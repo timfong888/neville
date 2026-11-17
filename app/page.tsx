@@ -115,7 +115,8 @@ export default function DemoPage() {
     if (w) {
       setWant(w.slice(0, 280));
       setName((p.get("n") ?? "").slice(0, 40));
-      setVariant(Number(p.get("v") ?? "0") || 0);
+      const v = Number(p.get("v") ?? "0");
+      setVariant(Number.isSafeInteger(v) ? v : 0);
       setShared(true);
       setStage("player");
     }
@@ -157,18 +158,29 @@ export default function DemoPage() {
     setIdx(0);
     if (music) stopPad.current = startPad();
 
-    if (!canSpeak) {
-      // No speech engine: step through the lines on a timer instead.
-      lines.forEach((l, i) => {
-        const at = lines.slice(0, i).reduce((t, s) => t + 1200 + s.length * 70, 0);
-        setTimeout(() => token.current === mine && setIdx(i), at);
+    // No working speech engine: step through the lines on a timer instead.
+    const readAlong = (from: number) => {
+      const rest = lines.slice(from);
+      const dur = (l: string) => 1200 + l.length * 70;
+      rest.forEach((_l, i) => {
+        const at = rest.slice(0, i).reduce((t, l) => t + dur(l), 0);
+        setTimeout(() => token.current === mine && setIdx(from + i), at);
       });
-      const total = lines.reduce((t, s) => t + 1200 + s.length * 70, 0);
-      setTimeout(() => token.current === mine && stop(), total);
+      const total = rest.reduce((t, l) => t + dur(l), 0);
+      setTimeout(() => {
+        if (token.current !== mine) return;
+        stop();
+        setIdx(lines.length);
+      }, total);
+    };
+
+    if (!canSpeak) {
+      readAlong(0);
       return;
     }
 
     const synth = window.speechSynthesis;
+    let failed = false;
     const voice = synth.getVoices().find((v) => v.voiceURI === voiceURI);
     lines.forEach((text, i) => {
       const u = new SpeechSynthesisUtterance(text);
@@ -179,6 +191,14 @@ export default function DemoPage() {
       u.rate = 0.82;
       u.pitch = 0.95;
       u.onstart = () => token.current === mine && setIdx(i);
+      u.onerror = (e) => {
+        // cancel() reports these two; anything else means the engine failed.
+        if (failed || token.current !== mine || e.error === "canceled" || e.error === "interrupted") return;
+        failed = true; // every queued line reports its own error; fall back once
+        synth.cancel();
+        setCanSpeak(false);
+        readAlong(i);
+      };
       if (i === lines.length - 1) {
         u.onend = () => {
           if (token.current !== mine) return;

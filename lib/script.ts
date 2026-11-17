@@ -90,7 +90,8 @@ export const VARIANT_COUNT = VARIANTS.length;
 export function buildScript(raw: string, name: string, variant: number): string[] {
   const core = toYouStatement(raw);
   const cleanName = name.trim().split(/\s+/)[0] ?? "";
-  const lines = VARIANTS[((variant % VARIANTS.length) + VARIANTS.length) % VARIANTS.length];
+  const v = Number.isSafeInteger(variant) ? variant : 0;
+  const lines = VARIANTS[((v % VARIANTS.length) + VARIANTS.length) % VARIANTS.length];
   return lines.map((fn) => fn(core, cleanName));
 }
 
