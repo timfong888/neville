@@ -85,7 +85,8 @@ export default function Diagram() {
       <path d="M620 130 H688" {...arrow} />
       <path d="M620 215 C655 215 650 345 688 345" {...arrow} />
       <path d="M455 440 C300 468 110 420 110 272" {...arrow} strokeDasharray="4 4" />
-      <text x="120" y="440" {...s}>audio streams straight from storage</text>
+      <text x="15" y="300" {...s}>audio streams straight</text>
+      <text x="15" y="318" {...s}>from storage to the player</text>
     </svg>
   );
 }

@@ -237,7 +237,7 @@ textarea:focus, input:focus, select:focus, button:focus-visible {
 .diagram svg { display: block; width: 100%; min-width: 620px; height: auto; }
 
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
-table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg-2); }
 td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
@@ -253,3 +253,9 @@ ul.clean li, ol.clean li { margin-bottom: 6px; }
 code { font-family: var(--mono); font-size: 0.92em; background: var(--bg-2); padding: 1px 5px; border-radius: 5px; }
 pre { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
 pre code { background: none; padding: 0; }
+
+@media (max-width: 560px) {
+  table { font-size: 12.5px; }
+  th, td { padding: 8px 6px; }
+  th { font-size: 10.5px; letter-spacing: 0; }
+}
