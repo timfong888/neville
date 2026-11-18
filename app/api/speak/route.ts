@@ -7,7 +7,13 @@ export const maxDuration = 60;
 const MAX_CHARS = 1000;
 // Models that only return raw PCM; we wrap it in a WAV header so browsers can play it.
 const PCM_ONLY = /^(heygen\/|google\/gemini)/;
-const PCM_RATE = 24000;
+// Raw PCM carries no sample rate. Use the one the upstream response states,
+// else the model's known rate: HeyGen returns 48 kHz (measured), Gemini 24 kHz.
+function pcmRate(model: string, contentType: string | null): number {
+  const stated = Number(/rate=(\d+)/.exec(contentType ?? "")?.[1]);
+  if (stated >= 8000 && stated <= 96000) return stated;
+  return model.startsWith("heygen/") ? 48000 : 24000;
+}
 
 function wav(pcm: ArrayBuffer, rate: number): ArrayBuffer {
   const out = new Uint8Array(44 + pcm.byteLength);
@@ -67,7 +73,7 @@ export async function POST(req: Request) {
 
   const audio = await res.arrayBuffer();
   const estCost = m.usdPerMChars === null ? null : (text.length * m.usdPerMChars) / 1e6;
-  return new NextResponse(pcm ? wav(audio, PCM_RATE) : audio, {
+  return new NextResponse(pcm ? wav(audio, pcmRate(model, res.headers.get("content-type"))) : audio, {
     headers: {
       "Content-Type": pcm ? "audio/wav" : "audio/mpeg",
       "Cache-Control": "no-store",
