@@ -7,12 +7,14 @@
   {
     "model": "heygen/heygen-voice-1-turbo",
     "voice": "nadine",
-    "file": "/voice-samples/heygen-heygen-voice-1-turbo.mp3"
+    "file": "/voice-samples/heygen-heygen-voice-1-turbo.mp3",
+    "expressiveFile": "/voice-samples/heygen-heygen-voice-1-turbo-expressive.mp3"
   },
   {
     "model": "canopylabs/orpheus-3b-0.1-ft",
     "voice": "tara",
-    "file": "/voice-samples/canopylabs-orpheus-3b-0-1-ft.mp3"
+    "file": "/voice-samples/canopylabs-orpheus-3b-0-1-ft.mp3",
+    "expressiveFile": "/voice-samples/canopylabs-orpheus-3b-0-1-ft-expressive.mp3"
   },
   {
     "model": "sesame/csm-1b",
@@ -22,26 +24,55 @@
   {
     "model": "fish-audio/drama-3",
     "voice": "",
-    "file": "/voice-samples/fish-audio-drama-3.mp3"
-  },
-  {
-    "model": "mistralai/voxtral-mini-tts-3-0",
-    "voice": "voice_3150",
-    "file": "/voice-samples/mistralai-voxtral-mini-tts-3-0.mp3"
-  },
-  {
-    "model": "x-ai/grok-voice-tts-1.0",
-    "voice": "eve",
-    "file": "/voice-samples/x-ai-grok-voice-tts-1-0.mp3"
+    "file": "/voice-samples/fish-audio-drama-3.mp3",
+    "expressiveFile": "/voice-samples/fish-audio-drama-3-expressive.mp3"
   },
   {
     "model": "google/gemini-3.8-flash-lite-tts",
     "voice": "Kore",
-    "file": "/voice-samples/google-gemini-3-8-flash-lite-tts.mp3"
+    "file": "/voice-samples/google-gemini-3-8-flash-lite-tts.mp3",
+    "expressiveFile": "/voice-samples/google-gemini-3-8-flash-lite-tts-expressive.mp3"
+  },
+  {
+    "model": "mistralai/voxtral-mini-tts-3-0",
+    "voice": "voice_3150",
+    "file": "/voice-samples/mistralai-voxtral-mini-tts-3-0.mp3",
+    "expressiveFile": "/voice-samples/mistralai-voxtral-mini-tts-3-0-expressive.mp3"
+  },
+  {
+    "model": "fish-audio/s2.1-pro",
+    "voice": "",
+    "file": "/voice-samples/fish-audio-s2-1-pro.mp3",
+    "expressiveFile": "/voice-samples/fish-audio-s2-1-pro-expressive.mp3"
+  },
+  {
+    "model": "x-ai/grok-voice-tts-1.0",
+    "voice": "eve",
+    "file": "/voice-samples/x-ai-grok-voice-tts-1-0.mp3",
+    "expressiveFile": "/voice-samples/x-ai-grok-voice-tts-1-0-expressive.mp3"
+  },
+  {
+    "model": "google/gemini-3.8-flash-tts",
+    "voice": "Kore",
+    "file": "/voice-samples/google-gemini-3-8-flash-tts.mp3",
+    "expressiveFile": "/voice-samples/google-gemini-3-8-flash-tts-expressive.mp3"
   },
   {
     "model": "elevenlabs/eleven-v4-turbo",
     "voice": "george",
-    "file": "/voice-samples/elevenlabs-eleven-v4-turbo.mp3"
+    "file": "/voice-samples/elevenlabs-eleven-v4-turbo.mp3",
+    "expressiveFile": "/voice-samples/elevenlabs-eleven-v4-turbo-expressive.mp3"
+  },
+  {
+    "model": "google/gemini-3.1-flash-tts-preview",
+    "voice": "Kore",
+    "file": "/voice-samples/google-gemini-3-1-flash-tts-preview.mp3",
+    "expressiveFile": "/voice-samples/google-gemini-3-1-flash-tts-preview-expressive.mp3"
+  },
+  {
+    "model": "fish-audio/s2.1-pro-free:free",
+    "voice": "",
+    "file": "/voice-samples/fish-audio-s2-1-pro-free-free.mp3",
+    "expressiveFile": "/voice-samples/fish-audio-s2-1-pro-free-free-expressive.mp3"
   }
 ]
