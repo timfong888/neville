@@ -141,6 +141,18 @@ export default function DemoPage() {
     };
   }, []);
 
+  // Leaving the page always ends playback, with or without a speech engine:
+  // the token bump silences pending read-along timers, and the pad stops.
+  useEffect(
+    () => () => {
+      token.current++;
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopPad.current?.();
+      stopPad.current = null;
+    },
+    [],
+  );
+
   const stop = useCallback(() => {
     token.current++;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();

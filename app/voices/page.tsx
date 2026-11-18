@@ -116,6 +116,11 @@ export default function VoicesPage() {
       <div className="meter" style={{ marginTop: 0 }}>
         {status === null ? (
           <span>Checking the OpenRouter key…</span>
+        ) : !status.paidCallsAllowed ? (
+          <span>
+            <b style={{ color: "var(--warn)" }}>Switched off here.</b> Voice generation is disabled on the
+            live site so it cannot spend. Use the preview link to generate clips.
+          </span>
         ) : !status.keyPresent ? (
           <span>
             <b style={{ color: "var(--warn)" }}>No key.</b> <code>OPENROUTER_API_KEY</code> is not set for
