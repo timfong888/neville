@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AUDIO_TOKENS_PER_MINUTE, BAKEOFF, OFF_ROUTER, ONE_MINUTE_CHARS, SAMPLE_WANT, tierFor } from "@/lib/bakeoff";
+import { AUDIO_TOKENS_PER_MINUTE, BAKEOFF, OFF_ROUTER, OTHER_MODELS, ONE_MINUTE_CHARS, SAMPLE_WANT, tierFor } from "@/lib/bakeoff";
 import { buildScript } from "@/lib/script";
 import samplesJson from "@/lib/voiceSamples.json";
 
@@ -32,7 +32,8 @@ function pricePerM(m: Model): { value: number | null; estimated: boolean } {
   if (m.id.endsWith(":free")) return { value: 0, estimated: false };
   const out = Number(m.pricing?.completion);
   const inp = Number(m.pricing?.prompt ?? 0);
-  if (!Number.isFinite(out) || out <= 0) return { value: null, estimated: false };
+  // Only Gemini's token rate is known; other token-priced models stay unconverted.
+  if (!m.id.startsWith("google/") || !Number.isFinite(out) || out <= 0) return { value: null, estimated: false };
   const perMinute = AUDIO_TOKENS_PER_MINUTE * out + (ONE_MINUTE_CHARS / 4) * (Number.isFinite(inp) ? inp : 0);
   return { value: (perMinute / ONE_MINUTE_CHARS) * 1e6, estimated: true };
 }
@@ -78,6 +79,15 @@ export default function VoicesPage() {
       return m ? { ...b, m, sample, price: pricePerM(m) } : null;
     }).filter((r): r is NonNullable<typeof r> => r !== null);
     return found.sort((a, b) => (a.price.value ?? Infinity) - (b.price.value ?? Infinity));
+  }, [models]);
+
+  // Every other speech model OpenRouter lists, so nothing is left out of view.
+  const others = useMemo(() => {
+    const inBakeoff = new Set(BAKEOFF.map((b) => b.model));
+    return (models ?? [])
+      .filter((m) => !inBakeoff.has(m.id))
+      .map((m) => ({ m, price: pricePerM(m), info: OTHER_MODELS[m.id] }))
+      .sort((a, b) => (a.price.value ?? Infinity) - (b.price.value ?? Infinity));
   }, [models]);
 
   const chars = text.trim().length;
@@ -330,6 +340,44 @@ export default function VoicesPage() {
           clip; replaying a clip is free.
         </p>
       </div>
+
+      {others.length > 0 && (
+        <>
+          <h2>The rest of OpenRouter&rsquo;s speech list</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            The other {others.length} speech models on the same key, cheapest first. No samples were made
+            for these.
+          </p>
+          <div className="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Voice model</th>
+                  <th className="num">Per 1M characters</th>
+                  <th className="num">1-minute affirmation</th>
+                  <th>Expressive from the prompt?</th>
+                  <th className="num">Limit per request</th>
+                </tr>
+              </thead>
+              <tbody>
+                {others.map(({ m, price, info }) => (
+                  <tr key={m.id}>
+                    <td>{m.name}</td>
+                    <td className="num">
+                      {price.value === null ? "not per character" : `${usd(price.value)}${price.estimated ? "*" : ""}`}
+                    </td>
+                    <td className="num">
+                      {price.value === null ? "n/a" : usd((ONE_MINUTE_CHARS * price.value) / 1e6)}
+                    </td>
+                    <td>{info?.expressive ?? "Not stated"}</td>
+                    <td className="num">{info?.limit ?? "not stated"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <h2>Not on OpenRouter</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
