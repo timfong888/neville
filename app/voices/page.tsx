@@ -147,7 +147,7 @@ export default function VoicesPage() {
           <p className="small muted" style={{ margin: "8px 0 0" }}>
             One minute is about {ONE_MINUTE_CHARS} characters. Prices are read live from OpenRouter.
             {rows.some((r) => r.price.measured) &&
-              " * Priced per token; this figure is worked out from what the sample clip actually cost."}
+              " * Priced per token of audio; this figure is worked out from what the sample clip cost."}
           </p>
         </>
       )}
