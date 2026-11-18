@@ -8,11 +8,11 @@ const MAX_CHARS = 1000;
 // Models that only return raw PCM; we wrap it in a WAV header so browsers can play it.
 const PCM_ONLY = /^(heygen\/|google\/gemini)/;
 // Raw PCM carries no sample rate. Use the one the upstream response states,
-// else the model's known rate: HeyGen returns 48 kHz (measured), Gemini 24 kHz.
+// else a per-model default: HeyGen has stated 44.1 kHz, Gemini documents 24 kHz.
 function pcmRate(model: string, contentType: string | null): number {
   const stated = Number(/rate=(\d+)/.exec(contentType ?? "")?.[1]);
   if (stated >= 8000 && stated <= 96000) return stated;
-  return model.startsWith("heygen/") ? 48000 : 24000;
+  return model.startsWith("heygen/") ? 44100 : 24000;
 }
 
 function wav(pcm: ArrayBuffer, rate: number): ArrayBuffer {
