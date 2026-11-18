@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BAKEOFF, OFF_ROUTER, ONE_MINUTE_CHARS, SAMPLE_WANT, tierFor } from "@/lib/bakeoff";
+import { AUDIO_TOKENS_PER_MINUTE, BAKEOFF, OFF_ROUTER, ONE_MINUTE_CHARS, SAMPLE_WANT, tierFor } from "@/lib/bakeoff";
 import { buildScript } from "@/lib/script";
 import samplesJson from "@/lib/voiceSamples.json";
 
-type Model = { id: string; name: string; usdPerMChars: number | null; voices: string[] };
+type Model = { id: string; name: string; usdPerMChars: number | null; voices: string[]; pricing?: Record<string, string> };
 type Status = {
   environment: string;
   paidCallsAllowed: boolean;
@@ -22,11 +22,18 @@ const SAMPLES = samplesJson as Sample[];
 const usd = (n: number) => (n < 0.1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
 const MAX = 1000;
 
-/** Per-1M-character price: the list price, or one worked out from a measured sample. */
-function pricePerM(m: Model, sample?: Sample): { value: number | null; measured: boolean } {
-  if (m.usdPerMChars !== null) return { value: m.usdPerMChars, measured: false };
-  if (sample?.costUsd != null && sample.chars > 0) return { value: (sample.costUsd / sample.chars) * 1e6, measured: true };
-  return { value: null, measured: false };
+/**
+ * Per-1M-character price. Character-priced models use the list price. Token-priced
+ * models (Gemini) are converted: one minute of audio is about 1,920 output tokens
+ * (32 a second, which matched what a sample clip cost) plus the script as input.
+ */
+function pricePerM(m: Model): { value: number | null; estimated: boolean } {
+  if (m.usdPerMChars !== null) return { value: m.usdPerMChars, estimated: false };
+  const out = Number(m.pricing?.completion);
+  const inp = Number(m.pricing?.prompt ?? 0);
+  if (!Number.isFinite(out) || out <= 0) return { value: null, estimated: false };
+  const perMinute = AUDIO_TOKENS_PER_MINUTE * out + (ONE_MINUTE_CHARS / 4) * (Number.isFinite(inp) ? inp : 0);
+  return { value: (perMinute / ONE_MINUTE_CHARS) * 1e6, estimated: true };
 }
 
 export default function VoicesPage() {
@@ -67,7 +74,7 @@ export default function VoicesPage() {
     const found = BAKEOFF.map((b) => {
       const m = models?.find((x) => x.id === b.model);
       const sample = SAMPLES.find((s) => s.model === b.model);
-      return m ? { ...b, m, sample, price: pricePerM(m, sample) } : null;
+      return m ? { ...b, m, sample, price: pricePerM(m) } : null;
     }).filter((r): r is NonNullable<typeof r> => r !== null);
     return found.sort((a, b) => (a.price.value ?? Infinity) - (b.price.value ?? Infinity));
   }, [models]);
@@ -134,7 +141,7 @@ export default function VoicesPage() {
                   <tr key={model}>
                     <td>{m.name}</td>
                     <td className="num">
-                      {price.value === null ? "per token" : `${usd(price.value)}${price.measured ? "*" : ""}`}
+                      {price.value === null ? "per token" : `${usd(price.value)}${price.estimated ? "*" : ""}`}
                     </td>
                     <td className="num">
                       {price.value === null ? "n/a" : usd((ONE_MINUTE_CHARS * price.value) / 1e6)}
@@ -146,8 +153,8 @@ export default function VoicesPage() {
           </div>
           <p className="small muted" style={{ margin: "8px 0 0" }}>
             One minute is about {ONE_MINUTE_CHARS} characters. Prices are read live from OpenRouter.
-            {rows.some((r) => r.price.measured) &&
-              " * Priced per token of audio; this figure is worked out from what the sample clip cost."}
+            {rows.some((r) => r.price.estimated) &&
+              " * Priced per token of audio, converted at 32 tokens a second, which matched what a sample clip cost."}
           </p>
         </>
       )}
@@ -168,12 +175,12 @@ export default function VoicesPage() {
         return (
           <div className="card voice" key={model}>
             <div className="voicehead">
-              <span className="pill pick">{tierFor(m.usdPerMChars)}</span>
+              <span className="pill pick">{tierFor(price.value)}</span>
               <h3>{m.name}</h3>
               <p className="small muted" style={{ margin: 0 }}>
                 {price.value === null
                   ? "priced per token"
-                  : `${usd(price.value)}${price.measured ? "*" : ""} per 1M characters · 1 minute ≈ ${usd(
+                  : `${usd(price.value)}${price.estimated ? "*" : ""} per 1M characters · 1 minute ≈ ${usd(
                       (ONE_MINUTE_CHARS * price.value) / 1e6,
                     )}`}
                 {note && ` · ${note}`}

@@ -20,6 +20,9 @@ export const BAKEOFF: BakeoffEntry[] = [
 /** A one-minute affirmation is about 900 characters of script. */
 export const ONE_MINUTE_CHARS = 900;
 
+/** Gemini bills speech as output tokens: 32 a second. */
+export const AUDIO_TOKENS_PER_MINUTE = 32 * 60;
+
 export const SAMPLE_WANT = "I want to be calm and confident when I speak";
 
 /** List prices for services that are not on OpenRouter and would need their own key. */
@@ -31,7 +34,7 @@ export const OFF_ROUTER: Array<{ name: string; usdPerMChars: string; note: strin
 ];
 
 export function tierFor(usdPerMChars: number | null): string {
-  if (usdPerMChars === null) return "Per token";
+  if (usdPerMChars === null) return "Price unknown";
   if (usdPerMChars < 5) return "Cheap";
   if (usdPerMChars < 12) return "Low";
   if (usdPerMChars < 25) return "Mid";
