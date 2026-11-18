@@ -21,11 +21,14 @@ export type SpeechModel = {
   usdPerMChars: number | null;
   pricing: Record<string, string>;
   voices: string[];
+  /** OpenRouter's own description of the model, trimmed. */
+  description: string;
 };
 
 type RawModel = {
   id?: string;
   name?: string;
+  description?: string;
   pricing?: Record<string, unknown>;
   supported_voices?: unknown;
 };
@@ -62,6 +65,7 @@ export async function listSpeechModels(): Promise<{ models: SpeechModel[]; prici
       usdPerMChars: Number.isFinite(perChar) && perChar > 0 ? perChar * 1e6 : null,
       pricing,
       voices: voiceNames(m.supported_voices),
+      description: typeof m.description === "string" ? m.description.slice(0, 2000) : "",
     };
   });
   return { models: models.filter((m) => m.id), pricingKeys: [...pricingKeys] };
