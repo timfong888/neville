@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_CHARS = 1000;
+const MAX_INSTRUCTIONS = 300;
 // Models that only return raw PCM; we wrap it in a WAV header so browsers can play it.
 const PCM_ONLY = /^(heygen\/|google\/gemini)/;
 // Raw PCM carries no sample rate. Use the one the upstream response states,
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
   const key = apiKey();
   if (!key) return NextResponse.json({ error: "OPENROUTER_API_KEY is not set for this environment." }, { status: 503 });
 
-  let body: { model?: unknown; voice?: unknown; text?: unknown };
+  let body: { model?: unknown; voice?: unknown; text?: unknown; instructions?: unknown };
   try {
     body = await req.json();
     if (!body || typeof body !== "object") throw new Error("not an object");
@@ -87,6 +88,9 @@ export async function POST(req: Request) {
   const model = typeof body.model === "string" ? body.model : "";
   const voice = typeof body.voice === "string" ? body.voice : "";
   const text = typeof body.text === "string" ? body.text.trim() : "";
+  // A style instruction for models that take one apart from the script (Gemini,
+  // Fish Audio). OpenRouter ignores it for the rest.
+  const instructions = typeof body.instructions === "string" ? body.instructions.trim().slice(0, MAX_INSTRUCTIONS) : "";
   if (!text || text.length > MAX_CHARS) {
     return NextResponse.json({ error: `Text must be 1 to ${MAX_CHARS} characters.` }, { status: 400 });
   }
@@ -113,7 +117,13 @@ export async function POST(req: Request) {
     const res = await fetch(`${OPENROUTER}/audio/speech`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
-      body: JSON.stringify({ model, ...(voice ? { voice } : {}), input: part, response_format: pcm ? "pcm" : "mp3" }),
+      body: JSON.stringify({
+        model,
+        ...(voice ? { voice } : {}),
+        ...(instructions ? { instructions } : {}),
+        input: part,
+        response_format: pcm ? "pcm" : "mp3",
+      }),
     });
     if (!res.ok) {
       let message = `OpenRouter returned ${res.status}.`;

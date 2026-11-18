@@ -2,71 +2,46 @@
   {
     "model": "hexgrad/kokoro-82m",
     "voice": "af_heart",
-    "file": "/voice-samples/hexgrad-kokoro-82m.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/hexgrad-kokoro-82m.mp3"
   },
   {
     "model": "heygen/heygen-voice-1-turbo",
     "voice": "nadine",
-    "file": "/voice-samples/heygen-heygen-voice-1-turbo.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/heygen-heygen-voice-1-turbo.mp3"
   },
   {
     "model": "canopylabs/orpheus-3b-0.1-ft",
     "voice": "tara",
-    "file": "/voice-samples/canopylabs-orpheus-3b-0-1-ft.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/canopylabs-orpheus-3b-0-1-ft.mp3"
   },
   {
     "model": "sesame/csm-1b",
     "voice": "read_speech_a",
-    "file": "/voice-samples/sesame-csm-1b.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/sesame-csm-1b.mp3"
   },
   {
     "model": "fish-audio/drama-3",
     "voice": "",
-    "file": "/voice-samples/fish-audio-drama-3.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/fish-audio-drama-3.mp3"
   },
   {
     "model": "mistralai/voxtral-mini-tts-3-0",
     "voice": "voice_3150",
-    "file": "/voice-samples/mistralai-voxtral-mini-tts-3-0.mp3",
-    "chars": 408,
-    "costUsd": null
-  },
-  {
-    "model": "fish-audio/s1",
-    "voice": "",
-    "file": "/voice-samples/fish-audio-s1.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/mistralai-voxtral-mini-tts-3-0.mp3"
   },
   {
     "model": "x-ai/grok-voice-tts-1.0",
     "voice": "eve",
-    "file": "/voice-samples/x-ai-grok-voice-tts-1-0.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/x-ai-grok-voice-tts-1-0.mp3"
   },
   {
     "model": "google/gemini-3.8-flash-lite-tts",
     "voice": "Kore",
-    "file": "/voice-samples/google-gemini-3-8-flash-lite-tts.mp3",
-    "chars": 408,
-    "costUsd": 0.0063
+    "file": "/voice-samples/google-gemini-3-8-flash-lite-tts.mp3"
   },
   {
     "model": "elevenlabs/eleven-v4-turbo",
     "voice": "george",
-    "file": "/voice-samples/elevenlabs-eleven-v4-turbo.mp3",
-    "chars": 408,
-    "costUsd": null
+    "file": "/voice-samples/elevenlabs-eleven-v4-turbo.mp3"
   }
 ]

@@ -15,7 +15,7 @@ type Status = {
   limitRemaining?: number | null;
   usage?: number | null;
 };
-type Sample = { model: string; voice: string; file: string; chars: number; costUsd: number | null };
+type Sample = { model: string; voice: string; file: string; expressiveFile?: string };
 type Clip = { url: string; cost: number | null; key: string };
 
 const SAMPLES = samplesJson as Sample[];
@@ -119,7 +119,10 @@ export default function VoicesPage() {
   return (
     <>
       <h1>Voice bake-off</h1>
-      <p className="lede">One script, ten voices, cheapest first. Press play and judge by ear.</p>
+      <p className="lede">
+        One script, {rows.length || "thirteen"} voices, cheapest first. Each plays plain and, where the model allows
+        it, with expressive cues. Press play and judge by ear.
+      </p>
 
       {loadError && <p className="banner">{loadError}</p>}
       {!models && !loadError && <p className="banner">Loading prices…</p>}
@@ -134,10 +137,11 @@ export default function VoicesPage() {
                   <th>Voice model</th>
                   <th className="num">Per 1M characters</th>
                   <th className="num">1-minute affirmation</th>
+                  <th>Expressive from the prompt?</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ model, m, price }) => (
+                {rows.map(({ model, m, price, expressive }) => (
                   <tr key={model}>
                     <td>{m.name}</td>
                     <td className="num">
@@ -146,6 +150,7 @@ export default function VoicesPage() {
                     <td className="num">
                       {price.value === null ? "n/a" : usd((ONE_MINUTE_CHARS * price.value) / 1e6)}
                     </td>
+                    <td>{expressive ? expressive.method : <span className="muted">None documented</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -161,11 +166,12 @@ export default function VoicesPage() {
 
       <h2>Listen</h2>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Each voice has a ready-made sample of the same script, so listening costs nothing. To hear your
-        own words, edit the script below and press Generate.
+        Each voice has ready-made samples of the same script, so listening costs nothing. To hear your
+        own words, edit the script below and press Generate. You can type a model&rsquo;s cues straight
+        into the script.
       </p>
 
-      {rows.map(({ model, voice: def, note, m, sample, price }) => {
+      {rows.map(({ model, voice: def, note, m, sample, price, expressive, why }) => {
         const noVoices = m.voices.length === 0;
         const v = noVoices ? "" : voice[model] ?? (m.voices.includes(def) ? def : m.voices[0]);
         const list = m.voices.filter((x) => !/^[a-z]{2}-[A-Z]{2}-/.test(x) || x.startsWith("en-"));
@@ -189,12 +195,42 @@ export default function VoicesPage() {
             {sample && (
               <>
                 <p className="small muted" style={{ margin: "10px 0 4px" }}>
-                  Sample{sample.voice && `, voice ${sample.voice.split(":")[0]}`}
-                  {sample.costUsd != null && ` · cost ${usd(sample.costUsd)} to make`}
+                  Plain{sample.voice && `, voice ${sample.voice.split(":")[0]}`}
                 </p>
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <audio controls preload="none" src={sample.file} style={{ width: "100%" }} />
               </>
+            )}
+            {expressive && sample?.expressiveFile && (
+              <>
+                <p className="small muted" style={{ margin: "10px 0 4px" }}>
+                  With expressive cues
+                </p>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio controls preload="none" src={sample.expressiveFile} style={{ width: "100%" }} />
+              </>
+            )}
+            {expressive ? (
+              <details className="cues">
+                <summary>How it is steered: {expressive.method.toLowerCase()}</summary>
+                <p className="small">
+                  Syntax: <code>{expressive.syntax}</code>
+                </p>
+                <p className="small muted">
+                  &ldquo;{expressive.quote}&rdquo;{" "}
+                  <a href={expressive.url} target="_blank" rel="noreferrer">
+                    Documentation
+                  </a>
+                </p>
+                <p className="small muted" style={{ marginBottom: 4 }}>
+                  {expressive.text ? "Script sent for the expressive sample:" : "Instruction sent with the unchanged script:"}
+                </p>
+                <p className="small cuetext">{expressive.text ?? expressive.instructions}</p>
+              </details>
+            ) : (
+              <p className="small muted" style={{ margin: "10px 0 0" }}>
+                {why ?? "No expressive control is documented."}
+              </p>
             )}
             <div className="controls">
               {noVoices ? (

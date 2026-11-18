@@ -2,20 +2,32 @@
 // reachable with the one OpenRouter key. `voice` is the default pick; an empty
 // voice means the model's own default (Fish Audio lists no voices).
 
-export type BakeoffEntry = { model: string; voice: string; note?: string };
+import data from "./bakeoff.json";
 
-export const BAKEOFF: BakeoffEntry[] = [
-  { model: "hexgrad/kokoro-82m", voice: "af_heart", note: "Open model. Cheapest paid option." },
-  { model: "heygen/heygen-voice-1-turbo", voice: "nadine" },
-  { model: "canopylabs/orpheus-3b-0.1-ft", voice: "tara", note: "Open model." },
-  { model: "sesame/csm-1b", voice: "read_speech_a", note: "Open model." },
-  { model: "fish-audio/drama-3", voice: "", note: "Fish Audio's cheaper model. Default voice." },
-  { model: "mistralai/voxtral-mini-tts-3-0", voice: "voice_3150" },
-  { model: "fish-audio/s1", voice: "", note: "Fish Audio S1. Default voice." },
-  { model: "x-ai/grok-voice-tts-1.0", voice: "eve" },
-  { model: "google/gemini-3.8-flash-lite-tts", voice: "Kore", note: "Priced per token, not per character." },
-  { model: "elevenlabs/eleven-v4-turbo", voice: "george", note: "Kept as the expensive reference." },
-];
+export type Expressive = {
+  /** How delivery is steered, in a few words. */
+  method: string;
+  /** The documented syntax, as an example. */
+  syntax: string;
+  /** A short quote from the vendor's documentation, and where it is. */
+  quote: string;
+  url: string;
+  /** The sample script with cues added. Null when the cue is a separate instruction. */
+  text: string | null;
+  /** A style instruction sent alongside the unchanged script (Gemini 3.8). */
+  instructions?: string;
+};
+
+export type BakeoffEntry = {
+  model: string;
+  voice: string;
+  note?: string;
+  expressive: Expressive | null;
+  /** Why there is no expressive sample. */
+  why?: string;
+};
+
+export const BAKEOFF = data as BakeoffEntry[];
 
 /** A one-minute affirmation is about 900 characters of script. */
 export const ONE_MINUTE_CHARS = 900;
