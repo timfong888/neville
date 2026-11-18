@@ -19,7 +19,7 @@ type Sample = { model: string; voice: string; file: string; chars: number; costU
 type Clip = { url: string; cost: number | null; key: string };
 
 const SAMPLES = samplesJson as Sample[];
-const usd = (n: number) => (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+const usd = (n: number) => (n < 0.1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
 const MAX = 1000;
 
 /** Per-1M-character price: the list price, or one worked out from a measured sample. */
