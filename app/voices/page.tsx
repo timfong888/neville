@@ -19,7 +19,7 @@ type Sample = { model: string; voice: string; file: string; expressiveFile?: str
 type Clip = { url: string; cost: number | null; key: string };
 
 const SAMPLES = samplesJson as Sample[];
-const usd = (n: number) => (n < 0.1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+const usd = (n: number) => (n === 0 ? "Free" : n < 0.1 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
 const MAX = 1000;
 
 /**
@@ -29,6 +29,7 @@ const MAX = 1000;
  */
 function pricePerM(m: Model): { value: number | null; estimated: boolean } {
   if (m.usdPerMChars !== null) return { value: m.usdPerMChars, estimated: false };
+  if (m.id.endsWith(":free")) return { value: 0, estimated: false };
   const out = Number(m.pricing?.completion);
   const inp = Number(m.pricing?.prompt ?? 0);
   if (!Number.isFinite(out) || out <= 0) return { value: null, estimated: false };

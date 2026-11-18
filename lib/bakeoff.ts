@@ -47,6 +47,7 @@ export const OFF_ROUTER: Array<{ name: string; usdPerMChars: string; note: strin
 
 export function tierFor(usdPerMChars: number | null): string {
   if (usdPerMChars === null) return "Price unknown";
+  if (usdPerMChars === 0) return "Free";
   if (usdPerMChars < 5) return "Cheap";
   if (usdPerMChars < 12) return "Low";
   if (usdPerMChars < 25) return "Mid";
