@@ -12,7 +12,8 @@ export async function GET() {
     paidCallsAllowed: paidCallsAllowed(),
     keyPresent: Boolean(key),
   };
-  if (!key) return NextResponse.json(base);
+  // The live site is public: it says only whether a key exists, never the budget.
+  if (!key || !paidCallsAllowed()) return NextResponse.json(base);
 
   try {
     const res = await fetch(`${OPENROUTER}/key`, {
