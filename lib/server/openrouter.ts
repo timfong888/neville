@@ -53,11 +53,9 @@ export async function listSpeechModels(): Promise<{ models: SpeechModel[]; prici
         pricingKeys.add(k);
       }
     }
-    const perChar = Number(
-      (m.pricing as Record<string, unknown> | undefined)?.["character"] ??
-        (m.pricing as Record<string, unknown> | undefined)?.["input_character"] ??
-        NaN,
-    );
+    // Character-priced speech models carry the per-character price in `prompt`
+    // and have no `completion` price. Token-priced ones (Gemini) have both.
+    const perChar = pricing.completion ? NaN : Number(pricing.prompt ?? NaN);
     return {
       id: m.id ?? "",
       name: m.name ?? m.id ?? "",
