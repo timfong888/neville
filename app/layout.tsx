@@ -40,8 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
         <main>{children}</main>
         <footer className="foot">
-          Prototype. Voice is your browser&rsquo;s built-in speech; no paid APIs are
-          called and nothing is stored on a server.
+          Prototype. The demo uses your browser&rsquo;s built-in speech and costs nothing.
+          Only the Voices page calls a paid API, and only on this preview. Nothing is stored
+          on a server.
         </footer>
       </body>
     </html>
