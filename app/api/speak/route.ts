@@ -31,6 +31,7 @@ export async function POST(req: Request) {
   let body: { model?: unknown; voice?: unknown; text?: unknown };
   try {
     body = await req.json();
+    if (!body || typeof body !== "object") throw new Error("not an object");
   } catch {
     return NextResponse.json({ error: "Send JSON." }, { status: 400 });
   }
