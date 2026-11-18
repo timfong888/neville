@@ -50,7 +50,10 @@ export async function POST(req: Request) {
 
   const { models } = await listSpeechModels();
   const m = models.find((x) => x.id === model);
-  if (!m || (m.voices.length > 0 && !m.voices.includes(voice))) {
+  // Models that list voices take only those. Models that list none (Fish Audio)
+  // use their default voice, or a Fish voice id: 32 hex characters.
+  const voiceOk = m && (m.voices.length > 0 ? m.voices.includes(voice) : voice === "" || /^[a-f0-9]{32}$/.test(voice));
+  if (!m || !voiceOk) {
     return NextResponse.json({ error: "Unknown model or voice." }, { status: 400 });
   }
 
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
   const res = await fetch(`${OPENROUTER}/audio/speech`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
-    body: JSON.stringify({ model, voice, input: text, response_format: pcm ? "pcm" : "mp3" }),
+    body: JSON.stringify({ model, ...(voice ? { voice } : {}), input: text, response_format: pcm ? "pcm" : "mp3" }),
   });
   if (!res.ok) {
     let message = `OpenRouter returned ${res.status}.`;

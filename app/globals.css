@@ -273,4 +273,5 @@ pre code { background: none; padding: 0; }
 /* ---------- Voices ---------- */
 .card.voice { margin-top: 12px; }
 .voicehead h3 { margin: 8px 0 2px; }
+.card.voice audio { display: block; }
 .card.voice .controls { margin: 12px 0 0; }
