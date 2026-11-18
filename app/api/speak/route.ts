@@ -15,6 +15,49 @@ function pcmRate(model: string, contentType: string | null): number {
   return model.startsWith("heygen/") ? 44100 : 24000;
 }
 
+// Per-request text caps, found by the upstream rejecting longer input.
+const PER_REQUEST_LIMIT: Record<string, number> = {
+  "canopylabs/orpheus": 300,
+  "sesame/csm": 200,
+};
+
+/** Split at sentence ends into pieces no longer than `limit`; hard-split a sentence only if it must. */
+function splitText(text: string, limit: number): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) ?? [text];
+  const out: string[] = [];
+  let cur = "";
+  const flush = () => {
+    if (cur.trim()) out.push(cur.trim());
+    cur = "";
+  };
+  for (let sentence of sentences) {
+    if ((cur + sentence).trim().length <= limit) {
+      cur += sentence;
+      continue;
+    }
+    flush();
+    while (sentence.trim().length > limit) {
+      const cut = sentence.lastIndexOf(" ", limit);
+      const at = cut > 0 ? cut : limit;
+      out.push(sentence.slice(0, at).trim());
+      sentence = sentence.slice(at);
+    }
+    cur = sentence;
+  }
+  flush();
+  return out;
+}
+
+function join(chunks: ArrayBuffer[]): ArrayBuffer {
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
+  let at = 0;
+  for (const c of chunks) {
+    out.set(new Uint8Array(c), at);
+    at += c.byteLength;
+  }
+  return out.buffer;
+}
+
 function wav(pcm: ArrayBuffer, rate: number): ArrayBuffer {
   const out = new Uint8Array(44 + pcm.byteLength);
   const v = new DataView(out.buffer);
@@ -57,32 +100,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unknown model or voice." }, { status: 400 });
   }
 
-  const pcm = PCM_ONLY.test(model);
-  const res = await fetch(`${OPENROUTER}/audio/speech`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
-    body: JSON.stringify({ model, ...(voice ? { voice } : {}), input: text, response_format: pcm ? "pcm" : "mp3" }),
-  });
-  if (!res.ok) {
-    let message = `OpenRouter returned ${res.status}.`;
-    try {
-      const j = (await res.json()) as { error?: { message?: string } };
-      if (j.error?.message) message = j.error.message.slice(0, 300);
-    } catch {
-      /* keep the generic message */
+  // Some models cap the text per request. Longer scripts go sentence by
+  // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
+  const limit = Object.entries(PER_REQUEST_LIMIT).find(([prefix]) => model.startsWith(prefix))?.[1];
+  const parts = limit && text.length > limit ? splitText(text, limit) : [text];
+  const pcm = PCM_ONLY.test(model) || parts.length > 1;
+
+  const chunks: ArrayBuffer[] = [];
+  const ids: string[] = [];
+  let contentType: string | null = null;
+  for (const part of parts) {
+    const res = await fetch(`${OPENROUTER}/audio/speech`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
+      body: JSON.stringify({ model, ...(voice ? { voice } : {}), input: part, response_format: pcm ? "pcm" : "mp3" }),
+    });
+    if (!res.ok) {
+      let message = `OpenRouter returned ${res.status}.`;
+      try {
+        const j = (await res.json()) as { error?: { message?: string } };
+        if (j.error?.message) message = j.error.message.slice(0, 300);
+      } catch {
+        /* keep the generic message */
+      }
+      return NextResponse.json({ error: message }, { status: res.status === 402 ? 402 : 502 });
     }
-    return NextResponse.json({ error: message }, { status: res.status === 402 ? 402 : 502 });
+    chunks.push(await res.arrayBuffer());
+    contentType = res.headers.get("content-type");
+    const id = res.headers.get("X-Generation-Id");
+    if (id) ids.push(id);
   }
 
-  const audio = await res.arrayBuffer();
+  const audio = chunks.length === 1 ? chunks[0] : join(chunks);
   const estCost = m.usdPerMChars === null ? null : (text.length * m.usdPerMChars) / 1e6;
-  return new NextResponse(pcm ? wav(audio, pcmRate(model, res.headers.get("content-type"))) : audio, {
+  return new NextResponse(pcm ? wav(audio, pcmRate(model, contentType)) : audio, {
     headers: {
       "Content-Type": pcm ? "audio/wav" : "audio/mpeg",
       "Cache-Control": "no-store",
       "X-Chars": String(text.length),
       "X-Est-Cost-Usd": estCost === null ? "" : estCost.toFixed(6),
-      "X-Generation-Id": res.headers.get("X-Generation-Id") ?? "",
+      "X-Generation-Id": ids.join(","),
+      "X-Requests": String(parts.length),
     },
   });
 }
