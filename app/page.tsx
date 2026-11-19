@@ -494,7 +494,6 @@ export default function DemoPage() {
         <div className="line" aria-live="polite">
           {current ?? (idx >= lines.length ? "And so it is." : "")}
         </div>
-        <span className="tag">Generated image goes here</span>
       </div>
 
       <div className="controls">

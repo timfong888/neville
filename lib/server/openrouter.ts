@@ -2,7 +2,8 @@
 // nothing in this file returns or logs it.
 import "server-only";
 
-export const OPENROUTER = "https://openrouter.ai/api/v1";
+// The override exists so tests can point the app at a stand-in server.
+export const OPENROUTER = process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1";
 
 export function apiKey(): string | undefined {
   const k = process.env.OPENROUTER_API_KEY?.trim();

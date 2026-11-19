@@ -12,7 +12,7 @@ const SYSTEM = `You write short spoken affirmations for a manifestation app.
 The listener gives one wish. Write it as already true, in the present tense, addressed to the listener as "you". This is the practice of living from the wish fulfilled.
 
 Rules:
-- 6 to 8 short sentences, 70 to 95 words in total.
+- 8 to 10 short sentences, 95 to 120 words in total.
 - One sentence per line. Plain text only: no titles, numbering, quotation marks, brackets, emoji or stage directions.
 - Begin with one line inviting a slow breath. If a first name is given, use it once, in that first line.
 - Say "you are", "you have", "you feel". Never "you will", "you want" or "I".
@@ -91,7 +91,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       headers: { Authorization: `Bearer ${opts.key}`, "Content-Type": "application/json", "X-Title": "Neville" },
       body: JSON.stringify({
         model,
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0.8,
         messages: [
           { role: "system", content: SYSTEM },
