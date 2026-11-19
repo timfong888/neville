@@ -25,7 +25,7 @@ export function wishMessage(want: string, name: string, variant: number): string
 }
 
 const MIN_BODY_LINES = 6;
-const MIN_BODY_WORDS = 50;
+const MIN_BODY_WORDS = 40;
 
 /** Tidy model output into spoken lines within the length cap. Null when unusable or too thin. */
 export function cleanLines(raw: string, maxChars: number): string[] | null {
