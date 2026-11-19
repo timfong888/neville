@@ -274,3 +274,26 @@ pre code { background: none; padding: 0; }
 .card.voice { margin-top: 12px; }
 .voicehead h3 { margin: 8px 0 2px; }
 .card.voice .controls { margin: 12px 0 0; }
+
+/* Settings: the voice list */
+.voicelist { border: 0; padding: 0; margin: 0; min-width: 0; }
+.voicelist legend { padding: 0; margin-bottom: 10px; }
+.voicerow {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 6px 10px 6px 14px; margin-bottom: 8px;
+}
+.voicerow.on { border-color: var(--accent); }
+.voicerow label {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 8px 0; cursor: pointer;
+  display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: center;
+  color: var(--text); font-size: 16px;
+}
+.voicerow input[type="radio"] { grid-row: 1 / span 2; width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.voicerow .vname { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.voicerow .btn { flex: 0 0 auto; min-width: 68px; }
+.voiceline { margin: 10px 0 0; }
+
+/* Four nav links do not fit beside the wordmark on a phone: wrap the nav below. */
+.top { flex-wrap: wrap; gap: 4px 16px; }
+.top nav { flex-wrap: wrap; gap: 4px 18px; }

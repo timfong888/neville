@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildScript, hashOf, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { DEMO_UNIT_COST, FREE_ANON_GENERATIONS } from "@/lib/architecture";
+import Link from "next/link";
+import { DEFAULT_VOICE_ID, readVoiceChoice, resolveVoice } from "@/lib/voices";
 
 type Stage = "form" | "making" | "player";
 
@@ -85,6 +87,12 @@ export default function DemoPage() {
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState("");
+  // The voice chosen in Settings. Read after load; the demo itself still speaks
+  // with the device's voice.
+  const [studioVoice, setStudioVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
+  useEffect(() => {
+    setStudioVoice(resolveVoice(readVoiceChoice()));
+  }, []);
   const [canSpeak, setCanSpeak] = useState(true);
   const [music, setMusic] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -328,7 +336,7 @@ export default function DemoPage() {
               />
             </div>
             <div>
-              <label htmlFor="voice">Voice</label>
+              <label htmlFor="voice">Device voice</label>
               <select
                 id="voice"
                 value={voiceURI}
@@ -344,6 +352,9 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
+          <p className="small muted voiceline">
+            Your chosen voice: <b>{studioVoice.name}</b>. <Link href="/settings">Change in Settings</Link>
+          </p>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>

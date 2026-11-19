@@ -1,0 +1,203 @@
+{
+  "default": "heygen-nadine",
+  "voices": [
+    {
+      "id": "heygen-nadine",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "nadine",
+      "name": "Nadine",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-nadine.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-tabitha",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "tabitha",
+      "name": "Tabitha",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-tabitha.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-noelle",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "noelle",
+      "name": "Noelle",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-noelle.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-meredith",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "meredith",
+      "name": "Meredith",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-meredith.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-sabrina",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "sabrina",
+      "name": "Sabrina",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-sabrina.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-bram",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "bram",
+      "name": "Bram",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-bram.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-gareth",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "gareth",
+      "name": "Gareth",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-gareth.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-lucian",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "lucian",
+      "name": "Lucian",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-lucian.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-weston",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "weston",
+      "name": "Weston",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-weston.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "heygen-vincent",
+      "provider": "HeyGen",
+      "model": "heygen/heygen-voice-1-turbo",
+      "voice": "vincent",
+      "name": "Vincent",
+      "label": "",
+      "sample": "/voice-samples/pick/heygen-vincent.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "gemini-achernar",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Achernar",
+      "name": "Achernar",
+      "label": "Soft",
+      "sample": "/voice-samples/pick/gemini-achernar.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-vindemiatrix",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Vindemiatrix",
+      "name": "Vindemiatrix",
+      "label": "Gentle",
+      "sample": "/voice-samples/pick/gemini-vindemiatrix.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-sulafat",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Sulafat",
+      "name": "Sulafat",
+      "label": "Warm",
+      "sample": "/voice-samples/pick/gemini-sulafat.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-enceladus",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Enceladus",
+      "name": "Enceladus",
+      "label": "Breathy",
+      "sample": "/voice-samples/pick/gemini-enceladus.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-algieba",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Algieba",
+      "name": "Algieba",
+      "label": "Smooth",
+      "sample": "/voice-samples/pick/gemini-algieba.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-kore",
+      "provider": "Google Gemini",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Kore",
+      "name": "Kore",
+      "label": "Firm",
+      "sample": "/voice-samples/pick/gemini-kore.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "eleven-george",
+      "provider": "ElevenLabs",
+      "model": "elevenlabs/eleven-v4-turbo",
+      "voice": "george",
+      "name": "George",
+      "label": "",
+      "sample": "/voice-samples/pick/eleven-george.mp3",
+      "enabled": false,
+      "tier": "premium"
+    },
+    {
+      "id": "eleven-sarah",
+      "provider": "ElevenLabs",
+      "model": "elevenlabs/eleven-v4-turbo",
+      "voice": "sarah",
+      "name": "Sarah",
+      "label": "",
+      "sample": "/voice-samples/pick/eleven-sarah.mp3",
+      "enabled": false,
+      "tier": "premium"
+    }
+  ]
+}
