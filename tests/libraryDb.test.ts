@@ -104,10 +104,17 @@ describe("recordings waiting for deletion", () => {
   it("are kept until cleared, oldest first, without duplicates", async () => {
     await addTombstones(db, ["t1", "t2"]);
     await addTombstones(db, ["t2", "t3"]);
-    expect(await oldestTombstones(db, 10)).toEqual(expect.arrayContaining(["t1", "t2", "t3"]));
+    expect(await oldestTombstones(db, 10, 0)).toEqual(expect.arrayContaining(["t1", "t2", "t3"]));
     await clearTombstones(db, ["t1", "t2"]);
-    expect(await oldestTombstones(db, 10)).toEqual(["t3"]);
+    expect(await oldestTombstones(db, 10, 0)).toEqual(["t3"]);
     await clearTombstones(db, ["t3"]);
+  });
+
+  it("the sweep leaves fresh ones alone: they may be uploads still in progress", async () => {
+    await addTombstones(db, ["fresh"]);
+    await db.query(`insert into blob_tombstone (key, created_at) values ('stale', now() - interval '11 minutes')`);
+    expect(await oldestTombstones(db)).toEqual(["stale"]);
+    await clearTombstones(db, ["fresh", "stale"]);
   });
 
   it("an account deletion that rolls back leaves its rows and records nothing", async () => {
@@ -116,7 +123,7 @@ describe("recordings waiting for deletion", () => {
     await addTombstones(db, keys.length ? keys : ["bob-key"]);
     await db.query("rollback");
     expect((await loadLibrary(db, bob)).manifestations).toHaveLength(1);
-    expect(await oldestTombstones(db, 10)).toEqual([]);
+    expect(await oldestTombstones(db, 10, 0)).toEqual([]);
   });
 });
 

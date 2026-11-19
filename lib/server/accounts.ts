@@ -31,7 +31,7 @@ export function accountsEnabled(): boolean {
 
 let pool: pg.Pool | null = null;
 function getPool(): pg.Pool {
-  if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
+  if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 10_000 });
   return pool;
 }
 
@@ -105,12 +105,14 @@ export async function audioType(file: Blob): Promise<"audio/wav" | "audio/mpeg" 
 
 /**
  * Picks a storage key for a new recording and records it in blob_tombstone
- * (committed at once) before anything is uploaded. The caller clears that
+ * (committed at once) before anything is uploaded. Call it, and upload,
+ * before opening the save transaction: neither should hold a connection. The caller clears that
  * record in the same transaction that saves the row pointing at the file, so
  * an upload whose row never commits is still known and gets removed.
  */
-export async function reserveAudioKey(profileId: string, manifestationId: string, mime: "audio/wav" | "audio/mpeg"): Promise<string> {
-  const key = `audio/${profileId}/${manifestationId}-${randomUUID()}.${mime === "audio/mpeg" ? "mp3" : "wav"}`;
+export async function reserveAudioKey(userId: string, mime: "audio/wav" | "audio/mpeg"): Promise<string> {
+  // Ownership lives in the database row, not the path; the user id only groups files.
+  const key = `audio/${userId}/${randomUUID()}.${mime === "audio/mpeg" ? "mp3" : "wav"}`;
   await addTombstones(getPool() as unknown as Db, [key]);
   return key;
 }

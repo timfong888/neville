@@ -136,6 +136,8 @@ export async function putManifestation(
 
 /** Deletes one manifestation; returns its storage keys, or null when it is not the caller's. */
 export async function deleteManifestation(db: Db, profileId: string, id: string): Promise<string[] | null> {
+  // Lock the row first, so a save cannot add a recording between reading the keys and deleting.
+  await db.query(`select id from manifestation where id = $1 and profile_id = $2 for update`, [id, profileId]);
   const keys = await db.query(
     `select r.audio_key from rendition r join manifestation m on m.id = r.manifestation_id
       where m.id = $1 and m.profile_id = $2 and r.audio_key is not null`,
@@ -195,6 +197,10 @@ export async function deletePlaylist(db: Db, profileId: string, id: string): Pro
 
 /** Deletes the user and, by cascade, everything they own. Returns storage keys to delete. */
 export async function deleteAccount(db: Db, userId: string): Promise<string[]> {
+  // Every save takes this profile row's lock first (ensureProfile upserts it in
+  // the same transaction), so holding it here means no save can commit a new
+  // recording between reading the keys and deleting the rows.
+  await db.query(`select id from profile where user_id = $1 for update`, [userId]);
   const keys = await db.query(
     `select r.audio_key from rendition r
        join manifestation m on m.id = r.manifestation_id
@@ -212,8 +218,16 @@ export async function addTombstones(db: Db, keys: string[]): Promise<void> {
   await db.query(`insert into blob_tombstone (key) select unnest($1::text[]) on conflict do nothing`, [keys]);
 }
 
-export async function oldestTombstones(db: Db, limit = 50): Promise<string[]> {
-  const { rows } = await db.query(`select key from blob_tombstone order by created_at limit $1`, [limit]);
+/**
+ * Leftovers old enough to be safe to remove. A fresh tombstone may be a key a
+ * save has reserved and is still uploading, so only those older than
+ * `minAgeMinutes` are returned.
+ */
+export async function oldestTombstones(db: Db, limit = 50, minAgeMinutes = 10): Promise<string[]> {
+  const { rows } = await db.query(
+    `select key from blob_tombstone where created_at <= now() - make_interval(mins => $2) order by created_at limit $1`,
+    [limit, minAgeMinutes],
+  );
   return rows.map((r) => String(r.key));
 }
 

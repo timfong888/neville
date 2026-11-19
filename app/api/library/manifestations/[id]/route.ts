@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { audioType, MAX_AUDIO_BYTES, purgeAudio, reserveAudioKey, storeAudio } from "@/lib/server/accounts";
+import { audioType, currentUser, MAX_AUDIO_BYTES, purgeAudio, reserveAudioKey, storeAudio } from "@/lib/server/accounts";
 import { addTombstones, clearTombstones, cleanManifestation, deleteManifestation, isId, putManifestation } from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
 
@@ -35,19 +35,29 @@ export async function PUT(req: Request, { params }: Ctx) {
   const mime = file ? await audioType(file) : null;
   if (file && !mime) return NextResponse.json({ error: "Recording must be WAV or MP3." }, { status: 415 });
 
-  // Keys to remove from Blob once the transaction has committed.
-  let purge: string[] = [];
+  // Upload first, outside any transaction, under a key already on record in
+  // blob_tombstone; the save transaction then only writes rows. Uploading
+  // needs a signed-in caller, so nobody else can fill storage or the record.
+  let audio: { key: string; mime: string } | null | undefined = form.get("removeAudio") === "1" ? null : undefined;
   let reserved: string | null = null;
+  if (file && mime) {
+    const user = await currentUser(req);
+    if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+    reserved = await reserveAudioKey(user.id, mime);
+    try {
+      audio = await storeAudio(reserved, file, mime);
+    } catch (e) {
+      await purgeAudio([reserved]).catch(() => undefined);
+      throw e;
+    }
+  }
+
+  let purge: string[] = [];
   try {
     const res = await asOwner(req, async (db, profileId) => {
-      let audio: { key: string; mime: string } | null | undefined = form.get("removeAudio") === "1" ? null : undefined;
-      if (file && mime) {
-        reserved = await reserveAudioKey(profileId, id, mime);
-        audio = await storeAudio(reserved, file, mime);
-      }
       const stale = await putManifestation(db, profileId, m, audio);
       if (stale === null) {
-        // Not this caller's id: the upload stays recorded and is removed below.
+        // Not this caller's id: the upload stays on record and is removed below.
         if (reserved) purge = [reserved];
         return NextResponse.json({ error: "Not found." }, { status: 404 });
       }
@@ -57,10 +67,11 @@ export async function PUT(req: Request, { params }: Ctx) {
       await addTombstones(db, stale);
       return NextResponse.json({ ok: true });
     });
+    if (res.status !== 200 && reserved && !purge.length) purge = [reserved];
     await purgeAudio(purge);
     return res;
   } catch (e) {
-    // Rolled back: the reserved key is still recorded, so this or a later sweep removes it.
+    // Rolled back: the reserved key is still on record, so this or a later sweep removes it.
     if (reserved) await purgeAudio([reserved]).catch(() => undefined);
     throw e;
   }
