@@ -78,8 +78,15 @@ describe("fitPause", () => {
     const total = 44 + speechBytes + silenceBytes(ms, 22050) * 11;
     expect(total).toBeLessThanOrEqual(MAX_AUDIO_BYTES);
   });
-  it("never goes below the floor and handles one line", () => {
-    expect(fitPause({ pauseMs: 4000, gaps: 11, speechBytes: 3_990_000, rate: 22050 })).toBe(300);
+  it("drops the pauses to nothing rather than break the size limit, and handles one line", () => {
+    expect(fitPause({ pauseMs: 4000, gaps: 11, speechBytes: 3_999_950, rate: 22050 })).toBe(0);
+    expect(fitPause({ pauseMs: 4000, gaps: 11, speechBytes: 9_000_000, rate: 22050 })).toBe(0);
     expect(fitPause({ pauseMs: 4000, gaps: 0, speechBytes: 1000, rate: 22050 })).toBe(0);
+  });
+  it("always lands at or under the limit when the speech itself fits", () => {
+    for (const speechBytes of [500_000, 2_000_000, 3_000_000, 3_900_000]) {
+      const ms = fitPause({ pauseMs: 4000, gaps: 11, speechBytes, rate: 22050 });
+      expect(44 + speechBytes + silenceBytes(ms, 22050) * 11).toBeLessThanOrEqual(MAX_AUDIO_BYTES);
+    }
   });
 });

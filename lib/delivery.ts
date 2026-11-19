@@ -122,7 +122,6 @@ export function styleInstruction(pace: Pace, tone: Tone): string {
 /** A response may carry about 4.5 MB on Vercel; stay under with room for headers. */
 export const MAX_AUDIO_BYTES = 4_000_000;
 const WAV_HEADER_BYTES = 44;
-const MIN_PAUSE_MS = 300;
 
 /** Silence of `ms` at `rate` Hz, as 16-bit mono PCM. */
 export function silenceBytes(ms: number, rate: number): number {
@@ -131,8 +130,9 @@ export function silenceBytes(ms: number, rate: number): number {
 
 /**
  * The pause to use between `gaps` lines so the finished file fits the size a
- * response may carry. Longer than that and the pauses shrink first, down to a
- * floor; speech itself is never cut.
+ * response may carry. Longer than that and the pauses shrink first, down to
+ * none if they must; speech itself is never cut. The size limit is a hard one,
+ * so it wins over how long a pause ought to be.
  */
 export function fitPause(opts: {
   pauseMs: number;
@@ -147,7 +147,7 @@ export function fitPause(opts: {
   const want = silenceBytes(pauseMs, rate) * gaps;
   if (want <= room) return pauseMs;
   const msThatFit = ((room / gaps / 2) * 1000) / rate;
-  return Math.max(MIN_PAUSE_MS, Math.floor(msThatFit));
+  return Math.max(0, Math.floor(msThatFit));
 }
 
 /** Joins PCM pieces with `pauseBytes` of silence between them. */

@@ -8,6 +8,7 @@ vi.mock("server-only", () => ({}));
 let server: Server;
 const seen: Array<Record<string, unknown>> = [];
 let refuseSpeed = false;
+let failOn: string | null = null;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -16,6 +17,10 @@ beforeAll(async () => {
     req.on("end", () => {
       const body = JSON.parse(raw);
       seen.push(body);
+      if (failOn && body.input === failOn) {
+        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "boom" } }));
+        return;
+      }
       if (refuseSpeed && "speed" in body) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "unknown field speed" } }));
         return;
@@ -84,6 +89,20 @@ describe("synthesize with pauses", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].input).toBe(lines.join("\n\n"));
     expect(out.ok && out.starts).toBeUndefined();
+  });
+
+  it("stops starting new lines once one fails", async () => {
+    failOn = "Breathe in.";
+    const synthesize = await load();
+    const many = ["Breathe in.", ...Array.from({ length: 8 }, (_, i) => `Line ${i}.`)];
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: many.join("\n\n"), lines: many, pauseMs: 500,
+    });
+    failOn = null;
+    expect(out.ok).toBe(false);
+    // The first three start together; nothing after the failure is started.
+    expect(seen.length).toBeLessThanOrEqual(3);
   });
 
   it("sends no speed when none is asked for", async () => {

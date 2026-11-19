@@ -1,7 +1,7 @@
 // One place that turns text into audio through OpenRouter. Used by the voice
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
-import { fitPause, silenceBytes, startShares, stitchPcm } from "@/lib/delivery";
+import { MAX_AUDIO_BYTES, fitPause, silenceBytes, startShares, stitchPcm } from "@/lib/delivery";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
 // Models that only return raw PCM; we wrap it in a WAV header so browsers can play it.
@@ -101,13 +101,21 @@ export type Speech =
 const LINE_CONCURRENCY = 3;
 
 /** Runs `fn` over `items` with at most `n` in flight, keeping the order of results. */
-async function mapLimit<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
+async function mapLimit<T, R>(
+  items: T[],
+  n: number,
+  fn: (item: T) => Promise<R>,
+  /** True for a result that should stop any further items from starting. */
+  stop: (r: R) => boolean = () => false,
+): Promise<R[]> {
+  const out: R[] = [];
   let next = 0;
+  let halted = false;
   const worker = async () => {
-    while (next < items.length) {
+    while (!halted && next < items.length) {
       const i = next++;
       out[i] = await fn(items[i]);
+      if (stop(out[i])) halted = true;
     }
   };
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
@@ -201,9 +209,17 @@ export async function synthesize(opts: {
     return { ok: false, status: 502, message: "The voice service refused the request." };
   };
 
-  const pieces = stitch ? await mapLimit(parts, LINE_CONCURRENCY, one) : [];
-  if (!stitch) for (const part of parts) pieces.push(await one(part));
-  const failed = pieces.find((p) => !p.ok);
+  // After a failure no new line is started, so no further paid recordings are made
+  // for audio that will be thrown away. Lines already in flight finish.
+  const pieces: Piece[] = stitch ? await mapLimit(parts, LINE_CONCURRENCY, one, (p) => !p.ok) : [];
+  if (!stitch) {
+    for (const part of parts) {
+      const piece = await one(part);
+      pieces.push(piece);
+      if (!piece.ok) break;
+    }
+  }
+  const failed = pieces.find((p) => p && !p.ok);
   if (failed && !failed.ok) return failed;
   const done = pieces as Extract<Piece, { ok: true }>[];
 
@@ -228,9 +244,14 @@ export async function synthesize(opts: {
     rate,
   });
   const gap = silenceBytes(pauseMs, rate);
+  const audio = wav(stitchPcm(chunks, gap), rate);
+  // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
+  if (audio.byteLength > MAX_AUDIO_BYTES) {
+    return { ok: false, status: 502, message: "The recording came out too long to send." };
+  }
   return {
     ok: true,
-    audio: wav(stitchPcm(chunks, gap), rate),
+    audio,
     mime: "audio/wav",
     requests: parts.length,
     ids,
