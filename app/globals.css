@@ -273,6 +273,7 @@ pre code { background: none; padding: 0; }
 /* ---------- Voices ---------- */
 .card.voice { margin-top: 12px; }
 .voicehead h3 { margin: 8px 0 2px; }
+.card.voice audio { display: block; }
 .card.voice .controls { margin: 12px 0 0; }
 
 /* Settings: the voice list */
@@ -297,3 +298,8 @@ pre code { background: none; padding: 0; }
 /* Four nav links do not fit beside the wordmark on a phone: wrap the nav below. */
 .top { flex-wrap: wrap; gap: 4px 16px; }
 .top nav { flex-wrap: wrap; gap: 4px 18px; }
+.cues { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.cues summary { cursor: pointer; font-size: 13px; color: var(--accent-text); }
+.cues p { margin: 8px 0 0; }
+.cuetext { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; overflow-wrap: anywhere; }
+.cues code { overflow-wrap: anywhere; }
