@@ -66,12 +66,3 @@ export async function listSpeechModels(): Promise<{ models: SpeechModel[]; prici
   });
   return { models: models.filter((m) => m.id), pricingKeys: [...pricingKeys] };
 }
-
-/**
- * Whether the app may generate real speech for visitors. Off unless
- * SPEECH_ENABLED is "true". The spend guards planned in issue #3 sit behind
- * this switch; the Voice setting works either way.
- */
-export function speechEnabled(): boolean {
-  return process.env.SPEECH_ENABLED?.trim().toLowerCase() === "true";
-}

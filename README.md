@@ -22,13 +22,13 @@ Edit it to change what is offered; no code change is needed.
 
 - `tier` is `free`, `cheap`, `low`, `mid` or `premium`, by price.
 
-The list is the full slate for now, for Tim's own listening. Before real speech
-is switched on for visitors, set `enabled: false` on what the public should not
+The list is the full slate for now, for Tim's own listening. Before recording in
+these voices is switched on for visitors, set `enabled: false` on what the public should not
 get: anyone who opens the site can choose any enabled voice.
 
 A mistake in the file fails the build, so it cannot reach the live site.
-Real speech generation stays off unless `SPEECH_ENABLED=true`; the setting
-works either way.
+Recording in the chosen voice is not built yet (see issue #3). The setting
+only stores the choice and plays samples.
 
 ## Paid calls
 

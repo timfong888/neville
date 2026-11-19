@@ -10,7 +10,7 @@ import {
   writeVoiceChoice,
 } from "@/lib/voices";
 
-export default function VoicePicker({ speechOn }: { speechOn: boolean }) {
+export default function VoicePicker() {
   const [chosen, setChosen] = useState(DEFAULT_VOICE_ID);
   const [playing, setPlaying] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -96,9 +96,8 @@ export default function VoicePicker({ speechOn }: { speechOn: boolean }) {
       </p>
       <p className="small muted">
         Your choice is kept on this device only. No account is needed.{" "}
-        {speechOn
-          ? "New manifestations are recorded in this voice."
-          : "Recording in these voices is switched off for now, so the demo still uses your device's own voice. Your choice is saved for when it is switched on."}
+        Recording in these voices is not built yet, so the demo still uses your device&rsquo;s
+        own voice. Your choice is saved for when it is.
       </p>
     </>
   );
