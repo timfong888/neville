@@ -1,5 +1,12 @@
 // Limit decisions for recording. Framework-free: no Next, React or browser
 // APIs. The numbers are in config/limits.json.
+//
+// HARD CAP: budgetVerdict, the spend ceiling. OpenRouter keeps the count, so it
+// holds everywhere.
+// SOFT MVP CAPS: takeSlot's per-visitor and per-day counters. They live in this
+// module's memory, one copy per server instance, and are lost on restart. They
+// slow casual overuse; they do not bound spend. Durable counters need a store
+// and are tracked in the "Durable per-IP and daily limits" issue.
 import limits from "@/config/limits.json";
 
 const today = () => new Date().toISOString().slice(0, 10);

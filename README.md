@@ -28,6 +28,11 @@ Edit it to change what is offered; no code change is needed.
 
 A mistake in the file fails the build, so it cannot reach the live site.
 
+## Tests
+
+`npm test` runs the unit tests for the limit decisions, the script rules, the
+fallback script and voice choice. `npm run typecheck` checks types.
+
 ## Paid calls and what bounds them
 
 `POST /api/manifest` is the app's one paid path, and it runs on the live site.
@@ -37,13 +42,15 @@ cent; the dearest voice allowed about one cent.
 
 Limits are in `config/limits.json`:
 
-- `spendCeilingUsd` — before every recording the server asks OpenRouter for the
-  key's total usage and refuses once it reaches this number. This is the real
-  cap: OpenRouter keeps the count, so it holds across every server instance.
-  If the usage cannot be read, nothing is recorded.
-- `perIpPerDay`, `globalPerDay` — counters held in memory. They reset when a
-  server instance restarts and are not shared between instances, so they slow
-  abuse but are not a cap on their own.
+- **Hard cap: `spendCeilingUsd`.** Before every recording the server asks
+  OpenRouter for the key's total usage and refuses once it reaches this number.
+  OpenRouter keeps the count, so it holds across every server instance. If the
+  usage cannot be read, nothing is recorded. This is the only server-side guard
+  that bounds spend.
+- **Soft MVP caps: `perIpPerDay`, `globalPerDay`.** Counters held in memory, one
+  copy per server instance, lost on restart. They slow casual overuse; they are
+  not a cap. The two free creations before the sign-up prompt are softer still:
+  that count is in the browser's own storage.
 - `maxWantChars`, `maxScriptChars` — input and script length.
 - `generationEnabled` — `false` switches recording off. Setting the environment
   variable `SPEECH_ENABLED=false` does the same without a code change.
