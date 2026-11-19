@@ -22,6 +22,8 @@ export type Voice = {
   sample: string;
   /** Only enabled voices are offered or accepted. */
   enabled: boolean;
+  /** May new audio be recorded in this voice? False means sample only. */
+  generate: boolean;
   tier: Tier;
 };
 
@@ -38,7 +40,10 @@ function load(): { all: Voice[]; defaultId: string } {
     for (const k of ["id", "provider", "model", "name", "sample"] as const) {
       if (typeof v[k] !== "string" || !v[k]) throw new Error(`config/voices.json: "${v.id}" is missing "${k}".`);
     }
-    if (typeof v.enabled !== "boolean") throw new Error(`config/voices.json: "${v.id}" needs "enabled": true or false.`);
+    for (const k of ["enabled", "generate"] as const) {
+      if (typeof v[k] !== "boolean") throw new Error(`config/voices.json: "${v.id}" needs "${k}": true or false.`);
+    }
+    if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);
     if (ids.has(v.id)) throw new Error(`config/voices.json: id "${v.id}" appears twice.`);
@@ -47,6 +52,7 @@ function load(): { all: Voice[]; defaultId: string } {
   const def = all.find((v) => v.id === config.default);
   if (!def) throw new Error(`config/voices.json: default "${config.default}" is not in the list.`);
   if (!def.enabled) throw new Error(`config/voices.json: default "${config.default}" is not enabled.`);
+  if (!def.generate) throw new Error(`config/voices.json: default "${config.default}" must have generate on.`);
   return { all, defaultId: def.id };
 }
 
@@ -58,13 +64,15 @@ export const DEFAULT_VOICE_ID = defaultId;
 export const ENABLED_VOICES: Voice[] = all.filter((v) => v.enabled);
 
 /**
- * The voice for a stored or requested id. An unknown, removed or disabled id
- * gives the default, so a stale choice on a device can never select a voice
- * that is no longer offered. Server code must resolve ids through this and
- * never take a model or voice name from the browser.
+ * The voice for a stored or requested id. An id that is unknown, removed,
+ * disabled or sample-only gives the default, so a stale choice on a device can
+ * never select a voice that may not be recorded. Server code must resolve ids
+ * through this and never take a model or voice name from the browser.
  */
 export function resolveVoice(id: string | null | undefined): Voice {
-  return ENABLED_VOICES.find((v) => v.id === id) ?? ENABLED_VOICES.find((v) => v.id === defaultId)!;
+  return (
+    ENABLED_VOICES.find((v) => v.id === id && v.generate) ?? ENABLED_VOICES.find((v) => v.id === defaultId)!
+  );
 }
 
 /** Where the choice is kept on the device. */

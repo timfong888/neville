@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-body", display: "swa
 export const metadata: Metadata = {
   title: "Neville — prototype",
   description:
-    "Type what you want, hear your manifestation. Architecture and Demo 1 prototype.",
+    "Type what you want, hear your manifestation.",
   robots: { index: false, follow: false },
   appleWebApp: { title: "Neville", statusBarStyle: "black-translucent" },
 };
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span>neville</span>
           </Link>
           <nav>
-            <Link href="/">Demo</Link>
+            <Link href="/">Create</Link>
             <Link href="/voices">Voices</Link>
             <Link href="/architecture">Architecture</Link>
             <Link href="/settings">Settings</Link>
@@ -41,9 +41,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
         <main>{children}</main>
         <footer className="foot">
-          Prototype. The demo uses your browser&rsquo;s built-in speech and costs nothing.
-          Voice samples are pre-made. New clips can only be generated on a preview, never on
-          the live site. Nothing is stored on a server.
+          Prototype. Your wish is sent to an AI service to write and record your affirmation.
+          Recordings are not stored. Free recordings are limited each day.
         </footer>
       </body>
     </html>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildScript, hashOf, titleFor, VARIANT_COUNT } from "@/lib/script";
-import { DEMO_UNIT_COST, FREE_ANON_GENERATIONS } from "@/lib/architecture";
+import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, readVoiceChoice, resolveVoice } from "@/lib/voices";
 
@@ -15,13 +15,18 @@ const EXAMPLES = [
   "a loving, easy relationship with my family",
 ];
 
-const STEPS = [
-  { label: "Writing your script in “You” statements", key: "script" as const },
-  { label: "Recording the voice", key: "voice" as const },
-  { label: "Painting the visual", key: "image" as const },
-];
+type Made = { lines: string[]; url: string; voiceName: string; source: string };
 
-const usd = (n: number) => (n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+/** Where each line starts, as a share of the whole script, for read-along. */
+function lineStarts(lines: string[]): number[] {
+  const total = lines.reduce((n, l) => n + l.length, 0) || 1;
+  let at = 0;
+  return lines.map((l) => {
+    const start = at / total;
+    at += l.length;
+    return start;
+  });
+}
 
 function readCount(): number {
   try {
@@ -81,6 +86,11 @@ export default function DemoPage() {
   const [name, setName] = useState("");
   const [variant, setVariant] = useState(0);
   const [step, setStep] = useState(0);
+  // A recording made by the server for this wish. Null means the free
+  // fallback: a template script read by the device's own voice.
+  const [made, setMade] = useState<Made | null>(null);
+  const [note, setNote] = useState("");
+  const audio = useRef<HTMLAudioElement | null>(null);
   const [used, setUsed] = useState(0);
   const [gate, setGate] = useState(false);
   const [shared, setShared] = useState(false);
@@ -102,19 +112,8 @@ export default function DemoPage() {
   const token = useRef(0);
   const stopPad = useRef<(() => void) | null>(null);
 
-  const lines = useMemo(() => buildScript(want, name, variant), [want, name, variant]);
-  const chars = useMemo(() => lines.join(" ").length, [lines]);
+  const lines = useMemo(() => made?.lines ?? buildScript(want, name, variant), [made, want, name, variant]);
   const hue = useMemo(() => hashOf(want + variant) % 360, [want, variant]);
-  const cost = useMemo(() => {
-    const voice = (chars / 1000) * DEMO_UNIT_COST.ttsPer1kChars;
-    return {
-      script: DEMO_UNIT_COST.script,
-      voice,
-      image: DEMO_UNIT_COST.image,
-      total: DEMO_UNIT_COST.script + voice + DEMO_UNIT_COST.image,
-    };
-  }, [chars]);
-
   // Voices, free counter, and shared links.
   useEffect(() => {
     setUsed(readCount());
@@ -155,15 +154,21 @@ export default function DemoPage() {
     () => () => {
       token.current++;
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      audio.current?.pause();
+      audio.current = null;
       stopPad.current?.();
       stopPad.current = null;
     },
     [],
   );
+  // A recording lives only in this tab. Free its memory when it is replaced.
+  useEffect(() => () => void (made && URL.revokeObjectURL(made.url)), [made]);
 
   const stop = useCallback(() => {
     token.current++;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    audio.current?.pause();
+    audio.current = null;
     stopPad.current?.();
     stopPad.current = null;
     setPlaying(false);
@@ -177,6 +182,32 @@ export default function DemoPage() {
     setPlaying(true);
     setIdx(0);
     if (music) stopPad.current = startPad();
+
+    // A server recording: play the file and move the read-along by its clock.
+    if (made) {
+      const a = new Audio(made.url);
+      audio.current = a;
+      const starts = lineStarts(lines);
+      a.ontimeupdate = () => {
+        if (token.current !== mine || !a.duration) return;
+        const at = a.currentTime / a.duration;
+        let i = 0;
+        while (i + 1 < starts.length && starts[i + 1] <= at) i++;
+        setIdx(i);
+      };
+      a.onended = () => {
+        if (token.current !== mine) return;
+        stop();
+        setIdx(lines.length);
+      };
+      a.onerror = () => {
+        if (token.current !== mine) return;
+        stop();
+        setToast("The recording could not be played.");
+      };
+      void a.play().catch(() => token.current === mine && stop());
+      return;
+    }
 
     // No working speech engine: step through the lines on a timer instead.
     const readAlong = (from: number) => {
@@ -228,7 +259,52 @@ export default function DemoPage() {
       }
       synth.speak(u);
     });
-  }, [canSpeak, lines, music, stop, voiceURI]);
+  }, [canSpeak, lines, made, music, stop, voiceURI]);
+
+  // One request writes the script and records it. If recording is off, over
+  // its limits or fails, the free fallback still gives the visitor something:
+  // a template script in the device's own voice.
+  const run = useRef(0);
+  const generate = async (v: number) => {
+    stop();
+    const mine = ++run.current;
+    setStage("making");
+    setStep(0);
+    setNote("");
+    setIdx(-1);
+    let next: Made | null = null;
+    let why = "";
+    try {
+      const res = await fetch("/api/manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ want: want.trim(), name: name.trim(), voiceId: studioVoice.id, variant: v }),
+      });
+      if (res.ok) {
+        const packed = atob(res.headers.get("X-Script") ?? "");
+        const made = JSON.parse(new TextDecoder().decode(Uint8Array.from(packed, (c) => c.charCodeAt(0))));
+        if (!Array.isArray(made) || !made.every((l) => typeof l === "string")) throw new Error("bad script");
+        next = {
+          lines: made,
+          url: URL.createObjectURL(await res.blob()),
+          voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
+          source: res.headers.get("X-Script-Source") ?? "",
+        };
+      } else {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        why = j?.error ?? "Recording is not available just now.";
+      }
+    } catch {
+      why = "The recording could not be made just now.";
+    }
+    if (run.current !== mine) {
+      if (next) URL.revokeObjectURL(next.url);
+      return;
+    }
+    setMade(next);
+    setNote(next ? "" : `${why} Here is a simpler version in your device's own voice.`);
+    setStage("player");
+  };
 
   const create = () => {
     if (!want.trim()) return;
@@ -239,23 +315,16 @@ export default function DemoPage() {
     setGate(false);
     setShared(false);
     setVariant(0);
-    setStage("making");
-    setStep(0);
     const n = used + 1;
     setUsed(n);
     writeCount(n);
+    void generate(0);
   };
 
+  // While waiting, tick the first step after a moment. The request does both.
   useEffect(() => {
-    if (stage !== "making") return;
-    if (step >= STEPS.length) {
-      const t = setTimeout(() => {
-        setIdx(-1);
-        setStage("player");
-      }, 350);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setStep((s) => s + 1), 800);
+    if (stage !== "making" || step > 0) return;
+    const t = setTimeout(() => setStep(1), 3000);
     return () => clearTimeout(t);
   }, [stage, step]);
 
@@ -268,8 +337,9 @@ export default function DemoPage() {
     const n = used + 1;
     setUsed(n);
     writeCount(n);
-    setVariant((v) => (v + 1) % VARIANT_COUNT);
-    setIdx(-1);
+    const v = (variant + 1) % VARIANT_COUNT;
+    setVariant(v);
+    void generate(v);
   };
 
   const share = async () => {
@@ -291,6 +361,9 @@ export default function DemoPage() {
 
   const reset = () => {
     stop();
+    run.current++;
+    setMade(null);
+    setNote("");
     writeCount(0);
     setUsed(0);
     setGate(false);
@@ -305,7 +378,7 @@ export default function DemoPage() {
     return (
       <>
         <h1>Type what you want. Hear it as already yours.</h1>
-        <p className="lede">No sign-up. One tap. About a minute of audio made for you.</p>
+        <p className="lede">No sign-up. One tap. A short affirmation written and recorded for you.</p>
         <div className="card">
           <label htmlFor="want">What do you want?</label>
           <textarea
@@ -336,7 +409,7 @@ export default function DemoPage() {
               />
             </div>
             <div>
-              <label htmlFor="voice">Device voice</label>
+              <label htmlFor="voice">Backup device voice</label>
               <select
                 id="voice"
                 value={voiceURI}
@@ -353,7 +426,7 @@ export default function DemoPage() {
             </div>
           </div>
           <p className="small muted voiceline">
-            Your chosen voice: <b>{studioVoice.name}</b>. <Link href="/settings">Change in Settings</Link>
+            Recorded in the voice of <b>{studioVoice.name}</b>. <Link href="/settings">Change voice</Link>
           </p>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
@@ -375,22 +448,19 @@ export default function DemoPage() {
   }
 
   if (stage === "making") {
+    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${studioVoice.name}`];
     return (
       <>
         <h1>Making it yours…</h1>
-        <p className="lede">
-          In the real app each step is one metered call through the model router. Here
-          they are simulated.
-        </p>
+        <p className="lede">This takes up to half a minute. Keep this page open.</p>
         <div className="card">
-          <ul className="steps">
-            {STEPS.map((s, i) => (
-              <li key={s.key} className={i < step ? "done" : i === step ? "on" : ""}>
+          <ul className="steps" aria-live="polite">
+            {steps.map((label, i) => (
+              <li key={label} className={i < step ? "done" : i === step ? "on" : ""}>
                 <span>
                   {i < step ? "✓ " : i === step ? "… " : ""}
-                  {s.label}
+                  {label}
                 </span>
-                <span className="cost">{usd(cost[s.key])}</span>
               </li>
             ))}
           </ul>
@@ -408,6 +478,7 @@ export default function DemoPage() {
         {shared ? "Shared with you. " : ""}
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>
+      {note && <p className="small muted">{note}</p>}
 
       <div
         className={`visual${playing ? " playing" : ""}`}
@@ -456,7 +527,7 @@ export default function DemoPage() {
       <div className="toast" role="status">
         {toast}
       </div>
-      {!canSpeak && (
+      {!made && !canSpeak && (
         <p className="small muted">
           This browser has no built-in speech, so the lines are shown in time instead.
         </p>
@@ -470,13 +541,11 @@ export default function DemoPage() {
         ))}
       </ol>
 
-      <div className="meter">
-        <span>
-          Real cost of this creation ({chars} characters of voice, 1 image). Replays are
-          free: the audio is stored once.
-        </span>
-        <b>{usd(cost.total)}</b>
-      </div>
+      <p className="small muted">
+        {made
+          ? `Recorded in the voice of ${made.voiceName}. It is not stored: it stays until you leave this page.`
+          : "Read by your device's own voice. Nothing was recorded."}
+      </p>
 
       {(gate || idx >= lines.length || left === 0) && <Gate />}
 
@@ -485,6 +554,7 @@ export default function DemoPage() {
           className="chip"
           onClick={() => {
             stop();
+            run.current++;
             setStage("form");
             setShared(false);
           }}

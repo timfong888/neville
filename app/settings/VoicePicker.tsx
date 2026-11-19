@@ -70,6 +70,7 @@ export default function VoicePicker() {
                 name="voice"
                 value={v.id}
                 checked={chosen === v.id}
+                disabled={!v.generate}
                 onChange={() => choose(v.id)}
               />
               <span className="vname">
@@ -77,7 +78,7 @@ export default function VoicePicker() {
                 {v.id === DEFAULT_VOICE_ID && <span className="pill">Default</span>}
               </span>
               <span className="small muted">
-                {[v.label, v.provider, TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
+                {[v.generate ? "" : "Sample only", v.label, v.provider, TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
               </span>
             </label>
             <button
@@ -96,8 +97,8 @@ export default function VoicePicker() {
       </p>
       <p className="small muted">
         Your choice is kept on this device only. No account is needed.{" "}
-        Recording in these voices is not built yet, so the demo still uses your device&rsquo;s
-        own voice. Your choice is saved for when it is.
+        New manifestations are recorded in the voice you choose. Voices marked sample only can be
+        heard here but not chosen yet.
       </p>
     </>
   );

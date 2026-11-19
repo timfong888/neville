@@ -10,7 +10,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-nadine.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-tabitha",
@@ -21,7 +22,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-tabitha.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-noelle",
@@ -32,7 +34,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-noelle.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-meredith",
@@ -43,7 +46,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-meredith.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-sabrina",
@@ -54,7 +58,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-sabrina.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-bram",
@@ -65,7 +70,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-bram.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-gareth",
@@ -76,7 +82,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-gareth.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-lucian",
@@ -87,7 +94,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-lucian.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-weston",
@@ -98,7 +106,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-weston.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "heygen-vincent",
@@ -109,7 +118,8 @@
       "label": "",
       "sample": "/voice-samples/pick/heygen-vincent.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "gemini-achernar",
@@ -120,7 +130,8 @@
       "label": "Soft",
       "sample": "/voice-samples/pick/gemini-achernar.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "gemini-vindemiatrix",
@@ -131,7 +142,8 @@
       "label": "Gentle",
       "sample": "/voice-samples/pick/gemini-vindemiatrix.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "gemini-sulafat",
@@ -142,7 +154,8 @@
       "label": "Warm",
       "sample": "/voice-samples/pick/gemini-sulafat.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "gemini-enceladus",
@@ -153,7 +166,8 @@
       "label": "Breathy",
       "sample": "/voice-samples/pick/gemini-enceladus.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "gemini-algieba",
@@ -164,7 +178,8 @@
       "label": "Smooth",
       "sample": "/voice-samples/pick/gemini-algieba.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "gemini-kore",
@@ -175,7 +190,8 @@
       "label": "Firm",
       "sample": "/voice-samples/pick/gemini-kore.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": true
     },
     {
       "id": "kokoro-af-heart",
@@ -186,7 +202,8 @@
       "label": "",
       "sample": "/voice-samples/pick/kokoro-af-heart.mp3",
       "enabled": true,
-      "tier": "cheap"
+      "tier": "cheap",
+      "generate": true
     },
     {
       "id": "orpheus-tara",
@@ -197,7 +214,8 @@
       "label": "",
       "sample": "/voice-samples/pick/orpheus-tara.mp3",
       "enabled": true,
-      "tier": "low"
+      "tier": "low",
+      "generate": false
     },
     {
       "id": "sesame-read-speech-a",
@@ -208,7 +226,8 @@
       "label": "",
       "sample": "/voice-samples/pick/sesame-read-speech-a.mp3",
       "enabled": true,
-      "tier": "low"
+      "tier": "low",
+      "generate": false
     },
     {
       "id": "fish-drama-3",
@@ -219,7 +238,8 @@
       "label": "Model default voice",
       "sample": "/voice-samples/pick/fish-drama-3.mp3",
       "enabled": true,
-      "tier": "low"
+      "tier": "low",
+      "generate": false
     },
     {
       "id": "fish-s2-1-pro-free",
@@ -230,7 +250,8 @@
       "label": "Model default voice",
       "sample": "/voice-samples/pick/fish-s2-1-pro-free.mp3",
       "enabled": true,
-      "tier": "free"
+      "tier": "free",
+      "generate": true
     },
     {
       "id": "fish-s2-1-pro",
@@ -241,7 +262,8 @@
       "label": "Model default voice",
       "sample": "/voice-samples/pick/fish-s2-1-pro.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": false
     },
     {
       "id": "voxtral-voice-3150",
@@ -252,7 +274,8 @@
       "label": "",
       "sample": "/voice-samples/pick/voxtral-voice-3150.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": false
     },
     {
       "id": "grok-eve",
@@ -263,7 +286,8 @@
       "label": "",
       "sample": "/voice-samples/pick/grok-eve.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": false
     },
     {
       "id": "gemini-flash-kore",
@@ -274,7 +298,8 @@
       "label": "Firm",
       "sample": "/voice-samples/pick/gemini-flash-kore.mp3",
       "enabled": true,
-      "tier": "mid"
+      "tier": "mid",
+      "generate": false
     },
     {
       "id": "gemini-3-1-kore",
@@ -285,7 +310,8 @@
       "label": "Firm",
       "sample": "/voice-samples/pick/gemini-3-1-kore.mp3",
       "enabled": true,
-      "tier": "premium"
+      "tier": "premium",
+      "generate": false
     },
     {
       "id": "eleven-george",
@@ -296,7 +322,8 @@
       "label": "",
       "sample": "/voice-samples/pick/eleven-george.mp3",
       "enabled": false,
-      "tier": "premium"
+      "tier": "premium",
+      "generate": false
     },
     {
       "id": "eleven-sarah",
@@ -307,7 +334,8 @@
       "label": "",
       "sample": "/voice-samples/pick/eleven-sarah.mp3",
       "enabled": false,
-      "tier": "premium"
+      "tier": "premium",
+      "generate": false
     }
   ]
 }
