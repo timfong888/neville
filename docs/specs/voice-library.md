@@ -66,7 +66,12 @@ Reading in the delivery we want matters: a clone copies the style of its trainin
 
 The library today is `config/voices.json`: `id`, `provider`, `model`, `voice`, `name`, `tier`, `enabled`, `generate`. Cloned voices extend it; nothing about how the browser picks a voice changes (it sends an id, the server resolves model and voice).
 
-New fields per library voice (in the database once step 2 of issue #3 lands; in the JSON file until then):
+**Keep the private part server-only.** `config/voices.json` is imported by `lib/voices.ts`, which the browser bundle includes, so anything put there is public. Release ids, reference transcripts, provider voice ids and revenue-share rates must never go in it. Split the record in two:
+
+- **Public voice entry** (stays in `config/voices.json`, safe for the browser): `id`, `name`, `label`, `tier`, `sample`, `enabled`, `generate`, `source`, `priceMultiplier`.
+- **Private clone registry** (a `server-only` module, then the database after step 2 of issue #3): every other field below. The server joins the two by `id`; the browser only ever sees the public entry.
+
+New fields per library voice (the private ones live in the registry):
 
 | Field | Meaning |
 |---|---|
