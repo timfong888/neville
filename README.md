@@ -5,6 +5,8 @@ Voice manifestation app. This repo holds the architecture spec and a clickable p
 - Spec: [docs/specs/architecture.md](docs/specs/architecture.md)
 - App: `npm install && npm run dev`, then open:
   - `/` — type a wish; the app writes a short affirmation and records it in your chosen voice.
+  - `/library` — manifestations you saved with **Save** on the player; open one to edit its title and script.
+  - `/playlists` — named, ordered playlists that play back to back; "Play all" plays the whole library.
   - `/settings` — choose a voice. The choice is kept on the device; no account.
   - `/voices` — voice bake-off: one script, several OpenRouter voices, price per clip.
   - `/architecture` — the architecture and cost page.

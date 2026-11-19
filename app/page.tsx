@@ -6,6 +6,9 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
+import { lineStarts, startPad } from "@/lib/audio";
+import { newId } from "@/lib/library/model";
+import { getStore } from "@/lib/library/useLibrary";
 
 type Stage = "form" | "making" | "player";
 
@@ -16,18 +19,7 @@ const EXAMPLES = [
   "a loving, easy relationship with my family",
 ];
 
-type Made = { lines: string[]; url: string; voiceName: string; source: string };
-
-/** Where each line starts, as a share of the whole script, for read-along. */
-function lineStarts(lines: string[]): number[] {
-  const total = lines.reduce((n, l) => n + l.length, 0) || 1;
-  let at = 0;
-  return lines.map((l) => {
-    const start = at / total;
-    at += l.length;
-    return start;
-  });
-}
+type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string };
 
 function readCount(): number {
   try {
@@ -44,43 +36,6 @@ function writeCount(n: number) {
   }
 }
 
-/** Soft ambient pad made with WebAudio, so the prototype ships no audio files. */
-function startPad(): () => void {
-  const Ctx: typeof AudioContext | undefined =
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctx) return () => {};
-  const ctx = new Ctx();
-  const master = ctx.createGain();
-  master.gain.value = 0;
-  master.connect(ctx.destination);
-  master.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 3);
-  const oscs = [110, 164.81, 220.6, 277.18].map((f, i) => {
-    const o = ctx.createOscillator();
-    o.type = "sine";
-    o.frequency.value = f;
-    const g = ctx.createGain();
-    g.gain.value = i === 0 ? 0.9 : 0.35;
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.05 + i * 0.03;
-    const lg = ctx.createGain();
-    lg.gain.value = 0.25;
-    lfo.connect(lg).connect(g.gain);
-    o.connect(g).connect(master);
-    o.start();
-    lfo.start();
-    return [o, lfo];
-  });
-  return () => {
-    master.gain.cancelScheduledValues(ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
-    setTimeout(() => {
-      oscs.flat().forEach((o) => o.stop());
-      void ctx.close();
-    }, 700);
-  };
-}
-
 export default function DemoPage() {
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
@@ -95,6 +50,9 @@ export default function DemoPage() {
   const [used, setUsed] = useState(0);
   const [gate, setGate] = useState(false);
   const [shared, setShared] = useState(false);
+  // The library id once this result is saved; cleared when a new one is made.
+  const [savedId, setSavedId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState("");
@@ -288,6 +246,7 @@ export default function DemoPage() {
         next = {
           lines: made,
           url: URL.createObjectURL(await res.blob()),
+          voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: res.headers.get("X-Script-Source") ?? "",
         };
@@ -303,6 +262,7 @@ export default function DemoPage() {
       return;
     }
     setMade(next);
+    setSavedId("");
     setNote(
       !next
         ? `${why} Here is a general version in your device's own voice.`
@@ -362,6 +322,39 @@ export default function DemoPage() {
     } catch {
       setToast("Could not share from this browser.");
     }
+    setTimeout(() => setToast(""), 2500);
+  };
+
+  // Keeps this result in the library on this device: script, title and recording.
+  const save = async () => {
+    if (saving || savedId) return;
+    setSaving(true);
+    try {
+      const audio = made ? await (await fetch(made.url)).blob() : null;
+      const now = Date.now();
+      const id = newId();
+      await getStore().saveManifestation(
+        {
+          id,
+          // The general fallback is not about the wish, so its title is not either.
+          title: made ? titleFor(want) : "A moment of calm",
+          want: want.trim(),
+          firstName: name.trim(),
+          lines,
+          voiceId: made?.voiceId ?? "",
+          voiceName: made?.voiceName ?? "Device voice",
+          hasAudio: !!audio,
+          createdAt: now,
+          updatedAt: now,
+        },
+        audio,
+      );
+      setSavedId(id);
+      setToast("Saved to your library.");
+    } catch {
+      setToast("Could not save on this device.");
+    }
+    setSaving(false);
     setTimeout(() => setToast(""), 2500);
   };
 
@@ -520,6 +513,15 @@ export default function DemoPage() {
         <button className="btn sm" onClick={share}>
           Share
         </button>
+        {savedId ? (
+          <Link className="btn sm" href={`/library/${savedId}`}>
+            ✓ Saved
+          </Link>
+        ) : (
+          <button className="btn sm" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        )}
         <button
           className="btn sm ghost"
           aria-pressed={music}
@@ -550,7 +552,7 @@ export default function DemoPage() {
 
       <p className="small muted">
         {made
-          ? `Recorded in the voice of ${made.voiceName}. It is not stored: it stays until you leave this page.`
+          ? `Recorded in the voice of ${made.voiceName}. ${savedId ? "Saved in your library on this device." : "Not kept unless you tap Save."}`
           : "Read by your device's own voice. Nothing was recorded."}
       </p>
 

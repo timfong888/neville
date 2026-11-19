@@ -34,6 +34,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </Link>
           <nav>
             <Link href="/">Create</Link>
+            <Link href="/library">Library</Link>
+            <Link href="/playlists">Playlists</Link>
             <Link href="/voices">Voices</Link>
             <Link href="/architecture">Architecture</Link>
             <Link href="/settings">Settings</Link>
@@ -42,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
         <footer className="foot">
           Prototype. Your wish is sent to an AI service to write and record your affirmation.
-          Recordings are not stored. Free recordings are limited each day.
+          What you save stays on this device. Free recordings are limited each day.
         </footer>
       </body>
     </html>
