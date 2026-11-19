@@ -7,6 +7,7 @@ Voice manifestation app. This repo holds the architecture spec and a clickable p
   - `/` — type a wish; the app writes a short affirmation and records it in your chosen voice.
   - `/library` — manifestations you saved with **Save** on the player; open one to edit its title and script.
   - `/playlists` — named, ordered playlists that play back to back; "Play all" plays the whole library.
+  - `/account` — create a free account with Google, move device work into it, sign out, delete the account.
   - `/settings` — choose a voice. The choice is kept on the device; no account.
   - `/voices` — voice bake-off: one script, several OpenRouter voices, price per clip.
   - `/architecture` — the architecture and cost page.
@@ -64,3 +65,25 @@ read by the device's own voice, which costs nothing.
 `POST /api/speak` (the bake-off) stays off in production. `GET /api/status`
 reports whether the key is present; on previews also its budget. It never
 returns the key.
+
+## Accounts
+
+Off until every variable below is set; until then saved work stays in the
+browser and `/account` says what is missing (variable names only, never
+values, and not on production).
+
+| Variable | Where it comes from |
+|---|---|
+| `ACCOUNTS_ENABLED` | set to `true` |
+| `DATABASE_URL` | Neon, added from the Vercel Marketplace |
+| `BLOB_READ_WRITE_TOKEN` | a **private** Vercel Blob store connected to the project |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web client; redirect URI `https://<host>/api/auth/callback/google` |
+| `BETTER_AUTH_SECRET` | 32+ random characters |
+| `BETTER_AUTH_URL` | optional; defaults to the production or branch URL |
+
+Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
+build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
+applies them by hand against `DATABASE_URL`. Recordings are kept in private
+Blob storage and only served through `/api/library/.../audio` to their owner.
+Deleting an account deletes the user row, which cascades to every saved row,
+then deletes the recordings.

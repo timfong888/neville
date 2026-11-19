@@ -39,12 +39,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/voices">Voices</Link>
             <Link href="/architecture">Architecture</Link>
             <Link href="/settings">Settings</Link>
+            <Link href="/account">Account</Link>
           </nav>
         </header>
         <main>{children}</main>
         <footer className="foot">
           Prototype. Your wish is sent to an AI service to write and record your affirmation.
-          What you save stays on this device. Free recordings are limited each day.
+          What you save stays on this device unless you sign in. Free recordings are limited each day.
         </footer>
       </body>
     </html>

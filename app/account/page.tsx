@@ -1,0 +1,212 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/account/authClient";
+import { fetchAccount, useAccount } from "@/lib/account/useAccount";
+import { AccountStore } from "@/lib/library/accountStore";
+import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
+import { getDeviceStore } from "@/lib/library/useLibrary";
+
+/** Moves everything saved on this device into the account, then clears the device. */
+async function moveDeviceWork(onStep: (done: number, total: number) => void): Promise<number> {
+  const device = getDeviceStore();
+  const target = new AccountStore();
+  const lib = await device.load();
+  const total = lib.manifestations.length + lib.playlists.length;
+  let done = 0;
+  // Oldest first, so the account keeps the same order.
+  for (const m of [...lib.manifestations].sort((a, b) => a.createdAt - b.createdAt)) {
+    const audio = m.hasAudio ? await device.getAudio(m.id) : null;
+    await target.saveManifestation(m, audio);
+    onStep(++done, total);
+  }
+  for (const p of lib.playlists) {
+    await target.savePlaylist(p);
+    onStep(++done, total);
+  }
+  for (const p of lib.playlists) await device.deletePlaylist(p.id);
+  for (const m of lib.manifestations) await device.deleteManifestation(m.id);
+  return lib.manifestations.length;
+}
+
+export default function AccountPage() {
+  const { account, ready } = useAccount();
+  const [deviceLib, setDeviceLib] = useState<Library>(EMPTY_LIBRARY);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const moved = useRef(false);
+
+  const refreshDevice = useCallback(() => void getDeviceStore().load().then(setDeviceLib), []);
+  useEffect(refreshDevice, [refreshDevice]);
+
+  const signedIn = account.enabled && !!account.user;
+  const deviceCount = deviceLib.manifestations.length;
+
+  const move = useCallback(async () => {
+    setBusy("Moving your saved work into your account…");
+    try {
+      const n = await moveDeviceWork((d, t) => setBusy(`Moving your saved work into your account… ${d} of ${t}`));
+      setMsg(`Moved ${n} ${n === 1 ? "manifestation" : "manifestations"} from this device into your account.`);
+    } catch (e) {
+      setMsg(`Some items could not be moved: ${e instanceof Error ? e.message : "unknown error"}. They are still on this device.`);
+    }
+    setBusy("");
+    refreshDevice();
+  }, [refreshDevice]);
+
+  // First visit after signing in: bring device work across once.
+  useEffect(() => {
+    if (signedIn && deviceCount > 0 && !moved.current) {
+      moved.current = true;
+      void move();
+    }
+  }, [signedIn, deviceCount, move]);
+
+  const signIn = async () => {
+    setBusy("Opening Google…");
+    const r = await authClient.signIn.social({ provider: "google", callbackURL: "/account" }).catch(() => null);
+    if (!r || r.error) {
+      setBusy("");
+      setMsg("Sign-in could not start. Try again in a moment.");
+    }
+  };
+
+  const signOut = async () => {
+    await authClient.signOut().catch(() => undefined);
+    await fetchAccount(true);
+    window.location.assign("/account");
+  };
+
+  const deleteAccount = async () => {
+    setBusy("Deleting your account…");
+    const res = await fetch("/api/account", { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      setBusy("");
+      setMsg("Your account could not be deleted just now. Nothing was removed.");
+      return;
+    }
+    await authClient.signOut().catch(() => undefined);
+    await fetchAccount(true);
+    window.location.assign("/account?deleted=1");
+  };
+
+  const clearDevice = async () => {
+    if (!window.confirm("Delete every manifestation and playlist saved on this device?")) return;
+    const d = getDeviceStore();
+    for (const p of deviceLib.playlists) await d.deletePlaylist(p.id);
+    for (const m of deviceLib.manifestations) await d.deleteManifestation(m.id);
+    try {
+      window.localStorage.removeItem("nv_free");
+      window.localStorage.removeItem("nv_voice");
+    } catch {
+      /* nothing stored */
+    }
+    refreshDevice();
+    setMsg("Everything saved on this device has been deleted.");
+  };
+
+  const [deleted, setDeleted] = useState(false);
+  useEffect(() => setDeleted(new URLSearchParams(window.location.search).has("deleted")), []);
+
+  if (!ready) return null;
+
+  return (
+    <>
+      <h1>{signedIn ? "Your account" : "Create a free account"}</h1>
+      {deleted && !signedIn && (
+        <p className="notice" role="status">
+          Your account, manifestations, recordings and playlists have been deleted.
+        </p>
+      )}
+
+      {signedIn ? (
+        <div className="card">
+          <p>
+            Signed in as <b>{account.user!.name}</b>
+            <span className="muted"> ({account.user!.email})</span>
+          </p>
+          <p className="muted">
+            Your <Link href="/library">manifestations</Link> and <Link href="/playlists">playlists</Link> are saved in
+            your account and follow you to any device.
+          </p>
+          {deviceCount > 0 && !busy && (
+            <button className="btn sm" onClick={move}>
+              Move {deviceCount} from this device into my account
+            </button>
+          )}
+          <div className="controls">
+            <button className="btn sm" onClick={signOut}>
+              Sign out
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="lede">Keep what you make, and play it back to back on any device. Free.</p>
+          <div className="card">
+            <ul className="steps">
+              <li className="done">
+                <span>✓ Everything you saved here moves into your account</span>
+              </li>
+              <li className="done">
+                <span>✓ Your manifestations and playlists on your phone and computer</span>
+              </li>
+              <li className="done">
+                <span>✓ Delete it all, any time</span>
+              </li>
+            </ul>
+            <button className="btn primary block" onClick={signIn} disabled={!account.enabled || !!busy}>
+              Continue with Google
+            </button>
+            {!account.enabled && (
+              <p className="small muted" style={{ marginTop: 10 }}>
+                Sign-in is not switched on here yet, so for now your work is saved on this device and you can keep
+                using everything without an account.
+                {account.missing?.length ? ` Waiting on: ${account.missing.join(", ")}.` : ""}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {busy && (
+        <p className="small muted" role="status">
+          {busy}
+        </p>
+      )}
+      {msg && (
+        <p className="small muted" role="status">
+          {msg}
+        </p>
+      )}
+
+      <h2>{signedIn ? "Delete my account" : "On this device"}</h2>
+      {signedIn ? (
+        <div className="card">
+          <p className="muted">
+            This deletes your account, every manifestation, recording and playlist, and signs you out. It cannot be
+            undone.
+          </p>
+          <label htmlFor="confirm">Type DELETE to confirm</label>
+          <input id="confirm" type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+          <button className="btn block danger" disabled={confirm !== "DELETE" || !!busy} onClick={deleteAccount}>
+            Delete my account
+          </button>
+        </div>
+      ) : (
+        <div className="card">
+          <p className="muted">
+            {deviceCount} {deviceCount === 1 ? "manifestation" : "manifestations"} and {deviceLib.playlists.length}{" "}
+            {deviceLib.playlists.length === 1 ? "playlist" : "playlists"} saved in this browser. No one else can see
+            them, and they are lost if you clear this site&apos;s data.
+          </p>
+          <button className="btn sm ghost danger" onClick={clearDevice} disabled={!deviceCount && !deviceLib.playlists.length}>
+            Delete everything on this device
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
