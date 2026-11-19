@@ -20,7 +20,7 @@ Paths are relative to the repository root.
 | 3 | Define my manifestation | Built | `app/page.tsx` (create form), `app/api/manifest/route.ts` |
 | 4 | Play mode that plays through all my manifestations | In this task | #12: saved library, named playlists, "Play all" |
 | 5 | Meditations in "You" statements | Built | `lib/prompt.ts`, `lib/script.ts` |
-| 6 | Uses my first name from time to time | Built | first-name field on `/`; prompt in `lib/prompt.ts` |
+| 6 | Uses my first name from time to time | Partial | First name used once, in the opening line (`lib/prompt.ts`). "From time to time" across a playlist: each saved manifestation uses it, so a playlist repeats it; within one script it is not repeated |
 | 7 | AI variations to keep it interesting | Built | "New variation" on the player, `app/page.tsx` |
 | 8 | Not repetitive; keeps me engaged instead of YouTube | Partial | Variations, music pad and read-along exist. Images and scrolling visual: #15. Calmer delivery: #10 |
 | 9 | New programming that overcomes doubts with imagery and goals | Not yet | #15 |
