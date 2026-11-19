@@ -3,6 +3,9 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
 import { addItem, makePlaylist, type Manifestation } from "@/lib/library/model";
 import {
+  addTombstones,
+  clearTombstones,
+  oldestTombstones,
   cleanManifestation,
   type Db,
   deleteAccount,
@@ -94,6 +97,26 @@ describe("library in Postgres", () => {
     expect(await count(`select count(*)::int as n from rendition where manifestation_id = any($1::uuid[])`, [[A, B]])).toBe(0);
     expect(await count(`select count(*)::int as n from playlist where profile_id = $1`, [alice])).toBe(0);
     expect((await loadLibrary(db, bob)).manifestations).toHaveLength(1);
+  });
+});
+
+describe("recordings waiting for deletion", () => {
+  it("are kept until cleared, oldest first, without duplicates", async () => {
+    await addTombstones(db, ["t1", "t2"]);
+    await addTombstones(db, ["t2", "t3"]);
+    expect(await oldestTombstones(db, 10)).toEqual(expect.arrayContaining(["t1", "t2", "t3"]));
+    await clearTombstones(db, ["t1", "t2"]);
+    expect(await oldestTombstones(db, 10)).toEqual(["t3"]);
+    await clearTombstones(db, ["t3"]);
+  });
+
+  it("an account deletion that rolls back leaves its rows and records nothing", async () => {
+    await db.query("begin");
+    const keys = await deleteAccount(db, "u-bob");
+    await addTombstones(db, keys.length ? keys : ["bob-key"]);
+    await db.query("rollback");
+    expect((await loadLibrary(db, bob)).manifestations).toHaveLength(1);
+    expect(await oldestTombstones(db, 10)).toEqual([]);
   });
 });
 

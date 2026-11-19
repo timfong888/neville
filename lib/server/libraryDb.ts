@@ -205,3 +205,18 @@ export async function deleteAccount(db: Db, userId: string): Promise<string[]> {
   await db.query(`delete from "user" where id = $1`, [userId]);
   return keys.rows.map((r) => String(r.audio_key));
 }
+
+/** Records storage keys to delete, in the caller's transaction. */
+export async function addTombstones(db: Db, keys: string[]): Promise<void> {
+  if (!keys.length) return;
+  await db.query(`insert into blob_tombstone (key) select unnest($1::text[]) on conflict do nothing`, [keys]);
+}
+
+export async function oldestTombstones(db: Db, limit = 50): Promise<string[]> {
+  const { rows } = await db.query(`select key from blob_tombstone order by created_at limit $1`, [limit]);
+  return rows.map((r) => String(r.key));
+}
+
+export async function clearTombstones(db: Db, keys: string[]): Promise<void> {
+  if (keys.length) await db.query(`delete from blob_tombstone where key = any($1::text[])`, [keys]);
+}

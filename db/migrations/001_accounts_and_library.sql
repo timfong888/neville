@@ -104,3 +104,12 @@ create table if not exists playlist_item (
   position          int not null,
   primary key (playlist_id, manifestation_id)
 );
+
+-- Recordings waiting to be removed from Blob storage. A key is written here in
+-- the same transaction that removes its last row, so a Blob outage can never
+-- leave a recording with no record of it; keys are deleted from here only
+-- after Blob confirms the file is gone, and are retried on later deletions.
+create table if not exists blob_tombstone (
+  key         text primary key,
+  created_at  timestamptz not null default now()
+);

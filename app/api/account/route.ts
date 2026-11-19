@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { accountsEnabled, currentUser, deleteAudio, missingVars, withTx } from "@/lib/server/accounts";
-import { deleteAccount } from "@/lib/server/libraryDb";
+import { accountsEnabled, currentUser, missingVars, purgeAudio, withTx } from "@/lib/server/accounts";
+import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +13,21 @@ export async function GET(req: Request) {
   return NextResponse.json({ enabled, user, missing }, { headers: { "Cache-Control": "no-store" } });
 }
 
-/** Deletes the signed-in account: rows by cascade in one transaction, then the recordings. */
+/**
+ * Deletes the signed-in account. One transaction removes every row (by
+ * cascade) and records each recording's key for deletion; the recordings are
+ * then removed from Blob, and any that fail are retried on later deletions.
+ */
 export async function DELETE(req: Request) {
   const origin = req.headers.get("origin");
   if (origin && origin !== new URL(req.url).origin) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const user = await currentUser(req);
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  const keys = await withTx((db) => deleteAccount(db, user.id));
-  await deleteAudio(keys);
-  return NextResponse.json({ ok: true });
+  const keys = await withTx(async (db) => {
+    const k = await deleteAccount(db, user.id);
+    await addTombstones(db, k);
+    return k;
+  });
+  const audioPending = await purgeAudio(keys);
+  return NextResponse.json({ ok: true, audioPending });
 }

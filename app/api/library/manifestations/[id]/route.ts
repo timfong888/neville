@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { audioType, deleteAudio, MAX_AUDIO_BYTES, storeAudio } from "@/lib/server/accounts";
-import { cleanManifestation, deleteManifestation, isId, putManifestation } from "@/lib/server/libraryDb";
+import { audioType, MAX_AUDIO_BYTES, purgeAudio, reserveAudioKey, storeAudio } from "@/lib/server/accounts";
+import { addTombstones, clearTombstones, cleanManifestation, deleteManifestation, isId, putManifestation } from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
 
 export const dynamic = "force-dynamic";
@@ -35,25 +35,48 @@ export async function PUT(req: Request, { params }: Ctx) {
   const mime = file ? await audioType(file) : null;
   if (file && !mime) return NextResponse.json({ error: "Recording must be WAV or MP3." }, { status: 415 });
 
-  return asOwner(req, async (db, profileId) => {
-    const audio = file && mime ? await storeAudio(profileId, id, file, mime) : form.get("removeAudio") === "1" ? null : undefined;
-    const stale = await putManifestation(db, profileId, m, audio);
-    if (stale === null) {
-      if (audio) await deleteAudio([audio.key]);
-      return NextResponse.json({ error: "Not found." }, { status: 404 });
-    }
-    await deleteAudio(stale);
-    return NextResponse.json({ ok: true, hasAudio: audio ? true : audio === null ? false : undefined });
-  });
+  // Keys to remove from Blob once the transaction has committed.
+  let purge: string[] = [];
+  let reserved: string | null = null;
+  try {
+    const res = await asOwner(req, async (db, profileId) => {
+      let audio: { key: string; mime: string } | null | undefined = form.get("removeAudio") === "1" ? null : undefined;
+      if (file && mime) {
+        reserved = await reserveAudioKey(profileId, id, mime);
+        audio = await storeAudio(reserved, file, mime);
+      }
+      const stale = await putManifestation(db, profileId, m, audio);
+      if (stale === null) {
+        // Not this caller's id: the upload stays recorded and is removed below.
+        if (reserved) purge = [reserved];
+        return NextResponse.json({ error: "Not found." }, { status: 404 });
+      }
+      // The new file is now referenced by a row; the replaced ones are not.
+      if (reserved) await clearTombstones(db, [reserved]);
+      purge = stale;
+      await addTombstones(db, stale);
+      return NextResponse.json({ ok: true });
+    });
+    await purgeAudio(purge);
+    return res;
+  } catch (e) {
+    // Rolled back: the reserved key is still recorded, so this or a later sweep removes it.
+    if (reserved) await purgeAudio([reserved]).catch(() => undefined);
+    throw e;
+  }
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;
   if (!isId(id)) return NextResponse.json({ error: "Bad id." }, { status: 400 });
-  return asOwner(req, async (db, profileId) => {
+  let purge: string[] = [];
+  const res = await asOwner(req, async (db, profileId) => {
     const keys = await deleteManifestation(db, profileId, id);
     if (keys === null) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    await deleteAudio(keys);
+    purge = keys;
+    await addTombstones(db, keys);
     return NextResponse.json({ ok: true });
   });
+  await purgeAudio(purge);
+  return res;
 }

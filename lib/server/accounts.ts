@@ -7,7 +7,8 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import pg from "pg";
 import { sniffAudio } from "@/lib/server/audioSniff";
-import type { Db } from "@/lib/server/libraryDb";
+import { randomUUID } from "node:crypto";
+import { addTombstones, type Db, oldestTombstones } from "@/lib/server/libraryDb";
 
 const REQUIRED = [
   "DATABASE_URL",
@@ -102,20 +103,22 @@ export async function audioType(file: Blob): Promise<"audio/wav" | "audio/mpeg" 
   return sniffAudio(new Uint8Array(await file.slice(0, 16).arrayBuffer()));
 }
 
-/** Stores a recording whose type was already checked with audioType(). */
-export async function storeAudio(
-  profileId: string,
-  manifestationId: string,
-  file: Blob,
-  mime: "audio/wav" | "audio/mpeg",
-): Promise<{ key: string; mime: string }> {
-  const ext = mime === "audio/mpeg" ? "mp3" : "wav";
-  const r = await put(`audio/${profileId}/${manifestationId}.${ext}`, file, {
-    access: "private",
-    addRandomSuffix: true,
-    contentType: mime,
-  });
-  return { key: r.url, mime };
+/**
+ * Picks a storage key for a new recording and records it in blob_tombstone
+ * (committed at once) before anything is uploaded. The caller clears that
+ * record in the same transaction that saves the row pointing at the file, so
+ * an upload whose row never commits is still known and gets removed.
+ */
+export async function reserveAudioKey(profileId: string, manifestationId: string, mime: "audio/wav" | "audio/mpeg"): Promise<string> {
+  const key = `audio/${profileId}/${manifestationId}-${randomUUID()}.${mime === "audio/mpeg" ? "mp3" : "wav"}`;
+  await addTombstones(getPool() as unknown as Db, [key]);
+  return key;
+}
+
+/** Uploads to a key from reserveAudioKey(); the type was already checked with audioType(). */
+export async function storeAudio(key: string, file: Blob, mime: "audio/wav" | "audio/mpeg"): Promise<{ key: string; mime: string }> {
+  await put(key, file, { access: "private", addRandomSuffix: false, contentType: mime });
+  return { key, mime };
 }
 
 export async function readAudio(key: string): Promise<ReadableStream<Uint8Array> | null> {
@@ -123,12 +126,31 @@ export async function readAudio(key: string): Promise<ReadableStream<Uint8Array>
   return r && r.statusCode === 200 ? r.stream : null;
 }
 
-/** Best effort: a key that fails to delete is logged, not retried here. */
-export async function deleteAudio(keys: string[]): Promise<void> {
-  if (!keys.length) return;
+/**
+ * Removes recordings whose keys are already recorded in blob_tombstone, then
+ * clears those records. If Blob fails, the records stay and a later call
+ * retries them, so nothing is ever forgotten. Returns how many are still pending.
+ */
+export async function purgeAudio(keys: string[]): Promise<number> {
+  let pending = 0;
+  const run = async (batch: string[]) => {
+    if (!batch.length) return;
+    try {
+      await del(batch);
+      await getPool().query(`delete from blob_tombstone where key = any($1::text[])`, [batch]);
+    } catch (e) {
+      pending += batch.length;
+      console.error("blob delete failed; will retry", batch.length, e instanceof Error ? e.message : e);
+    }
+  };
+  await run(keys);
+  // Retry older leftovers from earlier failures, a few at a time.
   try {
-    await del(keys);
-  } catch (e) {
-    console.error("blob delete failed", keys.length, e instanceof Error ? e.message : e);
+    const old = (await oldestTombstones(getPool() as unknown as Db, 50)).filter((k) => !keys.includes(k));
+    await run(old);
+  } catch {
+    /* the sweep is opportunistic */
   }
+  return pending;
 }
+
