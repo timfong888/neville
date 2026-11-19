@@ -6,7 +6,7 @@
 // SOFT MVP CAPS: takeSlot's per-visitor and per-day counters. They live in this
 // module's memory, one copy per server instance, and are lost on restart. They
 // slow casual overuse; they do not bound spend. Durable counters need a store
-// and are tracked in the "Durable per-IP and daily limits" issue.
+// and are tracked in issue #8.
 import limits from "@/config/limits.json";
 
 const today = () => new Date().toISOString().slice(0, 10);

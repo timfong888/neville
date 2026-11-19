@@ -49,7 +49,7 @@ Limits are in `config/limits.json`:
   that bounds spend.
 - **Soft MVP caps: `perIpPerDay`, `globalPerDay`.** Counters held in memory, one
   copy per server instance, lost on restart. They slow casual overuse; they are
-  not a cap. The two free creations before the sign-up prompt are softer still:
+  not a cap. Making them durable needs a store: see issue #8. The two free creations before the sign-up prompt are softer still:
   that count is in the browser's own storage.
 - `maxWantChars`, `maxScriptChars` — input and script length.
 - `generationEnabled` — `false` switches recording off. Setting the environment
