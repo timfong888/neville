@@ -6,6 +6,7 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
+import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { lineStarts, startPad } from "@/lib/audio";
 import { newId } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
@@ -19,7 +20,18 @@ const EXAMPLES = [
   "a loving, easy relationship with my family",
 ];
 
-type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string };
+type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string; starts?: number[] };
+
+/** The server's line start times, if present and sound; null makes the page estimate instead. */
+function readStarts(header: string | null, count: number): number[] | undefined {
+  try {
+    const v = JSON.parse(header ?? "null");
+    const ok = Array.isArray(v) && v.length === count && v.every((n) => typeof n === "number" && n >= 0 && n <= 1);
+    return ok ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function readCount(): number {
   try {
@@ -146,7 +158,8 @@ export default function DemoPage() {
     if (made) {
       const a = new Audio(made.url);
       audio.current = a;
-      const starts = lineStarts(lines);
+      // With pauses, the server knows where each line starts; otherwise estimate by length.
+      const starts = made.starts ?? lineStarts(lines);
       a.ontimeupdate = () => {
         if (token.current !== mine || !a.duration) return;
         const at = a.currentTime / a.duration;
@@ -237,7 +250,14 @@ export default function DemoPage() {
       const res = await fetch("/api/manifest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ want: want.trim(), name: name.trim(), voiceId: studioVoice.id, variant: v }),
+        body: JSON.stringify({
+          want: want.trim(),
+          name: name.trim(),
+          voiceId: studioVoice.id,
+          variant: v,
+          pace: readPaceChoice(),
+          tone: readToneChoice(),
+        }),
       });
       if (res.ok) {
         const packed = atob(res.headers.get("X-Script") ?? "");
@@ -249,6 +269,7 @@ export default function DemoPage() {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: res.headers.get("X-Script-Source") ?? "",
+          starts: readStarts(res.headers.get("X-Line-Starts"), made.length),
         };
       } else {
         const j = (await res.json().catch(() => null)) as { error?: string } | null;

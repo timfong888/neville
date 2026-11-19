@@ -31,6 +31,25 @@ Edit it to change what is offered; no code change is needed.
 
 A mistake in the file fails the build, so it cannot reach the live site.
 
+## Delivery: pace and tone
+
+Settings has a Pace (Slow, Very slow) and a Tone (Calm, Soft, Sleep). Defaults are
+Slow and Calm. The presets, with the numbers behind them, live in `lib/delivery.ts`;
+the browser sends only the two ids and the server turns them into speech settings.
+
+- **Script:** the prompt asks for 10 to 12 short present-tense lines, a repeated
+  refrain, no exclamation marks, no sales words. The tone adds a one-line "feel".
+- **Speed:** sent to the model as `speed`. A model that refuses it is asked again
+  without it; `X-Speed-Applied` on the response says which happened.
+- **Pauses:** voices that return raw PCM (HeyGen, Gemini) are recorded one line at
+  a time and joined with silence (1.5 s Slow, 2.6 s Very slow, longer for Soft and
+  Sleep). If the file would be too big for a response, the pauses shrink first.
+  Other voices get one request with a blank line between sentences.
+- **Style instruction:** sent to Gemini voices, which take one.
+
+`node scripts/record-samples.mjs` records before/after clips into
+`public/delivery-samples/` (needs the key, ffmpeg and a running dev server).
+
 ## Tests
 
 `npm test` runs the unit tests for the limit decisions, the script rules, the
