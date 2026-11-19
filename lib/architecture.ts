@@ -1,7 +1,11 @@
 // Single source for the numbers shown on /architecture and in the demo's cost meter.
 // Keep in step with docs/specs/architecture.md.
 
-/** Free creations before the sign-up gate in the prototype (variations count). */
+/**
+ * Free creations before the sign-up gate (variations count). SOFT MVP CAP: it
+ * is counted in the browser's own storage, so clearing it or using another
+ * browser resets it. It shapes the experience; it does not bound spend.
+ */
 export const FREE_ANON_GENERATIONS = 2;
 
 /** Per-call prices behind the demo's cost meter (USD): cheap voice tier, one image. */

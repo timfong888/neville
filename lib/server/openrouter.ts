@@ -2,7 +2,8 @@
 // nothing in this file returns or logs it.
 import "server-only";
 
-export const OPENROUTER = "https://openrouter.ai/api/v1";
+// The override exists so tests can point the app at a stand-in server.
+export const OPENROUTER = process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1";
 
 export function apiKey(): string | undefined {
   const k = process.env.OPENROUTER_API_KEY?.trim();
@@ -21,11 +22,14 @@ export type SpeechModel = {
   usdPerMChars: number | null;
   pricing: Record<string, string>;
   voices: string[];
+  /** OpenRouter's own description of the model, trimmed. */
+  description: string;
 };
 
 type RawModel = {
   id?: string;
   name?: string;
+  description?: string;
   pricing?: Record<string, unknown>;
   supported_voices?: unknown;
 };
@@ -62,6 +66,7 @@ export async function listSpeechModels(): Promise<{ models: SpeechModel[]; prici
       usdPerMChars: Number.isFinite(perChar) && perChar > 0 ? perChar * 1e6 : null,
       pricing,
       voices: voiceNames(m.supported_voices),
+      description: typeof m.description === "string" ? m.description.slice(0, 2000) : "",
     };
   });
   return { models: models.filter((m) => m.id), pricingKeys: [...pricingKeys] };

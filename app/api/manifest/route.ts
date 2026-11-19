@@ -1,0 +1,88 @@
+import { NextResponse } from "next/server";
+import { apiKey } from "@/lib/server/openrouter";
+import { LIMITS, generationEnabled, returnSlot, takeSlot, underCeiling } from "@/lib/server/limits";
+import { synthesize } from "@/lib/server/tts";
+import { writeScript } from "@/lib/server/writer";
+import { resolveVoice } from "@/lib/voices";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+// A style instruction for models that take one apart from the script. It is
+// never part of the spoken text, so it cannot be read aloud.
+const STYLE = "Speak slowly, calmly and warmly, like a meditation guide. Leave a short pause after each sentence.";
+const TAKES_STYLE = /^google\/gemini/;
+
+function visitor(req: Request): string {
+  // On Vercel these are set by the platform, not by the caller.
+  return (
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
+
+// The app's one paid path: a wish in, a script and its recording out.
+// Nothing is stored. Guards are in lib/server/limits.ts.
+export async function POST(req: Request) {
+  if (!generationEnabled()) {
+    return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
+  }
+  const key = apiKey();
+  if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
+
+  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown };
+  try {
+    body = await req.json();
+    if (!body || typeof body !== "object") throw new Error("not an object");
+  } catch {
+    return NextResponse.json({ code: "bad_request", error: "Send JSON." }, { status: 400 });
+  }
+  const want = typeof body.want === "string" ? body.want.replace(/\s+/g, " ").trim() : "";
+  const name = typeof body.name === "string" ? body.name.replace(/[^\p{L}\p{M}' -]/gu, "").trim().slice(0, 40) : "";
+  const variant = Number.isSafeInteger(body.variant) ? Math.abs(body.variant as number) % 50 : 0;
+  if (!want || want.length > LIMITS.maxWantChars) {
+    return NextResponse.json(
+      { code: "bad_request", error: `Say what you want in 1 to ${LIMITS.maxWantChars} characters.` },
+      { status: 400 },
+    );
+  }
+  // The browser sends only an id. The model and voice come from the config.
+  const voice = resolveVoice(typeof body.voiceId === "string" ? body.voiceId : null);
+
+  const ip = visitor(req);
+  const refused = takeSlot(ip);
+  if (refused) return NextResponse.json(refused, { status: refused.status });
+
+  const budget = await underCeiling(key);
+  if (!budget.ok) {
+    returnSlot(ip);
+    return NextResponse.json(budget.refusal, { status: budget.refusal.status });
+  }
+
+  const script = await writeScript({ key, want, name, variant });
+  const text = script.lines.join(" ");
+  const speech = await synthesize({
+    key,
+    model: voice.model,
+    voice: voice.voice,
+    text,
+    instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
+    compact: true,
+    timeoutMs: 42_000,
+  });
+  if (!speech.ok) {
+    return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
+  }
+
+  return new NextResponse(speech.audio, {
+    headers: {
+      "Content-Type": speech.mime,
+      "Cache-Control": "no-store",
+      "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
+      "X-Script-Source": script.source,
+      "X-Voice-Id": voice.id,
+      "X-Chars": String(text.length),
+    },
+  });
+}

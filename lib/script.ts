@@ -104,3 +104,23 @@ export function hashOf(s: string): number {
   }
   return h >>> 0;
 }
+
+/**
+ * A calm affirmation that uses none of the listener's own words. The server
+ * records this when the text model cannot write the script: the model is what
+ * turns an unkind or unsafe wish into something gentle, so without it the wish
+ * must not be spoken back.
+ */
+export function neutralScript(name: string): string[] {
+  return [
+    name ? `${name}, take a slow breath in, and let it go.` : "Take a slow breath in, and let it go.",
+    "You are safe, and you are at ease.",
+    "Your shoulders soften, and your breath moves gently.",
+    "You have everything you need in this moment.",
+    "Good things come to you easily, and you welcome them.",
+    "You are kind to yourself and to the people around you.",
+    "You feel a quiet warmth in your chest.",
+    "You are grateful for this day and for who you are becoming.",
+    "And so it is.",
+  ];
+}
