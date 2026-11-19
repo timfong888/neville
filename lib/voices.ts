@@ -31,7 +31,10 @@ function load(): { all: Voice[]; defaultId: string } {
   const all = config.voices as Voice[];
   const ids = new Set<string>();
   for (const v of all) {
-    if (typeof v.voice !== "string") throw new Error(`config/voices.json: "${v.id}" needs "voice" (it may be "").`);
+    // These two may be empty, but must be present.
+    for (const k of ["voice", "label"] as const) {
+      if (typeof v[k] !== "string") throw new Error(`config/voices.json: "${v.id}" needs "${k}" (it may be "").`);
+    }
     for (const k of ["id", "provider", "model", "name", "sample"] as const) {
       if (typeof v[k] !== "string" || !v[k]) throw new Error(`config/voices.json: "${v.id}" is missing "${k}".`);
     }
