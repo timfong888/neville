@@ -1,11 +1,11 @@
 // Writes the affirmation script with a cheap text model through OpenRouter.
-// If the model is unavailable, slow or returns something unusable, the
-// built-in template writes the script instead, so a recording never fails
-// for want of a script.
+// If the model is unavailable, slow or returns something unusable,
+// a built-in neutral script is recorded instead, so a recording never fails
+// for want of a script. That script uses none of the visitor's words.
 import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
-import { buildScript } from "@/lib/script";
+import { neutralScript } from "@/lib/script";
 import { SYSTEM, cleanLines, wishMessage } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
@@ -33,17 +33,8 @@ export async function scriptModel(): Promise<string> {
 export type Script = { lines: string[]; source: "model" | "template"; model?: string };
 
 export async function writeScript(opts: { key: string; want: string; name: string; variant: number }): Promise<Script> {
-  const template = (): Script => {
-    const lines = buildScript(opts.want, opts.name, opts.variant);
-    const kept: string[] = [];
-    let used = 0;
-    for (const l of lines) {
-      if (used + l.length + 1 > limits.maxScriptChars) break;
-      kept.push(l);
-      used += l.length + 1;
-    }
-    return { lines: kept.length ? kept : lines.slice(0, 3), source: "template" };
-  };
+  // The fallback never repeats the wish: see neutralScript.
+  const template = (): Script => ({ lines: neutralScript(opts.name), source: "template" });
   try {
     const model = await scriptModel();
     const res = await fetch(`${OPENROUTER}/chat/completions`, {

@@ -303,7 +303,13 @@ export default function DemoPage() {
       return;
     }
     setMade(next);
-    setNote(next ? "" : `${why} Here is a simpler version in your device's own voice.`);
+    setNote(
+      !next
+        ? `${why} Here is a simpler version in your device's own voice.`
+        : next.source === "template"
+          ? "A personal script could not be written just now, so this is a general one."
+          : "",
+    );
     setStage("player");
   };
 
