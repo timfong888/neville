@@ -4,7 +4,7 @@
 
 import config from "@/config/voices.json";
 
-export type Tier = "cheap" | "mid" | "premium";
+export type Tier = "free" | "cheap" | "low" | "mid" | "premium";
 
 export type Voice = {
   /** Stable id stored on the device. Do not reuse an id for a different voice. */
@@ -12,7 +12,7 @@ export type Voice = {
   provider: string;
   /** OpenRouter model id. */
   model: string;
-  /** The voice name the model expects. */
+  /** The voice name the model expects. Empty means the model's own default voice. */
   voice: string;
   /** Name shown to people. */
   name: string;
@@ -25,17 +25,18 @@ export type Voice = {
   tier: Tier;
 };
 
-const TIERS: Tier[] = ["cheap", "mid", "premium"];
+const TIERS: Tier[] = ["free", "cheap", "low", "mid", "premium"];
 
 function load(): { all: Voice[]; defaultId: string } {
   const all = config.voices as Voice[];
   const ids = new Set<string>();
   for (const v of all) {
-    for (const k of ["id", "provider", "model", "voice", "name", "sample"] as const) {
+    if (typeof v.voice !== "string") throw new Error(`config/voices.json: "${v.id}" needs "voice" (it may be "").`);
+    for (const k of ["id", "provider", "model", "name", "sample"] as const) {
       if (typeof v[k] !== "string" || !v[k]) throw new Error(`config/voices.json: "${v.id}" is missing "${k}".`);
     }
     if (typeof v.enabled !== "boolean") throw new Error(`config/voices.json: "${v.id}" needs "enabled": true or false.`);
-    if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use cheap, mid or premium.`);
+    if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);
     if (ids.has(v.id)) throw new Error(`config/voices.json: id "${v.id}" appears twice.`);
     ids.add(v.id);
@@ -66,7 +67,13 @@ export function resolveVoice(id: string | null | undefined): Voice {
 /** Where the choice is kept on the device. */
 export const VOICE_STORAGE_KEY = "nv_voice";
 
-export const TIER_LABEL: Record<Tier, string> = { cheap: "Lowest cost", mid: "Mid cost", premium: "Premium" };
+export const TIER_LABEL: Record<Tier, string> = {
+  free: "Free",
+  cheap: "Lowest cost",
+  low: "Low cost",
+  mid: "Mid cost",
+  premium: "Premium",
+};
 
 export function readVoiceChoice(): string | null {
   try {

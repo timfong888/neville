@@ -3,7 +3,7 @@
   "voices": [
     {
       "id": "heygen-nadine",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "nadine",
       "name": "Nadine",
@@ -14,7 +14,7 @@
     },
     {
       "id": "heygen-tabitha",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "tabitha",
       "name": "Tabitha",
@@ -25,7 +25,7 @@
     },
     {
       "id": "heygen-noelle",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "noelle",
       "name": "Noelle",
@@ -36,7 +36,7 @@
     },
     {
       "id": "heygen-meredith",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "meredith",
       "name": "Meredith",
@@ -47,7 +47,7 @@
     },
     {
       "id": "heygen-sabrina",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "sabrina",
       "name": "Sabrina",
@@ -58,7 +58,7 @@
     },
     {
       "id": "heygen-bram",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "bram",
       "name": "Bram",
@@ -69,7 +69,7 @@
     },
     {
       "id": "heygen-gareth",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "gareth",
       "name": "Gareth",
@@ -80,7 +80,7 @@
     },
     {
       "id": "heygen-lucian",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "lucian",
       "name": "Lucian",
@@ -91,7 +91,7 @@
     },
     {
       "id": "heygen-weston",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "weston",
       "name": "Weston",
@@ -102,7 +102,7 @@
     },
     {
       "id": "heygen-vincent",
-      "provider": "HeyGen",
+      "provider": "HeyGen Voice Turbo",
       "model": "heygen/heygen-voice-1-turbo",
       "voice": "vincent",
       "name": "Vincent",
@@ -113,7 +113,7 @@
     },
     {
       "id": "gemini-achernar",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Achernar",
       "name": "Achernar",
@@ -124,7 +124,7 @@
     },
     {
       "id": "gemini-vindemiatrix",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Vindemiatrix",
       "name": "Vindemiatrix",
@@ -135,7 +135,7 @@
     },
     {
       "id": "gemini-sulafat",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Sulafat",
       "name": "Sulafat",
@@ -146,7 +146,7 @@
     },
     {
       "id": "gemini-enceladus",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Enceladus",
       "name": "Enceladus",
@@ -157,7 +157,7 @@
     },
     {
       "id": "gemini-algieba",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Algieba",
       "name": "Algieba",
@@ -168,7 +168,7 @@
     },
     {
       "id": "gemini-kore",
-      "provider": "Google Gemini",
+      "provider": "Gemini 3.8 Flash Lite",
       "model": "google/gemini-3.8-flash-lite-tts",
       "voice": "Kore",
       "name": "Kore",
@@ -178,8 +178,118 @@
       "tier": "mid"
     },
     {
+      "id": "kokoro-af-heart",
+      "provider": "Kokoro 82M",
+      "model": "hexgrad/kokoro-82m",
+      "voice": "af_heart",
+      "name": "Heart",
+      "label": "",
+      "sample": "/voice-samples/pick/kokoro-af-heart.mp3",
+      "enabled": true,
+      "tier": "cheap"
+    },
+    {
+      "id": "orpheus-tara",
+      "provider": "Orpheus 3B",
+      "model": "canopylabs/orpheus-3b-0.1-ft",
+      "voice": "tara",
+      "name": "Tara",
+      "label": "",
+      "sample": "/voice-samples/pick/orpheus-tara.mp3",
+      "enabled": true,
+      "tier": "low"
+    },
+    {
+      "id": "sesame-read-speech-a",
+      "provider": "Sesame CSM 1B",
+      "model": "sesame/csm-1b",
+      "voice": "read_speech_a",
+      "name": "Sesame A",
+      "label": "",
+      "sample": "/voice-samples/pick/sesame-read-speech-a.mp3",
+      "enabled": true,
+      "tier": "low"
+    },
+    {
+      "id": "fish-drama-3",
+      "provider": "Fish Audio Drama 3",
+      "model": "fish-audio/drama-3",
+      "voice": "",
+      "name": "Fish Drama",
+      "label": "Model default voice",
+      "sample": "/voice-samples/pick/fish-drama-3.mp3",
+      "enabled": true,
+      "tier": "low"
+    },
+    {
+      "id": "fish-s2-1-pro-free",
+      "provider": "Fish Audio S2.1 Pro Free",
+      "model": "fish-audio/s2.1-pro-free:free",
+      "voice": "",
+      "name": "Fish Free",
+      "label": "Model default voice",
+      "sample": "/voice-samples/pick/fish-s2-1-pro-free.mp3",
+      "enabled": true,
+      "tier": "free"
+    },
+    {
+      "id": "fish-s2-1-pro",
+      "provider": "Fish Audio S2.1 Pro",
+      "model": "fish-audio/s2.1-pro",
+      "voice": "",
+      "name": "Fish Pro",
+      "label": "Model default voice",
+      "sample": "/voice-samples/pick/fish-s2-1-pro.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "voxtral-voice-3150",
+      "provider": "Voxtral TTS 3",
+      "model": "mistralai/voxtral-mini-tts-3-0",
+      "voice": "voice_3150",
+      "name": "Voxtral 3150",
+      "label": "",
+      "sample": "/voice-samples/pick/voxtral-voice-3150.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "grok-eve",
+      "provider": "Grok Voice TTS",
+      "model": "x-ai/grok-voice-tts-1.0",
+      "voice": "eve",
+      "name": "Eve",
+      "label": "",
+      "sample": "/voice-samples/pick/grok-eve.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-flash-kore",
+      "provider": "Gemini 3.8 Flash",
+      "model": "google/gemini-3.8-flash-tts",
+      "voice": "Kore",
+      "name": "Kore (Flash)",
+      "label": "Firm",
+      "sample": "/voice-samples/pick/gemini-flash-kore.mp3",
+      "enabled": true,
+      "tier": "mid"
+    },
+    {
+      "id": "gemini-3-1-kore",
+      "provider": "Gemini 3.1 Flash Preview",
+      "model": "google/gemini-3.1-flash-tts-preview",
+      "voice": "Kore",
+      "name": "Kore (3.1)",
+      "label": "Firm",
+      "sample": "/voice-samples/pick/gemini-3-1-kore.mp3",
+      "enabled": true,
+      "tier": "premium"
+    },
+    {
       "id": "eleven-george",
-      "provider": "ElevenLabs",
+      "provider": "ElevenLabs v4 Turbo",
       "model": "elevenlabs/eleven-v4-turbo",
       "voice": "george",
       "name": "George",
@@ -190,7 +300,7 @@
     },
     {
       "id": "eleven-sarah",
-      "provider": "ElevenLabs",
+      "provider": "ElevenLabs v4 Turbo",
       "model": "elevenlabs/eleven-v4-turbo",
       "voice": "sarah",
       "name": "Sarah",

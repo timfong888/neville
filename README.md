@@ -20,6 +20,12 @@ Edit it to change what is offered; no code change is needed.
 - `sample` is a pre-made clip under `public/`, so listening costs nothing.
 - Do not reuse an `id` for a different voice: devices remember the id.
 
+- `tier` is `free`, `cheap`, `low`, `mid` or `premium`, by price.
+
+The list is the full slate for now, for Tim's own listening. Before real speech
+is switched on for visitors, set `enabled: false` on what the public should not
+get: anyone who opens the site can choose any enabled voice.
+
 A mistake in the file fails the build, so it cannot reach the live site.
 Real speech generation stays off unless `SPEECH_ENABLED=true`; the setting
 works either way.
