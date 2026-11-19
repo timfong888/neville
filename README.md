@@ -3,6 +3,7 @@
 Voice manifestation app. This repo holds the architecture spec and a clickable prototype.
 
 - Spec: [docs/specs/architecture.md](docs/specs/architecture.md)
+- PRD coverage: [docs/specs/prd-coverage.md](docs/specs/prd-coverage.md)
 - App: `npm install && npm run dev`, then open:
   - `/` — type a wish; the app writes a short affirmation and records it in your chosen voice.
   - `/settings` — choose a voice. The choice is kept on the device; no account.
