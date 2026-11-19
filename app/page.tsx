@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildScript, hashOf, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
-import { DEFAULT_VOICE_ID, readVoiceChoice, resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
+import { readVoiceChoice } from "@/lib/voiceStore";
 
 type Stage = "form" | "making" | "player";
 

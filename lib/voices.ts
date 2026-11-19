@@ -1,3 +1,4 @@
+// Framework-free: no Next, React or browser APIs, so a native app can import it.
 // The voices people can choose in Settings. The list and the default live in
 // config/voices.json so they can change without touching code. A mistake in
 // that file fails the build here, before it can reach the live site.
@@ -75,9 +76,6 @@ export function resolveVoice(id: string | null | undefined): Voice {
   );
 }
 
-/** Where the choice is kept on the device. */
-export const VOICE_STORAGE_KEY = "nv_voice";
-
 export const TIER_LABEL: Record<Tier, string> = {
   free: "Free",
   cheap: "Lowest cost",
@@ -85,21 +83,3 @@ export const TIER_LABEL: Record<Tier, string> = {
   mid: "Mid cost",
   premium: "Premium",
 };
-
-export function readVoiceChoice(): string | null {
-  try {
-    return window.localStorage.getItem(VOICE_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-/** Returns false when the device refuses storage (private mode). */
-export function writeVoiceChoice(id: string): boolean {
-  try {
-    window.localStorage.setItem(VOICE_STORAGE_KEY, id);
-    return true;
-  } catch {
-    return false;
-  }
-}

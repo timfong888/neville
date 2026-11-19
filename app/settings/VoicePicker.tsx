@@ -5,10 +5,9 @@ import {
   DEFAULT_VOICE_ID,
   ENABLED_VOICES,
   TIER_LABEL,
-  readVoiceChoice,
   resolveVoice,
-  writeVoiceChoice,
 } from "@/lib/voices";
+import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 
 export default function VoicePicker() {
   const [chosen, setChosen] = useState(DEFAULT_VOICE_ID);

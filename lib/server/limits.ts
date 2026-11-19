@@ -12,6 +12,9 @@
 import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
+import { type Refusal, budgetVerdict } from "@/lib/limits";
+
+export { returnSlot, takeSlot } from "@/lib/limits";
 
 export const LIMITS = limits;
 
@@ -19,45 +22,6 @@ export const LIMITS = limits;
 export function generationEnabled(): boolean {
   if (process.env.SPEECH_ENABLED?.trim().toLowerCase() === "false") return false;
   return limits.generationEnabled === true;
-}
-
-const today = () => new Date().toISOString().slice(0, 10);
-let day = today();
-let total = 0;
-const perIp = new Map<string, number>();
-
-function roll() {
-  const t = today();
-  if (t !== day) {
-    day = t;
-    total = 0;
-    perIp.clear();
-  }
-}
-
-export type Refusal = { status: number; code: string; error: string };
-
-/** Counts one request against the visitor and the day. Returns a refusal when over. */
-export function takeSlot(ip: string): Refusal | null {
-  roll();
-  if (total >= limits.globalPerDay) {
-    return { status: 429, code: "day_full", error: "Today's free recordings are used up. Try again tomorrow." };
-  }
-  const used = perIp.get(ip) ?? 0;
-  if (used >= limits.perIpPerDay) {
-    return { status: 429, code: "visitor_full", error: "You have used today's free recordings." };
-  }
-  if (perIp.size > 5000) perIp.clear(); // keep memory bounded
-  perIp.set(ip, used + 1);
-  total++;
-  return null;
-}
-
-/** Gives a slot back when nothing was spent. */
-export function returnSlot(ip: string) {
-  const used = perIp.get(ip) ?? 0;
-  if (used > 0) perIp.set(ip, used - 1);
-  if (total > 0) total--;
 }
 
 /**
@@ -76,14 +40,8 @@ export async function underCeiling(key: string): Promise<{ ok: true; usage: numb
     const { data } = (await res.json()) as { data?: { usage?: number; limit_remaining?: number | null } };
     const usage = data?.usage;
     if (typeof usage !== "number") return { ok: false, refusal: closed };
-    const spent = usage >= limits.spendCeilingUsd;
-    const empty = typeof data?.limit_remaining === "number" && data.limit_remaining <= 0.02;
-    if (spent || empty) {
-      return {
-        ok: false,
-        refusal: { status: 429, code: "budget_spent", error: "The free recording budget is used up for now." },
-      };
-    }
+    const refusal = budgetVerdict(usage, data?.limit_remaining);
+    if (refusal) return { ok: false, refusal };
     return { ok: true, usage };
   } catch {
     return { ok: false, refusal: closed };
