@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AUDIO_TYPES, deleteAudio, MAX_AUDIO_BYTES, storeAudio } from "@/lib/server/accounts";
+import { audioType, deleteAudio, MAX_AUDIO_BYTES, storeAudio } from "@/lib/server/accounts";
 import { cleanManifestation, deleteManifestation, isId, putManifestation } from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
 
@@ -30,12 +30,13 @@ export async function PUT(req: Request, { params }: Ctx) {
   if (!m) return NextResponse.json({ error: "A title and a script are needed." }, { status: 400 });
   const file = form.get("audio");
   if (file !== null && !(file instanceof Blob)) return NextResponse.json({ error: "Bad audio." }, { status: 400 });
-  if (file && (file.size > MAX_AUDIO_BYTES || !AUDIO_TYPES.has(file.type))) {
-    return NextResponse.json({ error: "Recording too large or not WAV/MP3." }, { status: 413 });
-  }
+  if (file && file.size > MAX_AUDIO_BYTES) return NextResponse.json({ error: "Recording too large." }, { status: 413 });
+  // The type comes from the file's own bytes; the browser's label is ignored.
+  const mime = file ? await audioType(file) : null;
+  if (file && !mime) return NextResponse.json({ error: "Recording must be WAV or MP3." }, { status: 415 });
 
   return asOwner(req, async (db, profileId) => {
-    const audio = file ? await storeAudio(profileId, id, file) : form.get("removeAudio") === "1" ? null : undefined;
+    const audio = file && mime ? await storeAudio(profileId, id, file, mime) : form.get("removeAudio") === "1" ? null : undefined;
     const stale = await putManifestation(db, profileId, m, audio);
     if (stale === null) {
       if (audio) await deleteAudio([audio.key]);

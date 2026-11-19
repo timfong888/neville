@@ -6,6 +6,7 @@ import { del, get, put } from "@vercel/blob";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import pg from "pg";
+import { sniffAudio } from "@/lib/server/audioSniff";
 import type { Db } from "@/lib/server/libraryDb";
 
 const REQUIRED = [
@@ -95,10 +96,19 @@ export async function currentUser(req: Request): Promise<SignedIn | null> {
 // Recordings live in a private Blob store and are only served through the
 // app after an ownership check, never by their storage URL.
 export const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
-export const AUDIO_TYPES = new Set(["audio/wav", "audio/mpeg", "audio/x-wav", "audio/wave"]);
 
-export async function storeAudio(profileId: string, manifestationId: string, file: Blob): Promise<{ key: string; mime: string }> {
-  const mime = AUDIO_TYPES.has(file.type) ? file.type : "audio/mpeg";
+/** The file's real type from its bytes, or null when it is not WAV or MP3. */
+export async function audioType(file: Blob): Promise<"audio/wav" | "audio/mpeg" | null> {
+  return sniffAudio(new Uint8Array(await file.slice(0, 16).arrayBuffer()));
+}
+
+/** Stores a recording whose type was already checked with audioType(). */
+export async function storeAudio(
+  profileId: string,
+  manifestationId: string,
+  file: Blob,
+  mime: "audio/wav" | "audio/mpeg",
+): Promise<{ key: string; mime: string }> {
   const ext = mime === "audio/mpeg" ? "mp3" : "wav";
   const r = await put(`audio/${profileId}/${manifestationId}.${ext}`, file, {
     access: "private",
