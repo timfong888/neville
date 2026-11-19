@@ -24,7 +24,10 @@ export function wishMessage(want: string, name: string, variant: number): string
   });
 }
 
-/** Tidy model output into spoken lines within the length cap. Null when unusable. */
+const MIN_BODY_LINES = 6;
+const MIN_BODY_WORDS = 50;
+
+/** Tidy model output into spoken lines within the length cap. Null when unusable or too thin. */
 export function cleanLines(raw: string, maxChars: number): string[] | null {
   const lines = raw
     .split(/\n+/)
@@ -47,6 +50,10 @@ export function cleanLines(raw: string, maxChars: number): string[] | null {
     out.push(l);
     used += l.length + 1;
   }
-  if (out.length < 2) return null;
+  // Too thin to be the affirmation we asked for (8 to 10 sentences, 95 to 120
+  // words): let the caller use the template instead. The floor is a little
+  // under the brief so a good script that runs slightly short still passes.
+  const words = out.join(" ").split(/\s+/).length;
+  if (out.length < MIN_BODY_LINES || words < MIN_BODY_WORDS) return null;
   return [...out, closing];
 }
