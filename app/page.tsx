@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildScript, hashOf, titleFor, VARIANT_COUNT } from "@/lib/script";
+import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
@@ -113,7 +113,9 @@ export default function DemoPage() {
   const token = useRef(0);
   const stopPad = useRef<(() => void) | null>(null);
 
-  const lines = useMemo(() => made?.lines ?? buildScript(want, name, variant), [made, want, name, variant]);
+  // Without a server recording the device reads a general script. It never
+  // reads the typed wish back: only the server's text model vets a wish.
+  const lines = useMemo(() => made?.lines ?? neutralScript(name.trim()), [made, name]);
   const hue = useMemo(() => hashOf(want + variant) % 360, [want, variant]);
   // Voices, free counter, and shared links.
   useEffect(() => {
@@ -123,10 +125,8 @@ export default function DemoPage() {
     if (w) {
       setWant(w.slice(0, 280));
       setName((p.get("n") ?? "").slice(0, 40));
-      const v = Number(p.get("v") ?? "0");
-      setVariant(Number.isSafeInteger(v) ? v : 0);
+      // A shared link only fills in the form. Nothing plays until Create.
       setShared(true);
-      setStage("player");
     }
     if (!("speechSynthesis" in window)) {
       setCanSpeak(false);
@@ -305,7 +305,7 @@ export default function DemoPage() {
     setMade(next);
     setNote(
       !next
-        ? `${why} Here is a simpler version in your device's own voice.`
+        ? `${why} Here is a general version in your device's own voice.`
         : next.source === "template"
           ? "A personal script could not be written just now, so this is a general one."
           : "",
@@ -353,7 +353,6 @@ export default function DemoPage() {
     const u = new URL(window.location.origin);
     u.searchParams.set("w", want.trim());
     if (name.trim()) u.searchParams.set("n", name.trim());
-    if (variant) u.searchParams.set("v", String(variant));
     try {
       if (navigator.share) await navigator.share({ title: titleFor(want), url: u.toString() });
       else {
@@ -385,7 +384,10 @@ export default function DemoPage() {
     return (
       <>
         <h1>Type what you want. Hear it as already yours.</h1>
-        <p className="lede">No sign-up. One tap. A short affirmation written and recorded for you.</p>
+        <p className="lede">
+          {shared ? "Someone shared this wish with you. Tap Create to hear it. " : ""}
+          No sign-up. One tap. A short affirmation written and recorded for you.
+        </p>
         <div className="card">
           <label htmlFor="want">What do you want?</label>
           <textarea
@@ -482,7 +484,6 @@ export default function DemoPage() {
     <>
       <h1>{titleFor(want)}</h1>
       <p className="lede">
-        {shared ? "Shared with you. " : ""}
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>
       {note && <p className="small muted">{note}</p>}
