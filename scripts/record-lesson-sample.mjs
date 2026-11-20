@@ -93,8 +93,11 @@ async function speak(text, tries = 5) {
 // Instead every request attempt (retries and the no-speed retry included) is counted at its
 // estimated price, as if each one were billed, and checked against the budget before it is sent.
 let committedUsd = 0;
+// The style instruction is sent with every request, so count it as billed text too (errs high).
+// usdPerChar for Sadaltager is calibrated on observed spend: 9 quotes, 1,615 chars, $0.01525.
+const billedChars = (text) => text.length + (V.instructions?.length ?? 0);
 function chargeAttempt(text) {
-  const cost = text.length * V.usdPerChar;
+  const cost = billedChars(text) * V.usdPerChar;
   if (committedUsd + cost > BUDGET) throw new Error(`budget reached: $${committedUsd.toFixed(4)} committed of $${BUDGET}`);
   committedUsd += cost;
 }
@@ -138,7 +141,7 @@ const clip = arg("clip") ? Number(arg("clip")) : null;
 const quotes = clip ? all.filter((q) => q.n === clip) : all.slice(0, Number(arg("count") ?? all.length));
 if (!quotes.length) throw new Error(`no quote rows found in ${SRC}`);
 const chars = quotes.reduce((n, q) => n + q.text.length, 0);
-const estimate = chars * V.usdPerChar;
+const estimate = quotes.reduce((n, q) => n + billedChars(q.text), 0) * V.usdPerChar;
 if (DRY || !KEY) {
   console.log(JSON.stringify({ src: SRC, voice: V, count: quotes.length, chars, estimateUsd: estimate, budgetUsd: BUDGET, quotes }, null, 2));
   if (!KEY && !DRY) console.error("OPENROUTER_API_KEY is not set: dry run only.");
