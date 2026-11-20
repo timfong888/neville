@@ -137,7 +137,9 @@ describe("POST /api/rerecord", () => {
     usage = 2.5;
     const res = await POST(req(script));
     expect(res.status).toBe(429);
-    expect(webhookHits.map((h) => (h as { level: number }).level)).toEqual([50, 80, 100]);
-    expect((webhookHits[2] as { text: string }).text).toContain("Recording has stopped");
+    // Webhooks are sent in the background, so wait for them.
+    await vi.waitFor(() => expect(webhookHits).toHaveLength(3));
+    expect(webhookHits.map((h) => (h as { level: number }).level).sort((a, b) => a - b)).toEqual([50, 80, 100]);
+    expect(webhookHits.some((h) => (h as { text: string }).text.includes("Recording has stopped"))).toBe(true);
   });
 });

@@ -12,6 +12,7 @@
 // Which levels were already alerted is remembered per instance, so each
 // instance that sees a level alerts it once.
 import "server-only";
+import { after } from "next/server";
 import limits from "@/config/limits.json";
 import { type AlertLevel, type LedgerEntry, newAlert, speechCost } from "@/lib/ledger";
 import { listSpeechModels } from "@/lib/server/openrouter";
@@ -58,13 +59,25 @@ export async function record(e: Omit<LedgerEntry, "at">): Promise<void> {
   }
 }
 
-/** Estimated cost of `chars` characters of speech in `model`; null when not priced per character. */
-export async function estimateSpeech(model: string, chars: number): Promise<number | null> {
+/**
+ * Estimated cost of `chars` characters of speech in `model`; null when not
+ * priced per character. Gives up after `waitMs` so a slow price list never
+ * holds back a response that is already paid for.
+ */
+export async function estimateSpeech(model: string, chars: number, waitMs = 1500): Promise<number | null> {
+  const lookup = listSpeechModels()
+    .then(({ models }) => speechCost(chars, models.find((m) => m.id === model)?.usdPerMChars))
+    .catch(() => null);
+  const timeout = new Promise<null>((r) => setTimeout(() => r(null), waitMs));
+  return Promise.race([lookup, timeout]);
+}
+
+/** Runs `fn` after the response is sent when inside a request; otherwise in the background. */
+function later(fn: () => Promise<void>) {
   try {
-    const { models } = await listSpeechModels();
-    return speechCost(chars, models.find((m) => m.id === model)?.usdPerMChars);
+    after(fn);
   } catch {
-    return null;
+    void fn();
   }
 }
 
@@ -81,6 +94,7 @@ export function lastSeenUsage() {
  * `spendCeilingUsd` it logs a `[budget-alert]` line and, if
  * `ALERT_WEBHOOK_URL` is set, POSTs a JSON message there (`text` and
  * `content` fields, so a Slack or Discord incoming webhook works as is).
+ * The webhook is sent after the response, so it never delays a request.
  * Returns the level alerted, if any. Never throws.
  */
 export async function checkBudget(usage: number): Promise<AlertLevel | null> {
@@ -95,16 +109,18 @@ export async function checkBudget(usage: number): Promise<AlertLevel | null> {
   console.warn("[budget-alert]", JSON.stringify({ level, usage, ceiling }));
   const url = process.env.ALERT_WEBHOOK_URL?.trim();
   if (url) {
-    try {
-      await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, content: text, level, usage, ceiling }),
-        signal: AbortSignal.timeout(4000),
-      });
-    } catch {
-      console.warn("[budget-alert] webhook failed");
-    }
+    later(async () => {
+      try {
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, content: text, level, usage, ceiling }),
+          signal: AbortSignal.timeout(4000),
+        });
+      } catch {
+        console.warn("[budget-alert] webhook failed");
+      }
+    });
   }
   return level;
 }

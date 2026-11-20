@@ -78,9 +78,10 @@ read by the device's own voice, which costs nothing.
   `{text, content, level, usage, ceiling}` there (a Slack or Discord incoming
   webhook works as is). No email service is connected. Each server instance
   alerts a level once, so the same level can arrive more than once.
-- **Admin page.** Set `ADMIN_TOKEN` in Vercel, then open
-  `/admin/usage?token=<ADMIN_TOKEN>`: a banner at 50/80/100%, kill-switch
-  state and recent ledger rows. Without `ADMIN_TOKEN` the page is a 404.
+- **Admin page.** Set `ADMIN_TOKEN` in Vercel, open `/admin/usage` and enter
+  it once (a 12-hour httpOnly cookie holds a hash of it; the token never goes
+  in a URL): a banner at 50/80/100%, kill-switch state and recent ledger rows.
+  Without `ADMIN_TOKEN` the page is a 404.
 - **Kill switch.** `SPEECH_ENABLED=false` (Vercel env, then redeploy: about a
   minute) or `generationEnabled: false` in `config/limits.json`. For an
   instant stop, disable the key at openrouter.ai: recording refuses whenever

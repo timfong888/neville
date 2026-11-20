@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import limits from "@/config/limits.json";
-import { budgetLevel, sameSecret, totals } from "@/lib/ledger";
+import { budgetLevel, totals } from "@/lib/ledger";
+import { ADMIN_COOKIE, adminToken, isAdminCookie } from "@/lib/server/admin";
 import { checkBudget, ledger } from "@/lib/server/ledger";
 import { generationEnabled } from "@/lib/server/limits";
 import { OPENROUTER, apiKey } from "@/lib/server/openrouter";
@@ -28,12 +30,26 @@ async function keyUsage(): Promise<number | null> {
 
 const usd = (n: number) => `$${n.toFixed(n < 0.01 ? 5 : 4)}`;
 
-// Tim's view of spend. Exists only when ADMIN_TOKEN is set; open it as
-// /admin/usage?token=<ADMIN_TOKEN>. Reading the key's usage is free.
-export default async function UsagePage({ searchParams }: { searchParams: Promise<{ token?: string | string[] }> }) {
-  const want = process.env.ADMIN_TOKEN?.trim() ?? "";
-  const given = (await searchParams).token;
-  if (!sameSecret(typeof given === "string" ? given : "", want)) notFound();
+// Tim's view of spend. Exists only when ADMIN_TOKEN is set: enter it once in
+// the form, and a cookie keeps you in for 12 hours. Reading usage is free.
+export default async function UsagePage({ searchParams }: { searchParams: Promise<{ wrong?: string }> }) {
+  if (!adminToken()) notFound();
+  if (!isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value)) {
+    const wrong = (await searchParams).wrong === "1";
+    return (
+      <>
+        <h1>Usage</h1>
+        <form className="card" method="post" action="/api/admin/login">
+          <label htmlFor="token">Admin token</label>
+          <input id="token" name="token" type="password" autoComplete="current-password" required />
+          {wrong && <p className="small danger">That token is not right.</p>}
+          <button className="btn primary block" type="submit">
+            Open
+          </button>
+        </form>
+      </>
+    );
+  }
 
   const usage = await keyUsage();
   if (usage !== null) await checkBudget(usage);
