@@ -59,13 +59,39 @@ export default function PlaylistPlayer({
   const order = useRef<number[]>([]);
   const pos = useRef(0);
   const gapUrl = useRef("");
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // While paused, timer callbacks (read-along steps, the gap fallback) wait and run on Resume.
+  // Timer callbacks (read-along steps, the gap fallback). Pause stops each with its remaining
+  // time; Resume starts it again with that time, so nothing runs early or all at once.
+  type Pending = { fn: () => void; due: number; left: number; handle: ReturnType<typeof setTimeout> | null };
+  const timers = useRef(new Map<number, Pending>());
+  const timerId = useRef(0);
+  const arm = (id: number, t: Pending, ms: number) => {
+    t.due = Date.now() + ms;
+    t.handle = setTimeout(() => {
+      timers.current.delete(id);
+      t.fn();
+    }, ms);
+  };
+  const later = (fn: () => void, ms: number) => {
+    const id = ++timerId.current;
+    const t: Pending = { fn, due: 0, left: ms, handle: null };
+    timers.current.set(id, t);
+    if (!paused.current) arm(id, t, ms);
+  };
+  const clearTimers = () => {
+    timers.current.forEach((t) => t.handle && clearTimeout(t.handle));
+    timers.current.clear();
+  };
   const paused = useRef(false);
-  const deferred = useRef<(() => void)[]>([]);
-  const later = (fn: () => void, ms: number) =>
-    timers.current.push(setTimeout(() => (paused.current ? deferred.current.push(fn) : fn()), ms));
-  // For Previous: when the current track started, and whether the gap after it is playing.
+  const pausedAt = useRef(0);
+  // The items and recordings of the session that is playing, fixed at Play, so editing the
+  // playlist mid-session cannot shift which track comes next.
+  const session = useRef<{ items: Manifestation[]; urls: Record<string, string> }>({ items: [], urls: {} });
+  const active = useRef(false);
+  // Blob URLs replaced while a session still uses them; freed when the session ends.
+  const stale = useRef<string[]>([]);
+  // True from setting the element's src until it plays, so a pause that comes with a src change is not taken for a system pause.
+  const switching = useRef(false);
+  // For Previous: when the current track started (moved forward by pauses), and whether the gap after it is playing.
   const trackStart = useRef(0);
   const inGap = useRef(false);
   // The latest settings, for callbacks made before they changed.
@@ -112,7 +138,8 @@ export default function PlaylistPlayer({
     });
     return () => {
       alive = false;
-      made.forEach((u) => URL.revokeObjectURL(u));
+      if (active.current) stale.current.push(...made);
+      else made.forEach((u) => URL.revokeObjectURL(u));
     };
     // `key` stands for `items`: same ids and versions, same recordings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,9 +148,7 @@ export default function PlaylistPlayer({
   /** Stops whatever the current track is doing, without ending the session. */
   const cancelTrack = () => {
     token.current++;
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    deferred.current = [];
+    clearTimers();
     paused.current = false;
     inGap.current = false;
     if ("speechSynthesis" in window) {
@@ -138,14 +163,22 @@ export default function PlaylistPlayer({
 
   const halt = useCallback(() => {
     cancelTrack();
+    active.current = false;
     el.current?.pause();
     if (el.current) el.current.volume = 1;
     sleepEndsAt.current = null;
     fading.current = null;
     bed.current?.stop();
     bed.current = null;
+    stale.current.forEach((u) => URL.revokeObjectURL(u));
+    stale.current = [];
     setPhase("idle");
-    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+    setCur(-1);
+    setIdx(-1);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = "none";
+      navigator.mediaSession.metadata = null;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -162,7 +195,7 @@ export default function PlaylistPlayer({
     if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: m.title,
-      artist: m.hasAudio && live.current.urls[m.id] ? `Neville · ${m.voiceName}` : "Neville",
+      artist: m.hasAudio && session.current.urls[m.id] ? `Neville · ${m.voiceName}` : "Neville",
       album: title,
       artwork: [
         { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -215,12 +248,24 @@ export default function PlaylistPlayer({
     if (n < 0) return finish();
     const a = el.current!;
     setIdx(-1);
-    const go = () => token.current === mine && startAt(n, mine);
+    // The finished recording's handlers must not run over the gap.
+    a.ontimeupdate = a.onplaying = null;
+    let started = false;
+    const go = () => {
+      if (started || token.current !== mine) return;
+      started = true;
+      startAt(n, mine);
+    };
     a.onended = go;
     a.onerror = go;
     inGap.current = true;
+    switching.current = true;
     a.src = gapUrl.current;
-    void a.play().catch(() => token.current === mine && later(() => startAt(n, mine), live.current.gapMs));
+    void a.play().catch(() => {
+      // A pause during the switch rejects play(); Resume plays the gap again.
+      if (token.current !== mine || paused.current) return;
+      later(go, live.current.gapMs);
+    });
   };
 
   const readAlong = (m: Manifestation, from: number, mine: number) => {
@@ -264,7 +309,7 @@ export default function PlaylistPlayer({
   /** Plays the track at position `p` of the play order. */
   const startAt = (p: number, mine: number) => {
     if (token.current !== mine) return;
-    const { items: list, urls: u } = live.current;
+    const { items: list, urls: u } = session.current;
     pos.current = p;
     inGap.current = false;
     trackStart.current = Date.now();
@@ -279,6 +324,7 @@ export default function PlaylistPlayer({
 
     const a = el.current!;
     const starts = lineStarts(m.lines);
+    switching.current = true;
     a.src = url;
     a.ontimeupdate = () => {
       if (token.current !== mine || !a.duration) return;
@@ -302,7 +348,7 @@ export default function PlaylistPlayer({
       speak(m, mine);
     };
     void a.play().catch(() => {
-      if (token.current !== mine) return;
+      if (token.current !== mine || paused.current) return;
       a.onerror = a.onended = a.onplaying = null;
       speak(m, mine);
     });
@@ -312,6 +358,10 @@ export default function PlaylistPlayer({
   const jump = (p: number) => {
     if (p < 0) return finish();
     const mine = cancelTrack();
+    // A device-voice track does not touch the element, so stop the recording that was playing.
+    // Marked as a switch so the pause listener does not take it for a system pause.
+    switching.current = true;
+    el.current?.pause();
     setPhase("playing");
     bed.current?.resume();
     startAt(p, mine);
@@ -348,7 +398,9 @@ export default function PlaylistPlayer({
     if (fading.current) bed.current?.fadeIn(2);
     fading.current = null;
     if (el.current) el.current.volume = 1;
-    if (phase !== "idle") sleepEndsAt.current = min > 0 ? Date.now() + min * 60_000 : null;
+    // While paused, count from the moment of pausing: Resume adds the pause length back on.
+    const base = paused.current ? pausedAt.current : Date.now();
+    if (phase !== "idle") sleepEndsAt.current = min > 0 ? base + min * 60_000 : null;
   };
 
   // Must run inside the tap handler.
@@ -359,8 +411,21 @@ export default function PlaylistPlayer({
     setDone(false);
     setNote("");
     setPhase("playing");
-    if (!el.current) el.current = new Audio();
+    if (!el.current) {
+      const a = new Audio();
+      a.addEventListener("playing", () => (switching.current = false));
+      a.addEventListener("error", () => (switching.current = false));
+      // A pause the app did not ask for (a call, Siri, headphones out): show it as paused so Play works.
+      a.addEventListener("pause", () => {
+        if (!active.current || paused.current || switching.current || a.ended) return;
+        pauseRef.current();
+      });
+      el.current = a;
+    }
+    session.current = { items, urls };
+    active.current = true;
     // Unlock the element inside the tap even if the first track uses the device voice.
+    switching.current = true;
     el.current.src = gapUrl.current;
     void el.current.play().catch(() => {});
     startMusic();
@@ -370,8 +435,14 @@ export default function PlaylistPlayer({
   };
 
   const pause = () => {
-    if (phase !== "playing") return;
+    if (!active.current || paused.current) return;
     paused.current = true;
+    pausedAt.current = Date.now();
+    timers.current.forEach((t) => {
+      if (t.handle) clearTimeout(t.handle);
+      t.handle = null;
+      t.left = Math.max(0, t.due - Date.now());
+    });
     el.current?.pause();
     if ("speechSynthesis" in window && window.speechSynthesis.speaking) window.speechSynthesis.pause();
     bed.current?.pause();
@@ -380,17 +451,27 @@ export default function PlaylistPlayer({
   };
 
   const resume = () => {
-    if (phase !== "paused") return;
+    if (!paused.current) {
+      // Playing by our state but the system stopped the element: just start it again.
+      if (active.current && el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
+      return;
+    }
     paused.current = false;
+    const pausedFor = Date.now() - pausedAt.current;
+    trackStart.current += pausedFor;
+    // The sleep timer stops while paused: move its deadline, and any fade under way, by the pause.
+    if (sleepEndsAt.current !== null) sleepEndsAt.current += pausedFor;
+    if (fading.current) fading.current.from += pausedFor;
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
     if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
     setPhase("playing");
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
-    const waiting = deferred.current;
-    deferred.current = [];
-    waiting.forEach((fn) => fn());
+    timers.current.forEach((t, id) => arm(id, t, t.left));
   };
+
+  const pauseRef = useRef(pause);
+  pauseRef.current = pause;
 
   const next = () => jump(skipPos(pos.current, order.current.length, repeat));
   // In the gap after a track, Previous replays that track; otherwise it restarts or goes back by time into the track.
@@ -415,8 +496,9 @@ export default function PlaylistPlayer({
     const active = phase !== "idle";
     set("play", active ? resume : () => play(0));
     set("pause", active ? pause : null);
-    set("nexttrack", active ? next : null);
-    set("previoustrack", active ? prev : null);
+    // A single manifestation has no next or previous track.
+    set("nexttrack", active && items.length > 1 ? next : null);
+    set("previoustrack", active && items.length > 1 ? prev : null);
     set("stop", active ? halt : null);
   });
   useEffect(
