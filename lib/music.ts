@@ -73,20 +73,23 @@ export function musicTrack(id: MusicChoice): MusicTrack | null {
 export const DEFAULT_MUSIC_VOLUME = 0.6;
 
 /**
- * Gain for a slider position. The tracks are mastered near -22 dBFS and
- * recordings are normalised near -20 dBFS (lib/loudness.ts), so at the top of
- * the slider the music sits about 10 dB under the voice between lines and,
- * ducked, about 19 dB under it while the voice speaks. 0 is silent.
+ * Gain for a slider position. The tracks average about -20.5 dBFS and
+ * recordings are normalised near -20 dBFS (lib/loudness.ts). At the default
+ * slider (0.6) the music sits about 10 dB under the voice between lines and
+ * about 16 dB under it while the voice speaks: clearly there on a phone
+ * speaker, never competing. The top of the slider is about 2 dB under between
+ * lines. 0 is silent. (The first curve sat about 30 dB under the voice at the
+ * default, which a phone speaker does not reproduce: #52.)
  */
 export function musicGain(volume: number): number {
   const v = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : DEFAULT_MUSIC_VOLUME));
   if (v === 0) return 0;
-  const db = -8 - (1 - v) * 24;
+  const db = -2 - (1 - v) * 20;
   return Math.round(10 ** (db / 20) * 10000) / 10000;
 }
 
-/** How far the music dips while the voice speaks, as a gain. -9 dB. */
-export const DUCK_GAIN = 0.355;
+/** How far the music dips while the voice speaks, as a gain. -6 dB. */
+export const DUCK_GAIN = 0.5;
 
 // ---- Where the voice speaks
 

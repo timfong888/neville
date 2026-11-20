@@ -37,7 +37,9 @@ describe("music tracks", () => {
 describe("musicGain", () => {
   it("is silent at 0 and never louder than -8 dB", () => {
     expect(musicGain(0)).toBe(0);
-    expect(20 * Math.log10(musicGain(1))).toBeCloseTo(-8, 0);
+    expect(20 * Math.log10(musicGain(1))).toBeCloseTo(-2, 0);
+    // The default sits about 10 dB under a normalised voice (#52).
+    expect(20 * Math.log10(musicGain(0.6))).toBeCloseTo(-10, 0);
     expect(musicGain(5)).toBe(musicGain(1));
   });
 

@@ -25,7 +25,7 @@ const MODES = {
   sleep: { pace: "very-slow", tone: "sleep", music: "night-tide", volume: 0.45, fadeIn: 8 },
   active: { pace: "brisk", tone: "energetic", music: "rise", volume: 0.8, fadeIn: 1 },
 };
-const musicDb = (v) => (v === 0 ? -120 : -8 - (1 - v) * 24);
+const musicDb = (v) => (v === 0 ? -120 : -2 - (1 - v) * 20);
 
 const SAMPLES = [
   { id: "sleep-1", mode: "sleep", voiceId: "gemini-vindemiatrix", wish: "to feel safe and rested, and to sleep deeply", name: "Tim" },
