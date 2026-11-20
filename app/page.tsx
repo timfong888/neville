@@ -6,6 +6,7 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
+import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { lineStarts } from "@/lib/audio";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
@@ -75,9 +76,21 @@ export default function DemoPage() {
   // The voice chosen in Settings. Read after load; the demo itself still speaks
   // with the device's voice.
   const [studioVoice, setStudioVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
-  useEffect(() => {
-    setStudioVoice(resolveVoice(readVoiceChoice()));
+  // The voice the next recording will use: the chosen one, or with Mix voices on the next in the mix.
+  const [nextVoice, setNextVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
+  const [mixOn, setMixOn] = useState(false);
+  // The voice of the recording being made now, for the "making" steps.
+  const [makingVoice, setMakingVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
+  const refreshNextVoice = useCallback(() => {
+    const chosen = resolveVoice(readVoiceChoice());
+    const on = readMixOn();
+    setStudioVoice(chosen);
+    setMixOn(on);
+    setNextVoice(on ? resolveVoice(peekMixVoice()) : chosen);
   }, []);
+  useEffect(() => {
+    refreshNextVoice();
+  }, [refreshNextVoice]);
   const [canSpeak, setCanSpeak] = useState(true);
   const [music, setMusic] = useState(true);
   const [volume, setVolume] = useState(0.6);
@@ -288,6 +301,10 @@ export default function DemoPage() {
     setIdx(-1);
     let next: Made | null = null;
     let why = "";
+    // Mix voices on: each new recording takes the next voice in the set.
+    const mixing = readMixOn();
+    const voice = mixing ? resolveVoice(peekMixVoice()) : studioVoice;
+    setMakingVoice(voice);
     try {
       const res = await fetch("/api/manifest", {
         method: "POST",
@@ -295,7 +312,7 @@ export default function DemoPage() {
         body: JSON.stringify({
           want: want.trim(),
           name: name.trim(),
-          voiceId: studioVoice.id,
+          voiceId: voice.id,
           variant: v,
           pace: readPaceChoice(),
           tone: readToneChoice(),
@@ -323,6 +340,10 @@ export default function DemoPage() {
     if (run.current !== mine) {
       if (next) URL.revokeObjectURL(next.url);
       return;
+    }
+    if (next && mixing) {
+      advanceMix();
+      refreshNextVoice();
     }
     setMade(next);
     setSavedId("");
@@ -492,7 +513,16 @@ export default function DemoPage() {
             </div>
           </div>
           <p className="small muted voiceline">
-            Recorded in the voice of <b>{studioVoice.name}</b>. <Link href="/settings">Change voice</Link>
+            {mixOn ? (
+              <>
+                Next recording: <b>{nextVoice.name}</b>, rotating through your voice mix.{" "}
+              </>
+            ) : (
+              <>
+                Recorded in the voice of <b>{nextVoice.name}</b>.{" "}
+              </>
+            )}
+            <Link href="/settings">Change voice</Link>
           </p>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
@@ -514,7 +544,7 @@ export default function DemoPage() {
   }
 
   if (stage === "making") {
-    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${studioVoice.name}`];
+    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${makingVoice.name}`];
     return (
       <>
         <h1>Making it yours…</h1>

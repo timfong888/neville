@@ -8,6 +8,8 @@ import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
 import { applyMode, readMode } from "@/lib/modeStore";
+import { mixedOrder } from "@/lib/voiceMix";
+import { readMixOn } from "@/lib/voiceMixStore";
 import { MODES, resolveMode, SLEEP_TIMER_MINUTES, sleepState, type ModeId } from "@/lib/modes";
 import { backPos, nextPos, playOrder, REPEATS, skipPos, silenceWav, type Repeat } from "@/lib/playback";
 import { hashOf } from "@/lib/script";
@@ -451,7 +453,14 @@ export default function PlaylistPlayer({
     startMusic();
     sleepEndsAt.current = sleepMin > 0 ? Date.now() + sleepMin * 60_000 : null;
     order.current = playOrder(items.length, shuffle, from);
-    startAt(shuffle ? 0 : from, mine);
+    let start = shuffle ? 0 : from;
+    // Mix voices on: no voice twice in a row where the playlist allows it, Repeat all's wrap included.
+    if (readMixOn()) {
+      const mixed = mixedOrder(order.current, from, shuffle, (i) => (urls[items[i].id] ? items[i].voiceId : "device"));
+      order.current = mixed.order;
+      start = mixed.start;
+    }
+    startAt(start, mine);
   };
 
   const pause = () => {
