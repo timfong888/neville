@@ -33,9 +33,11 @@ export function mixVoiceAt(mix: string[], n: number): string {
 
 /**
  * Reorders `order` (track indexes) so no voice plays twice in a row where that
- * can be avoided, keeping the first track and otherwise the original order as
- * far as it can: at each step the earliest remaining track in a different voice
- * goes next.
+ * can be avoided, keeping the first track. At each step the next track comes
+ * from the voice (other than the last one played) with the most tracks left,
+ * taking that voice's earliest remaining track. Choosing by most-left rather
+ * than earliest-in-order is deliberate: the simpler greedy leaves one voice
+ * bunched at the end (A,B,C,C would end C,C instead of becoming A,C,B,C).
  */
 export function spreadVoices(order: number[], voiceOf: (i: number) => string): number[] {
   if (order.length < 3) return order;

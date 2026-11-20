@@ -33,9 +33,10 @@ export function readMix(): string[] {
 }
 export const writeMix = (ids: string[]): boolean => set(SET, JSON.stringify(cleanMix(ids)));
 
-/** The voice for the next recording, and moves the rotation on. */
-export function takeMixVoice(): string {
-  const n = Number(get(NEXT) ?? "0") || 0;
-  set(NEXT, String(n + 1));
-  return mixVoiceAt(readMix(), n);
-}
+const nextIndex = (): number => Number(get(NEXT) ?? "0") || 0;
+
+/** The voice for the next recording. The rotation moves on only via advanceMix, once a recording is made. */
+export const peekMixVoice = (): string => mixVoiceAt(readMix(), nextIndex());
+
+/** Moves the rotation on after a recording was actually made, so a failed one does not use up a voice's turn. */
+export const advanceMix = (): boolean => set(NEXT, String(nextIndex() + 1));

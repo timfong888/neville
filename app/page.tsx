@@ -6,7 +6,7 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
-import { readMixOn, takeMixVoice } from "@/lib/voiceMixStore";
+import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { lineStarts } from "@/lib/audio";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
@@ -289,7 +289,8 @@ export default function DemoPage() {
     let next: Made | null = null;
     let why = "";
     // Mix voices on: each new recording takes the next voice in the set.
-    const voice = readMixOn() ? resolveVoice(takeMixVoice()) : studioVoice;
+    const mixing = readMixOn();
+    const voice = mixing ? resolveVoice(peekMixVoice()) : studioVoice;
     if (voice.id !== studioVoice.id) setStudioVoice(voice);
     try {
       const res = await fetch("/api/manifest", {
@@ -327,6 +328,7 @@ export default function DemoPage() {
       if (next) URL.revokeObjectURL(next.url);
       return;
     }
+    if (next && mixing) advanceMix();
     setMade(next);
     setSavedId("");
     setNote(
