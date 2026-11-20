@@ -53,7 +53,14 @@ export default function PlaylistPlayer({
   const pos = useRef(0);
   const gapUrl = useRef("");
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
+  // While paused, timer callbacks (read-along steps, the gap fallback) wait and run on Resume.
+  const paused = useRef(false);
+  const deferred = useRef<(() => void)[]>([]);
+  const later = (fn: () => void, ms: number) =>
+    timers.current.push(setTimeout(() => (paused.current ? deferred.current.push(fn) : fn()), ms));
+  // For Previous: when the current track started, and whether the gap after it is playing.
+  const trackStart = useRef(0);
+  const inGap = useRef(false);
   // The latest settings, for callbacks made before they changed.
   const live = useRef({ repeat, gapMs, items, urls });
   live.current = { repeat, gapMs, items, urls };
@@ -106,7 +113,14 @@ export default function PlaylistPlayer({
     token.current++;
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    deferred.current = [];
+    paused.current = false;
+    inGap.current = false;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      // cancel() keeps a paused engine paused, and new lines would never start.
+      window.speechSynthesis.resume();
+    }
     const a = el.current;
     if (a) a.onended = a.ontimeupdate = a.onerror = a.onplaying = null;
     return token.current;
@@ -156,6 +170,7 @@ export default function PlaylistPlayer({
     const go = () => token.current === mine && startAt(n, mine);
     a.onended = go;
     a.onerror = go;
+    inGap.current = true;
     a.src = gapUrl.current;
     void a.play().catch(() => token.current === mine && later(() => startAt(n, mine), live.current.gapMs));
   };
@@ -203,6 +218,8 @@ export default function PlaylistPlayer({
     if (token.current !== mine) return;
     const { items: list, urls: u } = live.current;
     pos.current = p;
+    inGap.current = false;
+    trackStart.current = Date.now();
     const i = order.current[p];
     const m = list[i];
     if (!m) return finish();
@@ -274,8 +291,9 @@ export default function PlaylistPlayer({
 
   const pause = () => {
     if (phase !== "playing") return;
+    paused.current = true;
     el.current?.pause();
-    if ("speechSynthesis" in window) window.speechSynthesis.pause();
+    if ("speechSynthesis" in window && window.speechSynthesis.speaking) window.speechSynthesis.pause();
     bed.current?.pause();
     setPhase("paused");
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
@@ -283,15 +301,25 @@ export default function PlaylistPlayer({
 
   const resume = () => {
     if (phase !== "paused") return;
+    paused.current = false;
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
     if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
     setPhase("playing");
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+    const waiting = deferred.current;
+    deferred.current = [];
+    waiting.forEach((fn) => fn());
   };
 
   const next = () => jump(skipPos(pos.current, order.current.length, repeat));
-  const prev = () => jump(backPos(pos.current, order.current.length, el.current?.currentTime ?? 0, repeat));
+  // In the gap after a track, Previous replays that track; otherwise it restarts or goes back by time into the track.
+  const prev = () =>
+    jump(
+      inGap.current
+        ? pos.current
+        : backPos(pos.current, order.current.length, (Date.now() - trackStart.current) / 1000, repeat),
+    );
 
   // Lock-screen and headphone controls. Re-bound each render so they see current state.
   useEffect(() => {
