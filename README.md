@@ -87,7 +87,11 @@ read by the device's own voice, which costs nothing.
   in a URL): a banner at 50/80/100%, kill-switch state and recent ledger rows.
   Without `ADMIN_TOKEN` the page is a 404. Use a long random token (32+
   characters, e.g. `openssl rand -base64 32`); after 10 wrong tries a visitor
-  is refused for 15 minutes. The cookie stays valid until it expires or the
+  is refused for 15 minutes. That throttle is best effort: it is counted in
+  memory per server instance (durable once a shared store such as Upstash is
+  added, issue #8), and it identifies the visitor by `x-real-ip` /
+  `x-forwarded-for`, which only Vercel's own edge sets reliably; behind any
+  other proxy those headers can be forged. The cookie stays valid until it expires or the
   token is changed.
 - **Kill switch.** `SPEECH_ENABLED=false` (Vercel env, then redeploy: about a
   minute) or `generationEnabled: false` in `config/limits.json`. For an
