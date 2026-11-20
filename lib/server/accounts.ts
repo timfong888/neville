@@ -6,6 +6,7 @@ import { del, get, put } from "@vercel/blob";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import pg from "pg";
+import { appleClientSecret } from "@/lib/server/appleSecret";
 import { sniffAudio } from "@/lib/server/audioSniff";
 import { randomUUID } from "node:crypto";
 import { addTombstones, type Db, oldestTombstones } from "@/lib/server/libraryDb";
@@ -59,6 +60,40 @@ function baseURL(): string | undefined {
   return undefined;
 }
 
+const APPLE_VARS = ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"] as const;
+
+/** Sign in with Apple is offered only when all four Apple variables are set. Google stays required. */
+export function appleEnabled(): boolean {
+  return APPLE_VARS.every((k) => process.env[k]?.trim());
+}
+
+/** Sign-in buttons to show: Google always, Apple when configured. */
+export function signInProviders(): ("google" | "apple")[] {
+  return appleEnabled() ? ["google", "apple"] : ["google"];
+}
+
+function appleProvider() {
+  if (!appleEnabled()) return {};
+  const clientId = process.env.APPLE_CLIENT_ID as string;
+  return {
+    apple: {
+      clientId,
+      clientSecret: appleClientSecret({
+        teamId: process.env.APPLE_TEAM_ID as string,
+        keyId: process.env.APPLE_KEY_ID as string,
+        clientId,
+        privateKey: process.env.APPLE_PRIVATE_KEY as string,
+      }),
+      // For the future iOS app: tokens issued to its bundle id are accepted too.
+      ...(process.env.APPLE_APP_BUNDLE_ID ? { appBundleIdentifier: process.env.APPLE_APP_BUNDLE_ID } : {}),
+    },
+  };
+}
+
+// The Apple client secret is a JWT that expires (150 days); rebuild the
+// instance weekly so a long-lived server never holds an expired one.
+const AUTH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+let authBuiltAt = 0;
 let auth: ReturnType<typeof makeAuth> | null = null;
 function makeAuth() {
   return betterAuth({
@@ -72,7 +107,10 @@ function makeAuth() {
         clientId: process.env.GOOGLE_CLIENT_ID as string,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
       },
+      ...appleProvider(),
     },
+    // Apple returns to the callback with a form POST from its own origin.
+    trustedOrigins: appleEnabled() ? ["https://appleid.apple.com"] : [],
     plugins: [nextCookies()],
   });
 }
@@ -80,7 +118,10 @@ function makeAuth() {
 /** The Better Auth instance. Call only when accountsEnabled() is true. */
 export function getAuth() {
   if (!accountsEnabled()) throw new Error("Accounts are not enabled.");
-  if (!auth) auth = makeAuth();
+  if (!auth || Date.now() - authBuiltAt > AUTH_MAX_AGE_MS) {
+    auth = makeAuth();
+    authBuiltAt = Date.now();
+  }
   return auth;
 }
 

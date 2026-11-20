@@ -81,6 +81,8 @@ values, and not on production).
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web client; redirect URI `https://<host>/api/auth/callback/google` |
 | `BETTER_AUTH_SECRET` | 32+ random characters |
 | `BETTER_AUTH_URL` | optional; defaults to the production or branch URL |
+| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | optional: Sign in with Apple appears when all four are set. The Services ID, the 10-character Team ID, the key's Key ID, and the full contents of its `.p8` file. The app signs Apple's client secret from the key itself, so nothing expires by hand. |
+| `APPLE_APP_BUNDLE_ID` | optional, for the future iOS app: also accept Apple tokens issued to this bundle id |
 
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
 build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
