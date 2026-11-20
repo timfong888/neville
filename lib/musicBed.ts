@@ -163,6 +163,16 @@ export class MusicBed {
     void this.ctx?.resume().catch(() => {});
   }
 
+  /** Undoes a fade-out (a sleep timer extended or turned off), back to full over `seconds`. */
+  fadeIn(seconds: number): void {
+    const ctx = this.ctx;
+    const g = this.fade?.gain;
+    if (!ctx || !g) return;
+    g.cancelScheduledValues(ctx.currentTime);
+    g.setValueAtTime(g.value, ctx.currentTime);
+    g.linearRampToValueAtTime(1, ctx.currentTime + seconds);
+  }
+
   stop(): void {
     this.stopped = true;
     if (this.ctx?.state === "suspended") void this.ctx.resume().catch(() => {});

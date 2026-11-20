@@ -332,19 +332,20 @@ export default function PlaylistPlayer({
     setVolume(md.volume);
     setMusic(md.music !== "none");
     prefetchMusic(md.music);
-    if (md.sleepTimer && sleepMin === 0) setSleepMin(30);
-    if (!md.sleepTimer) setSleepMin(0);
     if (phase !== "idle") {
       bed.current?.stop();
       bed.current = null;
       if (md.music !== "none") startMusic(md.volume, true);
       if (phase === "paused") (bed.current as MusicBed | null)?.pause();
-      if (!md.sleepTimer) sleepEndsAt.current = null;
     }
+    // Sleep turns the timer on (30 min unless one is set); the others turn it off. Either way
+    // any fade in progress is undone and, while playing, the timer starts now.
+    chooseSleep(md.sleepTimer ? sleepMin || 30 : 0);
   };
 
   const chooseSleep = (min: number) => {
     setSleepMin(min);
+    if (fading.current) bed.current?.fadeIn(2);
     fading.current = null;
     if (el.current) el.current.volume = 1;
     if (phase !== "idle") sleepEndsAt.current = min > 0 ? Date.now() + min * 60_000 : null;
