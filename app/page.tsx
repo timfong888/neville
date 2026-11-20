@@ -9,6 +9,7 @@ import { readVoiceChoice } from "@/lib/voiceStore";
 import { lineStarts, startPad } from "@/lib/audio";
 import { newId } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
+import Onboarding from "@/app/components/Onboarding";
 
 type Stage = "form" | "making" | "player";
 
@@ -376,6 +377,7 @@ export default function DemoPage() {
   if (stage === "form") {
     return (
       <>
+        <Onboarding />
         <h1>Type what you want. Hear it as already yours.</h1>
         <p className="lede">
           {shared ? "Someone shared this wish with you. Tap Create to hear it. " : ""}
