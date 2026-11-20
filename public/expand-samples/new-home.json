@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-11-20T07:01:22.778Z",
+  "wish": "I'm walking into my new home",
+  "mode": "calm",
+  "pace": "slow",
+  "tone": "calm",
+  "music": "morning-light",
+  "volume": 0.6,
+  "fadeIn": 2,
+  "voiceId": "gemini-sulafat",
+  "seconds": 169.3,
+  "voiceSeconds": 161.3,
+  "costUsd": 0.01089,
+  "textCostUsd": 0,
+  "draft": {
+    "settle": [
+      "Close your eyes now, and let your jaw soften.",
+      "Let your shoulders drop, heavy and warm, sinking into the surface beneath you.",
+      "Breathe out slowly, and feel the quiet settle through your body.",
+      "Let your mind grow still, drifting at that gentle edge before sleep."
+    ],
+    "scene": [
+      "I stand at the front step, and the key is cool in my palm.",
+      "The metal sits solid against my fingers, a small weight I know.",
+      "I turn the key, and the lock gives with a soft, certain click.",
+      "The door swings inward, and warm air meets my face.",
+      "I breathe in the scent of fresh paint and clean wood.",
+      "My chest loosens, the breath moving deep and easy.",
+      "Pale afternoon light spills across the floorboards in a long band.",
+      "My hand rests on the cool frame, the paint smooth under my fingertips.",
+      "Dust hangs gold in the light, slow and unhurried.",
+      "My shoulders settle, warm and steady, as I step over the threshold.",
+      "The floor is firm beneath my feet, solid and sure.",
+      "A calm warmth spreads through my stomach and rests there.",
+      "I stand still in the doorway, grounded, and feel completely at home."
+    ],
+    "closing": [
+      "I am home.",
+      "I am home.",
+      "I am home.",
+      "And so it is."
+    ],
+    "flags": [
+      {
+        "kind": "choice",
+        "where": "",
+        "text": "turning the key in the front door"
+      },
+      {
+        "kind": "choice",
+        "where": "",
+        "text": "cool metal key in the palm"
+      },
+      {
+        "kind": "choice",
+        "where": "",
+        "text": "pale afternoon light across floorboards"
+      },
+      {
+        "kind": "choice",
+        "where": "",
+        "text": "fresh paint and clean wood scent"
+      },
+      {
+        "kind": "choice",
+        "where": "",
+        "text": "smooth painted doorframe under fingertips"
+      }
+    ],
+    "holdAudio": false,
+    "vetted": true,
+    "model": "anthropic/claude-haiku-5.5"
+  }
+}

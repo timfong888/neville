@@ -5,6 +5,7 @@ import { synthesize } from "@/lib/server/tts";
 import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
+import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 
 export const dynamic = "force-dynamic";
@@ -38,9 +39,16 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ code: "bad_request", error: "Send JSON." }, { status: 400 });
   }
-  const parsed = parseRerecord(body, LIMITS.maxScriptChars);
+  // Optional delivery presets, as in /api/manifest. Sent only by the guided-audio
+  // flow, which records one part at a time (settle, scene, closing) and so
+  // allows a longer part. Without them the recording is made exactly as before.
+  const delivery = (body && typeof body === "object" ? body : {}) as { pace?: unknown; tone?: unknown };
+  const preset = delivery.pace !== undefined || delivery.tone !== undefined;
+  const parsed = parseRerecord(body, preset ? LIMITS.maxGuidedSectionChars : LIMITS.maxScriptChars);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
   const { lines } = parsed.value;
+  const pace = resolvePace(delivery.pace);
+  const tone = resolveTone(delivery.tone);
   const voice = resolveVoice(parsed.value.voiceId);
 
   const ip = visitor(req);
@@ -81,7 +89,8 @@ export async function POST(req: Request) {
     model: voice.model,
     voice: voice.voice,
     text,
-    instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
+    ...(preset ? { lines, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone) } : {}),
+    instructions: TAKES_STYLE.test(voice.model) ? (preset ? styleInstruction(pace, tone) : STYLE) : undefined,
     compact: true,
     timeoutMs: 42_000,
   });

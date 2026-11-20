@@ -5,6 +5,13 @@
   "globalPerDay": 150,
   "maxWantChars": 280,
   "maxScriptChars": 700,
+  "maxGuidedSectionChars": 1000,
+  "expandPerIpPerDay": 20,
+  "maxExpandRegenerations": 3,
+  "expandModels": [
+    "anthropic/claude-haiku-5.5",
+    "google/gemini-3.5-flash-lite"
+  ],
   "scriptModels": [
     "google/gemini-2.5-flash-lite",
     "openai/gpt-4.1-nano",

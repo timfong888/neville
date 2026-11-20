@@ -6,7 +6,7 @@ export type LedgerKind = "script" | "vet" | "speech";
 /** One paid call to OpenRouter. */
 export type LedgerEntry = {
   at: number;
-  route: "manifest" | "rerecord";
+  route: "manifest" | "rerecord" | "expand";
   kind: LedgerKind;
   /** OpenRouter model id; null when the call fell back without a model. */
   model: string | null;
