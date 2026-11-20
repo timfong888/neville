@@ -4,7 +4,7 @@ import { LIMITS, generationEnabled, returnExpandSlot, takeExpandSlot, underCeili
 import { expandWish } from "@/lib/server/expander";
 import { vetScript } from "@/lib/server/vet";
 import { record } from "@/lib/server/ledger";
-import { allLines, holdsAudio, reviewFlags } from "@/lib/expand";
+import { allLines, holdsAudio, reviewFlags, wishNote } from "@/lib/expand";
 import { resolveTone } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +102,8 @@ export async function POST(req: Request) {
     // True while a claim, number or name the writer added is unconfirmed.
     holdAudio: holdsAudio(flags),
     vetted: true,
+    // A neutral line for the UI to show for health or money wishes. The text above is not changed.
+    note: wishNote(want),
     model: made.model,
   });
 }

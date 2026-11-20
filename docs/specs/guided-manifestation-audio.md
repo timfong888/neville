@@ -1,6 +1,6 @@
 # Guided manifestation audio
 
-Status: draft for Tim's review, 2026-11-20. Tracks [#49](https://github.com/timfong888/neville/issues/49). Source of truth for scope is the PRD ([Neville](https://docs.google.com/document/d/1fBH5TIdn_nzCYWX4KSIH9MoJWmm_X4_tYLbhw-mTyWc/edit)).
+Status: draft for Tim's review, 2026-11-20. Defaults below are set by the orchestrator pending Tim. Tracks [#49](https://github.com/timfong888/neville/issues/49). Source of truth for scope is the PRD ([Neville](https://docs.google.com/document/d/1fBH5TIdn_nzCYWX4KSIH9MoJWmm_X4_tYLbhw-mTyWc/edit)).
 
 **Scope:** the user's own manifestations only. Tim's separate "lessons" feature (Neville's exact quotes, no AI-written text) is a different thing. Nothing here quotes Neville, and nothing here should be used for lessons.
 
@@ -71,6 +71,8 @@ Two layers. Only the first is built.
 | Health, money or other-person outcome claim the user's wish did not make | Check in code, plus the writer's own `claims` list | Yes, until confirmed | The vet step catches harm, not a false "your body is cured". |
 | Concrete choices the writer made (an oak door, late light, smell of paint) | The writer's `choices` list | No, shown as "swap any that don't fit" | They are guesses at what the user would see. Swapping them is the main way the user makes it theirs. |
 
+| One neutral line for a health or money wish ("This is a calming exercise, not medical or financial advice. It can sit alongside care and planning, not replace them.") | `wishNote`, returned as `note` by `/api/expand` | No | Shown beside the draft. The user's text and the audio are not changed. |
+
 The vet step (OK or NO, fails closed) is kept. It runs on the draft before it is shown, and again in `/api/rerecord` on whatever text the user finally accepts, because edits can change it.
 
 **2. People at Neville, before launch.** These need a person, not a check.
@@ -79,7 +81,7 @@ The vet step (OK or NO, fails closed) is kept. It runs on the draft before it is
 |---|---|---|
 | Does the prompt read like Neville's method to someone who knows it? Feel from inside, one act, assume the feeling | Tim | The prompt encodes the method. Only Tim can say if the first-person scene is right. |
 | The closing line and the refrain ("I am home.", then "And so it is.") | Tim | Existing app voice. Choose whether it should be Neville's phrasing instead. |
-| Wishes about health, money, or another person | Tim, with legal if needed | The audio will not add claims, but it will voice the user's own claim ("my back pain is gone") in a calm authoritative voice. Decide on a one-line note or none. |
+| Wishes about health, money, or another person | Tim, with legal if needed | The audio will not add claims, but it will voice the user's own claim ("my back pain is gone") in a calm authoritative voice. Default for now: the one-line neutral note above, text unchanged. Tim confirms the wording. |
 | Listening while drowsy | Tim | The method works at the edge of sleep. Say clearly not to listen while driving. A line in the player. |
 
 ## Make it richer
@@ -96,7 +98,7 @@ Uses the existing pipeline: `/api/rerecord` with Calm mode (pace slow, tone calm
 
 **Constraint found:** the pipeline returns one WAV of at most about 4 MB (`MAX_AUDIO_BYTES`, set by the response size Vercel allows). At 24 kHz that is about 83 seconds, roughly 550 characters at Calm pace. A first run with a 13-line scene (825 characters) failed with a 502 for that reason. So a 2 to 3 minute guide cannot be one request. The prototype records it in pieces of at most 540 characters (settle, the scene in two pieces, closing), joins them with silence, and mixes the music in `scripts/record-expanded-sample.mjs`.
 
-The product needs one of these. This is a decision for the account work, not for Tim's review of the sample:
+**Default for now: play the pieces in sequence, no storage.** The product needs one of these eventually. The choice belongs to the account work (#13), not to Tim's review of the sample:
 
 | Option | Cost | Note |
 |---|---|---|
@@ -126,25 +128,31 @@ Everything run for this task, including two failed attempts and five test drafts
 Prompted on six wishes: a house, a confident state, a pain-free body, a monthly income, a relationship, and a request for a coworker to be fired.
 
 - The house sample reads as intended: first person, one act (turning the key and stepping in), body ("my chest loosens"), touch ("the paint smooth under my fingertips"), small sight ("dust hangs gold in the light").
-- **Repetition across wishes.** Three of the five other scenes ended up at a table with a cup of tea. The model has a default calm setting. "Make it richer" and variations will need an instruction to avoid the default, or a list of settings to avoid.
+- **Repetition across wishes.** Three of the five other scenes ended up at a table with a cup of tea. The model has a default calm setting. Fixed for now with an instruction in the prompt (choose a setting that follows from the wish, not the tea table or soft window light; keep the same setting when making it richer). Re-run on the same three wishes: no tea. But two of three now open with a hand on a door frame, as the home sample does, so the next default is a doorway. Watch for it; a larger test across about 20 wishes is the real check.
 - Abstract wishes ("confident when I speak") worked: the model picked a concrete act (standing at a lectern).
 - The harmful wish became a neutral peaceful scene and said nothing about the request, as designed.
-- The number, name and claim checks fire only on what the writer adds. A wish that is itself a claim ("my back pain is gone") passes through unflagged. See People at Neville above.
+- The number, name and claim checks fire only on what the writer adds. A wish that is itself a claim ("my back pain is gone") passes through unflagged and gets the neutral note. See People at Neville above.
 - Not yet tested: names given by the user, very long wishes, non-English wishes, and whether people prefer this to the current short script. One sample is not a result.
 
 ## Decisions for Tim
 
-1. **Flow.** Text first, edit, then audio (recommended), or one-step audio, or silent replacement. See #49.
-2. **Length.** About 2 minutes 50 seconds now. Is that right for a first listen, or should there be a short and a long version?
-3. **Make it richer cap.** 3 per manifestation, or unlimited at 5 cents a day?
-4. **Voice of the scene.** First person ("I") as specified. The settle is in "you". Is a mixed voice acceptable, or should the whole thing be one voice?
+Defaults are what the build does until Tim says otherwise.
+
+| # | Decision | Default for now |
+|---|---|---|
+| 1 | Flow | Text first, edit, then audio. Pieces played in sequence, no storage. |
+| 2 | Length | About 2 minutes 50 seconds. Open: is that right for a first listen, or should there be a short and a long version? |
+| 3 | Make it richer cap | 3 per manifestation, keeps the same setting. |
+| 4 | Variation | Prompt avoids the tea-table and soft-window defaults. |
+| 5 | Health and money wishes | One neutral line beside the draft; the user's text is unchanged. |
+| 6 | Voice of the scene | First person ("I"), settle in "you". Open: is a mixed voice acceptable? |
 
 ## Not built
 
 - The editor UI: showing the three parts, highlighting flags, the "make it richer" button, and the confirm step. The API returns everything the UI needs (`flags`, `holdAudio`).
 - Saving an expanded script in the library. The existing `Manifestation` shape (`want`, `lines`) can hold it; pieces need the decision above.
 - A hard cap on "make it richer" and on drafts: both are soft, in-memory counters like the existing recording limits (#8).
-- Variation to avoid the default setting.
+- A reliable variation check. The prompt instruction is tested on three wishes only.
 
 ## Files
 

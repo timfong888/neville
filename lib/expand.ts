@@ -36,11 +36,13 @@ One sentence per line, 5 to 14 words. Plain and calm. No exclamation marks, no q
 
 3. "closing": 4 lines. A short present-tense phrase of 3 to 7 words that holds the feeling (for example "I am home."), written identically on three lines, then exactly: And so it is.
 
+Setting: choose a setting that follows from the wish. Do not default to a kitchen table with a cup of tea, or to a window with soft light; those are overused. If the wish names no place, pick an ordinary one that fits it (a hallway, a garden gate, a bus stop at dawn, a studio floor) and let it be a little unexpected.
+
 Facts: use only what the wish says. You may invent small sensory particulars (colours, textures, light, weather, objects) because the scene needs them. Never invent a named person, a name, a number, a sum of money, a place name, a date or a diagnosis. Never claim a cure, an income, or an outcome for health, money or another person.
 
 If the wish asks for harm to anyone, control over a specific person, or anything hateful or sexual, write instead a gentle scene of peace in the listener's own life, and leave "claims" empty.
 
-If "draft" is given, keep the person's own words wherever you can and keep the same single act. If "richer" is true, make it richer: more of the body, more touch, more small specific sight. Stay within 2 lines of the same length.
+If "draft" is given, keep the person's own words wherever you can and keep the same single act and the same setting. If "richer" is true, make it richer: more of the body, more touch, more small specific sight. Stay within 2 lines of the same length.
 
 Plain text in every line: no quotation marks, brackets, emoji, ellipses or stage directions.
 
@@ -157,6 +159,17 @@ export function reviewFlags(x: Expansion, want: string, name = ""): Flag[] {
   for (const c of x.claims) flags.push({ kind: "claim", where: "", text: c });
   for (const c of x.choices) flags.push({ kind: "choice", where: "", text: c });
   return flags;
+}
+
+const NOTE_WORDS =
+  /\b(pain|cure[ds]?|heal(?:ed|ing|s)?|health\w*|illness|disease|cancer|tumou?r|diagnos\w*|medic\w*|anxiety|depress\w*|surgery|money|income|earn\w*|salary|rich|wealth\w*|debt|invest\w*|dollars?|million|profit|savings?)\b/i;
+
+/** One neutral line, shown beside the draft, for a wish about health or money. The person's text is never changed. */
+export const HEALTH_MONEY_NOTE =
+  "This is a calming exercise, not medical or financial advice. It can sit alongside care and planning, not replace them.";
+
+export function wishNote(want: string): string | null {
+  return NOTE_WORDS.test(want) ? HEALTH_MONEY_NOTE : null;
 }
 
 /** True while something the person must confirm is still open. */
