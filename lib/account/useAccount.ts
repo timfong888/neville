@@ -8,6 +8,8 @@ export type AccountState = {
   user: { id: string; name: string; email: string; image: string | null } | null;
   /** Off production only: the variable names still missing. */
   missing?: string[];
+  /** Sign-in buttons this deployment offers. */
+  providers?: ("google" | "apple")[];
 };
 
 const OFF: AccountState = { enabled: false, user: null };

@@ -81,6 +81,8 @@ values, and not on production).
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web client. Authorized redirect URIs: `https://getneville.vercel.app/api/auth/callback/google` and `https://neville-delta.vercel.app/api/auth/callback/google` (plus a preview branch URL if you test sign-in there); JavaScript origins: the same two hosts |
 | `BETTER_AUTH_SECRET` | 32+ random characters |
 | `BETTER_AUTH_URL` | optional; production defaults to `https://getneville.vercel.app`, previews to their branch URL. `https://neville-delta.vercel.app` stays a trusted origin |
+| `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | optional: Sign in with Apple appears (Services ID return URLs: `https://getneville.vercel.app/api/auth/callback/apple` and `https://neville-delta.vercel.app/api/auth/callback/apple`; domains: `getneville.vercel.app`, `neville-delta.vercel.app`) when all four are set and the key parses. A key that does not parse switches only Apple off (one log line names the variable); Google keeps working. The Services ID, the 10-character Team ID, the key's Key ID, and the full contents of its `.p8` file. The app signs Apple's client secret from the key itself, so nothing expires by hand. |
+| `APPLE_APP_BUNDLE_ID` | optional, for the future iOS app: also accept Apple ID tokens issued to this bundle id (the Services ID stays accepted) |
 
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
 build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
