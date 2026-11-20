@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanMix, DEFAULT_MIX, honoursPace, MIXABLE_VOICES, mixVoiceAt, spreadVoices } from "@/lib/voiceMix";
+import { cleanMix, DEFAULT_MIX, honoursPace, MIXABLE_VOICES, mixVoiceAt, paceSupport, spreadVoices } from "@/lib/voiceMix";
 
 describe("voice mix", () => {
   it("defaults to the voices that honour pace, which leaves out Nadine", () => {
@@ -34,5 +34,13 @@ describe("spreadVoices", () => {
   });
   it("leaves a single-voice playlist alone", () => {
     expect(spreadVoices([2, 0, 1], () => "A")).toEqual([2, 0, 1]);
+  });
+});
+
+describe("paceSupport", () => {
+  it("marks only measured voices as honouring or ignoring pace", () => {
+    expect(paceSupport({ model: "google/gemini-3.8-flash-lite-tts" })).toBe("honours");
+    expect(paceSupport({ model: "heygen/heygen-voice-1-turbo" })).toBe("ignores");
+    expect(paceSupport({ model: "hexgrad/kokoro-82m" })).toBe("untested");
   });
 });

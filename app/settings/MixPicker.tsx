@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_MIX, honoursPace, MIXABLE_VOICES } from "@/lib/voiceMix";
+import { DEFAULT_MIX, MIXABLE_VOICES, paceSupport } from "@/lib/voiceMix";
 import { readMix, readMixOn, writeMix, writeMixOn } from "@/lib/voiceMixStore";
 
 /** Mix voices: new recordings rotate through a set of voices; playlists avoid the same voice twice in a row. */
@@ -51,7 +51,8 @@ export default function MixPicker() {
                 <span className="small muted">
                   {" "}
                   {v.provider}
-                  {honoursPace(v) ? "" : " · ignores pace: Sleep and Brisk change only its pauses"}
+                  {paceSupport(v) === "ignores" && " · ignores pace: Sleep and Brisk change only its pauses"}
+                  {paceSupport(v) === "untested" && " · pace untested"}
                 </span>
               </span>
             </label>
