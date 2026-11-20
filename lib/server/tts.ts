@@ -157,7 +157,8 @@ export async function synthesize(opts: {
   const limit = Object.entries(PER_REQUEST_LIMIT).find(([prefix]) => model.startsWith(prefix))?.[1];
   const parts = stitch ? opts.lines! : limit && text.length > limit ? splitText(text, limit) : [text];
   const pcm = PCM_ONLY.test(model) || parts.length > 1;
-  const wantSpeed = opts.speed && opts.speed > 0 && opts.speed < 1 ? opts.speed : undefined;
+  // 1 is the model's own pace, so it is not sent. Brisk asks for a little faster.
+  const wantSpeed = opts.speed && opts.speed >= 0.5 && opts.speed <= 1.2 && opts.speed !== 1 ? opts.speed : undefined;
   let speedRefused = false;
   let speedSent = false;
 

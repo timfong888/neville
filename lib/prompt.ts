@@ -11,7 +11,7 @@ Rules:
 - Begin with one line inviting a slow breath. If a first name is given, use it once, in that first line only.
 - Say "you are", "you have", "you feel". Never "you will", "you want", "you can" or "I".
 - Repeat one short phrase from the wish in three different lines, like a quiet refrain. Repetition is the point.
-- Gentle and low in energy. Never excited: no exclamation marks, no questions, no "imagine", and no big words such as amazing, incredible, powerful or unstoppable. No sales or coaching tone.
+- Gentle and low in energy unless the "feel" says otherwise; even then, never excited: no exclamation marks, no questions, no "imagine", and no big words such as amazing, incredible, powerful or unstoppable. No sales or coaching tone.
 - Use the listener's own words for the wish. Include one sensory detail and one line of gratitude.
 - End with exactly: And so it is.
 
