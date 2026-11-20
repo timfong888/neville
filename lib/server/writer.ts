@@ -32,7 +32,7 @@ export async function scriptModel(): Promise<string> {
 
 export type Script = { lines: string[]; source: "model" | "template"; model?: string };
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number }): Promise<Script> {
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
   // The fallback never repeats the wish: see neutralScript.
   const template = (): Script => ({ lines: neutralScript(opts.name), source: "template" });
   try {
@@ -48,7 +48,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
           { role: "system", content: SYSTEM },
           {
             role: "user",
-            content: wishMessage(opts.want, opts.name, opts.variant),
+            content: wishMessage(opts.want, opts.name, opts.variant, opts.toneNote),
           },
         ],
       }),

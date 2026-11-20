@@ -1,0 +1,78 @@
+{
+  "recordedAt": "2026-11-19T19:32:07.185Z",
+  "totalCostUsd": 0.00413,
+  "samples": [
+    {
+      "id": "1-default-voice",
+      "title": "Default voice (Nadine), Slow + Calm",
+      "voiceId": "heygen-nadine",
+      "pace": "slow",
+      "tone": "calm",
+      "wish": "I want to be calm and confident when I speak",
+      "name": "Tim",
+      "files": {
+        "before": "1-default-voice-before.mp3",
+        "after": "1-default-voice-after.mp3"
+      },
+      "before": {
+        "script": "Take a slow, deep breath, Tim. You are calm and confident when you speak. Your voice is steady and clear. You feel grounded and at ease in every conversation. Your words flow effortlessly, expressing your thoughts with grace. You know exactly what you want to say. You feel a gentle warmth spreading through you as you share your ideas. You are so grateful for this inner peace. You are truly radiant with self-assurance. And so it is.",
+        "costUsd": 0
+      },
+      "after": {
+        "script": "Breathe in, Tim. Breathe out. You feel calm and confident. Your voice is steady and clear. You feel steady, warm, and grounded. Your words flow with ease. You feel calm and confident. You are heard and understood. You feel steady, warm, and grounded. You are so grateful for this ease. You feel calm and confident. And so it is.",
+        "scriptSource": "model",
+        "speedApplied": false,
+        "pauseMs": 1500,
+        "costUsd": 0
+      }
+    },
+    {
+      "id": "2-soft-very-slow",
+      "title": "Gemini Sulafat, Very slow + Soft",
+      "voiceId": "gemini-sulafat",
+      "pace": "very-slow",
+      "tone": "soft",
+      "wish": "a loving, easy relationship with my family",
+      "name": "Tim",
+      "files": {
+        "before": "2-soft-very-slow-before.mp3",
+        "after": "2-soft-very-slow-after.mp3"
+      },
+      "before": {
+        "script": "Breathe in, Tim, and breathe out. You are surrounded by deep, unconditional love. You feel a profound sense of peace and connection with your family. Your conversations flow easily, filled with understanding and warmth. You experience joy and laughter in every interaction. You feel completely accepted and cherished for who you are. You have a beautiful, supportive bond with each family member. You notice the gentle comfort of their presence. You are so grateful for this harmonious and loving relationship. And so it is.",
+        "costUsd": 0
+      },
+      "after": {
+        "script": "Breathe in slowly, Tim. You are gentle with your family. You feel close and intimate. Your relationship is easy. Your family is loving. You feel close and intimate. You are loving with your family. Your relationship is easy. You feel close and intimate. You are grateful for this ease. And so it is.",
+        "scriptSource": "model",
+        "speedApplied": true,
+        "pauseMs": 3120,
+        "costUsd": 0.00068
+      }
+    },
+    {
+      "id": "3-sleep",
+      "title": "Gemini Vindemiatrix, Very slow + Sleep",
+      "voiceId": "gemini-vindemiatrix",
+      "pace": "very-slow",
+      "tone": "sleep",
+      "wish": "to feel safe and rested, and to sleep deeply",
+      "name": "Tim",
+      "files": {
+        "before": "3-sleep-before.mp3",
+        "after": "3-sleep-after.mp3"
+      },
+      "before": {
+        "script": "Breathe in, Tim, and slowly exhale. You are completely safe and deeply rested now. You feel a profound sense of peace washing over you. Your mind is calm, free from all worries. You are sinking into a luxurious, restful sleep. Your body is relaxed, heavy and warm. You feel the soft support of your bed beneath you. You are so grateful for this deep, restorative sleep. You are enjoying the profound feeling of wellbeing. And so it is.",
+        "costUsd": 0
+      },
+      "after": {
+        "script": "Breathe in slowly, Tim. You feel a gentle heaviness. Your body is safe now. You are deeply rested. You are deeply rested. Warmth spreads through you. Your mind lets go. You feel safe and warm. You are deeply rested. Gratitude fills your heart. And so it is.",
+        "scriptSource": "model",
+        "speedApplied": true,
+        "pauseMs": 3677,
+        "costUsd": 0.00345
+      }
+    }
+  ]
+}

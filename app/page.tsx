@@ -6,7 +6,12 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
-import { lineStarts, startPad } from "@/lib/audio";
+import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
+import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
+import { lineStarts } from "@/lib/audio";
+import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
+import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
+import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
 import { newId } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
@@ -20,7 +25,18 @@ const EXAMPLES = [
   "a loving, easy relationship with my family",
 ];
 
-type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string };
+type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string; starts?: number[] };
+
+/** The server's line start times, if present and sound; null makes the page estimate instead. */
+function readStarts(header: string | null, count: number): number[] | undefined {
+  try {
+    const v = JSON.parse(header ?? "null");
+    const ok = Array.isArray(v) && v.length === count && v.every((n) => typeof n === "number" && n >= 0 && n <= 1);
+    return ok ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function readCount(): number {
   try {
@@ -60,17 +76,38 @@ export default function DemoPage() {
   // The voice chosen in Settings. Read after load; the demo itself still speaks
   // with the device's voice.
   const [studioVoice, setStudioVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
-  useEffect(() => {
-    setStudioVoice(resolveVoice(readVoiceChoice()));
+  // The voice the next recording will use: the chosen one, or with Mix voices on the next in the mix.
+  const [nextVoice, setNextVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
+  const [mixOn, setMixOn] = useState(false);
+  // The voice of the recording being made now, for the "making" steps.
+  const [makingVoice, setMakingVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
+  const refreshNextVoice = useCallback(() => {
+    const chosen = resolveVoice(readVoiceChoice());
+    const on = readMixOn();
+    setStudioVoice(chosen);
+    setMixOn(on);
+    setNextVoice(on ? resolveVoice(peekMixVoice()) : chosen);
   }, []);
+  useEffect(() => {
+    refreshNextVoice();
+  }, [refreshNextVoice]);
   const [canSpeak, setCanSpeak] = useState(true);
   const [music, setMusic] = useState(true);
+  const [volume, setVolume] = useState(0.6);
   const [playing, setPlaying] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
 
   const token = useRef(0);
-  const stopPad = useRef<(() => void) | null>(null);
+  const bed = useRef<MusicBed | null>(null);
+  // Where the voice speaks in the current recording, so the music can dip under it.
+  const speech = useRef<Segment[]>([]);
+  useEffect(() => {
+    setVolume(readMusicVolume());
+    const choice = readMusicChoice();
+    setMusic(choice !== "none");
+    prefetchMusic(choice);
+  }, []);
 
   // Without a server recording the device reads a general script. It never
   // reads the typed wish back: only the server's text model vets a wish.
@@ -104,7 +141,7 @@ export default function DemoPage() {
     return () => {
       window.speechSynthesis.removeEventListener?.("voiceschanged", load);
       window.speechSynthesis.cancel();
-      stopPad.current?.();
+      bed.current?.stop();
     };
   }, []);
 
@@ -116,21 +153,34 @@ export default function DemoPage() {
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       audio.current?.pause();
       audio.current = null;
-      stopPad.current?.();
-      stopPad.current = null;
+      bed.current?.stop();
+      bed.current = null;
     },
     [],
   );
   // A recording lives only in this tab. Free its memory when it is replaced.
   useEffect(() => () => void (made && URL.revokeObjectURL(made.url)), [made]);
+  useEffect(() => {
+    speech.current = [];
+    if (!made) return;
+    let live = true;
+    void fetch(made.url)
+      .then((r) => r.blob())
+      .then(speechOf)
+      .then((s) => live && (speech.current = s))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [made]);
 
   const stop = useCallback(() => {
     token.current++;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     audio.current?.pause();
     audio.current = null;
-    stopPad.current?.();
-    stopPad.current = null;
+    bed.current?.stop();
+    bed.current = null;
     setPlaying(false);
   }, []);
 
@@ -141,19 +191,31 @@ export default function DemoPage() {
     const mine = ++token.current;
     setPlaying(true);
     setIdx(0);
-    if (music) stopPad.current = startPad();
+    if (music) {
+      // Music on with "No music" chosen in Settings plays the default track.
+      const choice = readMusicChoice();
+      bed.current = new MusicBed();
+      void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume);
+    }
 
     // A server recording: play the file and move the read-along by its clock.
     if (made) {
       const a = new Audio(made.url);
       audio.current = a;
-      const starts = lineStarts(lines);
+      // With pauses, the server knows where each line starts; otherwise estimate by length.
+      const starts = made.starts ?? lineStarts(lines);
       a.ontimeupdate = () => {
         if (token.current !== mine || !a.duration) return;
         const at = a.currentTime / a.duration;
         let i = 0;
         while (i + 1 < starts.length && starts[i + 1] <= at) i++;
         setIdx(i);
+      };
+      // Dip the music under each spoken stretch, on the audio clock.
+      a.onplaying = () => {
+        if (token.current !== mine) return;
+        if (speech.current.length) bed.current?.duckFor(speech.current, a.currentTime);
+        else bed.current?.holdDuck(true);
       };
       a.onended = () => {
         if (token.current !== mine) return;
@@ -201,7 +263,12 @@ export default function DemoPage() {
       }
       u.rate = 0.82;
       u.pitch = 0.95;
-      u.onstart = () => token.current === mine && setIdx(i);
+      u.onstart = () => {
+        if (token.current !== mine) return;
+        setIdx(i);
+        bed.current?.holdDuck(true);
+      };
+      u.onend = () => token.current === mine && bed.current?.holdDuck(false);
       u.onerror = (e) => {
         // cancel() reports these two; anything else means the engine failed.
         if (failed || token.current !== mine || e.error === "canceled" || e.error === "interrupted") return;
@@ -219,7 +286,7 @@ export default function DemoPage() {
       }
       synth.speak(u);
     });
-  }, [canSpeak, lines, made, music, stop, voiceURI]);
+  }, [canSpeak, lines, made, music, stop, voiceURI, volume]);
 
   // One request writes the script and records it. If recording is off, over
   // its limits or fails, the free fallback still gives the visitor something:
@@ -234,11 +301,22 @@ export default function DemoPage() {
     setIdx(-1);
     let next: Made | null = null;
     let why = "";
+    // Mix voices on: each new recording takes the next voice in the set.
+    const mixing = readMixOn();
+    const voice = mixing ? resolveVoice(peekMixVoice()) : studioVoice;
+    setMakingVoice(voice);
     try {
       const res = await fetch("/api/manifest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ want: want.trim(), name: name.trim(), voiceId: studioVoice.id, variant: v }),
+        body: JSON.stringify({
+          want: want.trim(),
+          name: name.trim(),
+          voiceId: voice.id,
+          variant: v,
+          pace: readPaceChoice(),
+          tone: readToneChoice(),
+        }),
       });
       if (res.ok) {
         const packed = atob(res.headers.get("X-Script") ?? "");
@@ -250,6 +328,7 @@ export default function DemoPage() {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: res.headers.get("X-Script-Source") ?? "",
+          starts: readStarts(res.headers.get("X-Line-Starts"), made.length),
         };
       } else {
         const j = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -261,6 +340,10 @@ export default function DemoPage() {
     if (run.current !== mine) {
       if (next) URL.revokeObjectURL(next.url);
       return;
+    }
+    if (next && mixing) {
+      advanceMix();
+      refreshNextVoice();
     }
     setMade(next);
     setSavedId("");
@@ -430,7 +513,16 @@ export default function DemoPage() {
             </div>
           </div>
           <p className="small muted voiceline">
-            Recorded in the voice of <b>{studioVoice.name}</b>. <Link href="/settings">Change voice</Link>
+            {mixOn ? (
+              <>
+                Next recording: <b>{nextVoice.name}</b>, rotating through your voice mix.{" "}
+              </>
+            ) : (
+              <>
+                Recorded in the voice of <b>{nextVoice.name}</b>.{" "}
+              </>
+            )}
+            <Link href="/settings">Change voice</Link>
           </p>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
@@ -452,7 +544,7 @@ export default function DemoPage() {
   }
 
   if (stage === "making") {
-    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${studioVoice.name}`];
+    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${makingVoice.name}`];
     return (
       <>
         <h1>Making it yours…</h1>
@@ -534,6 +626,25 @@ export default function DemoPage() {
         >
           Music: {music ? "on" : "off"}
         </button>
+        {music && (
+          <label className="small muted volume">
+            <span className="sr-only">Music volume</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              aria-label="Music volume"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setVolume(v);
+                writeMusicVolume(v);
+                bed.current?.setVolume(v);
+              }}
+            />
+          </label>
+        )}
       </div>
       <div className="toast" role="status">
         {toast}
