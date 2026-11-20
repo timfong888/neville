@@ -64,7 +64,7 @@ read by the device's own voice, which costs nothing.
 
 ## Usage ledger, kill switch and budget alerts
 
-- **Ledger.** Every paid call (`/api/manifest` script and speech, `/api/rerecord`
+- **Ledger.** Every paid call, with the one gap noted below, (`/api/manifest` script and speech, `/api/rerecord`
   vet and speech) is recorded: route, kind, model, characters, estimated cost.
   Each entry is one `[ledger]` JSON line in the runtime log (Vercel, project,
   Logs), which is the durable record. The last 500 are also kept in memory per
@@ -80,8 +80,13 @@ read by the device's own voice, which costs nothing.
   alerts a level once, so the same level can arrive more than once; a webhook
   that fails is logged and not retried.
 - **Failed recordings** are recorded too (`ok: false`, unpriced), since a long
-  script can be billed in part before it fails. Script-writing calls are
-  recorded unpriced (fractions of a cent).
+  script can be billed in part before it fails; the admin page marks them.
+  A script check that answers with nothing usable is recorded as well.
+  Script-writing calls are recorded unpriced (fractions of a cent). Known gap:
+  a script-writing reply that arrives but is unusable (the app then uses the
+  general script) is not recorded yet, because the writer does not report it;
+  that waits on the delivery work in #19. The ceiling and alerts are not
+  affected: they use OpenRouter's own usage counter.
 - **Admin page.** Set `ADMIN_TOKEN` in Vercel, open `/admin/usage` and enter
   it once (a 12-hour httpOnly cookie holds a hash of it; the token never goes
   in a URL): a banner at 50/80/100%, kill-switch state and recent ledger rows.

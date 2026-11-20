@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, adminCookieValue, adminToken, loginBlocked, noteFailedLogin, tokenMatches } from "@/lib/server/admin";
+import { ADMIN_COOKIE, adminCookieValue, adminToken, clearFailedLogins, loginBlocked, noteFailedLogin, tokenMatches } from "@/lib/server/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     back.searchParams.set("wrong", "1");
     return NextResponse.redirect(back, 303);
   }
+  clearFailedLogins(ip);
   const res = NextResponse.redirect(back, 303);
   res.cookies.set(ADMIN_COOKIE, adminCookieValue(want), {
     httpOnly: true,

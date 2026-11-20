@@ -95,7 +95,8 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
       <p className="small muted">{store.scope}</p>
       <p className="small">
         {t.calls} calls, {t.chars} characters, about {usd(t.estUsd)}
-        {t.unpriced ? ` plus ${t.unpriced} unpriced` : ""}.
+        {t.unpriced ? ` plus ${t.unpriced} unpriced` : ""}
+        {t.failed ? `; ${t.failed} failed (may be billed in part)` : ""}.
       </p>
       {rows.length > 0 && (
         <div className="tablewrap">
@@ -108,6 +109,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                 <th>Model</th>
                 <th>Chars</th>
                 <th>Est.</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -119,6 +121,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
                   <td>{r.model ?? "—"}</td>
                   <td>{r.chars}</td>
                   <td>{r.estUsd === null ? "—" : usd(r.estUsd)}</td>
+                  <td className={r.ok === false ? "danger" : undefined}>{r.ok === false ? "failed" : "ok"}</td>
                 </tr>
               ))}
             </tbody>

@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   }
 
   const vet = await vetScript(key, lines);
-  if (vet.ok || vet.reason === "rejected") {
+  if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }
   if (!vet.ok) {

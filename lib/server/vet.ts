@@ -8,6 +8,7 @@ import { VET_SYSTEM, verdict } from "@/lib/rerecord";
 export type Vet =
   | { ok: true; model: string; costUsd: number | null }
   | { ok: false; reason: "rejected"; model: string; costUsd: number | null }
+  | { ok: false; reason: "empty"; model: string; costUsd: number | null }
   | { ok: false; reason: "unavailable" };
 
 export async function vetScript(key: string, lines: string[]): Promise<Vet> {
@@ -34,8 +35,10 @@ export async function vetScript(key: string, lines: string[]): Promise<Vet> {
       usage?: { cost?: unknown };
     };
     const reply = json.choices?.[0]?.message?.content;
-    if (typeof reply !== "string") return { ok: false, reason: "unavailable" };
     const costUsd = typeof json.usage?.cost === "number" ? json.usage.cost : null;
+    // Answered but said nothing usable: billed, so the caller records it, and
+    // treated like a refusal so nothing is recorded in a voice.
+    if (typeof reply !== "string") return { ok: false, reason: "empty", model, costUsd };
     return verdict(reply) ? { ok: true, model, costUsd } : { ok: false, reason: "rejected", model, costUsd };
   } catch {
     return { ok: false, reason: "unavailable" };

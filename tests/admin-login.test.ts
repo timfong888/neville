@@ -55,6 +55,13 @@ describe("admin login", () => {
     expect((await login(process.env.ADMIN_TOKEN!, "10.7.7.7")).status).toBe(303);
   });
 
+  it("clears a visitor's wrong guesses after a correct login", async () => {
+    for (let i = 0; i < 9; i++) await login(`guess-${i}`, "10.8.8.8");
+    expect((await login(process.env.ADMIN_TOKEN!, "10.8.8.8")).status).toBe(303);
+    for (let i = 0; i < 9; i++) await login(`again-${i}`, "10.8.8.8");
+    expect((await login(process.env.ADMIN_TOKEN!, "10.8.8.8")).status).toBe(303);
+  });
+
   it("is a 404 when ADMIN_TOKEN is not set", async () => {
     const saved = process.env.ADMIN_TOKEN;
     delete process.env.ADMIN_TOKEN;

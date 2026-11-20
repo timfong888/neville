@@ -41,6 +41,11 @@ export function noteFailedLogin(ip: string, now = Date.now()) {
   if (fails.size > 5000) fails.clear();
 }
 
+/** A correct login clears the visitor's wrong guesses. */
+export function clearFailedLogins(ip: string) {
+  fails.delete(ip);
+}
+
 /** For tests. */
 export function resetLoginFailures() {
   fails.clear();

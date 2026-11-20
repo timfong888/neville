@@ -31,7 +31,8 @@ describe("ledger sums", () => {
       { at: 1, route: "manifest", kind: "speech", model: "m", chars: 500, estUsd: 0.003 },
       { at: 2, route: "manifest", kind: "script", model: "t", chars: 600, estUsd: null },
     ]);
-    expect(t).toEqual({ calls: 2, chars: 1100, estUsd: 0.003, unpriced: 1 });
+    expect(t).toEqual({ calls: 2, chars: 1100, estUsd: 0.003, unpriced: 1, failed: 0 });
+    expect(totals([{ at: 3, route: "rerecord", kind: "speech", model: "m", chars: 10, estUsd: null, ok: false }]).failed).toBe(1);
   });
 });
 

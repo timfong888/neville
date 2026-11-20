@@ -43,7 +43,7 @@ export function speechCost(chars: number, usdPerMChars: number | null | undefine
   return typeof usdPerMChars === "number" && usdPerMChars >= 0 ? (chars * usdPerMChars) / 1e6 : null;
 }
 
-export type Totals = { calls: number; chars: number; estUsd: number; unpriced: number };
+export type Totals = { calls: number; chars: number; estUsd: number; unpriced: number; failed: number };
 
 export function totals(entries: LedgerEntry[]): Totals {
   return entries.reduce<Totals>(
@@ -52,8 +52,9 @@ export function totals(entries: LedgerEntry[]): Totals {
       chars: t.chars + e.chars,
       estUsd: t.estUsd + (e.estUsd ?? 0),
       unpriced: t.unpriced + (e.estUsd === null ? 1 : 0),
+      failed: t.failed + (e.ok === false ? 1 : 0),
     }),
-    { calls: 0, chars: 0, estUsd: 0, unpriced: 0 },
+    { calls: 0, chars: 0, estUsd: 0, unpriced: 0, failed: 0 },
   );
 }
 

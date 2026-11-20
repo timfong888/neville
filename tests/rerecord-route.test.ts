@@ -30,7 +30,8 @@ beforeAll(async () => {
       if (path.startsWith("/key")) return res.end(JSON.stringify({ data: { usage, limit_remaining: null } }));
       if (path.startsWith("/models")) return res.end(JSON.stringify({ data: [{ id: "google/gemini-2.5-flash-lite" }] }));
       if (path.startsWith("/chat/completions")) {
-        return res.end(JSON.stringify({ choices: [{ message: { content: vetReply } }], usage: { cost: 0.00002 } }));
+        const content = vetReply === "<empty>" ? null : vetReply;
+        return res.end(JSON.stringify({ choices: [{ message: { content } }], usage: { cost: 0.00002 } }));
       }
       if (path.startsWith("/audio/speech") && speechFails) {
         res.statusCode = 500;
@@ -168,5 +169,13 @@ describe("POST /api/rerecord", () => {
     expect((await POST(req(script))).status).toBe(502);
     const rows = await L.ledger().recent(10);
     expect(rows[0]).toMatchObject({ kind: "speech", ok: false, estUsd: null });
+  });
+
+  it("records a check that answered with nothing usable, keeps the slot, and records no speech", async () => {
+    vetReply = "<empty>";
+    expect((await POST(req(script))).status).toBe(503);
+    const rows = await L.ledger().recent(10);
+    expect(rows.map((r) => r.kind)).toEqual(["vet"]);
+    expect(rows[0].estUsd).toBe(0.00002);
   });
 });
