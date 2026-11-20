@@ -3,6 +3,7 @@ import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { writeScript } from "@/lib/server/writer";
+import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 
@@ -67,6 +68,11 @@ export async function POST(req: Request) {
   // A blank line between lines is the pause we can ask of voices whose audio
   // cannot be stitched; the others get real silence between lines.
   const text = script.lines.join("\n\n");
+  if (script.source === "model") {
+    // Text-model cost is not returned by the writer; at these prices it is a
+    // few thousandths of a cent, so it is recorded as unpriced.
+    await record({ route: "manifest", kind: "script", model: script.model ?? null, chars: text.length, estUsd: null });
+  }
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -80,9 +86,20 @@ export async function POST(req: Request) {
     timeoutMs: 42_000,
   });
   if (!speech.ok) {
+    // A failed recording may still have been billed in part (several requests
+    // for a long script), so it is recorded, unpriced.
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
 
+  await record({
+    route: "manifest",
+    kind: "speech",
+    model: voice.model,
+    voiceId: voice.id,
+    chars: text.length,
+    estUsd: await estimateSpeech(voice.model, text.length),
+  });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,

@@ -14,6 +14,7 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { type Refusal, budgetVerdict, takeSlot as takeIn } from "@/lib/limits";
+import { checkBudget } from "@/lib/server/ledger";
 import { counter, visitorKey } from "@/lib/server/redis";
 
 /** Counts one request against the visitor and the day, in Redis when configured. */
@@ -45,6 +46,7 @@ export async function underCeiling(key: string): Promise<{ ok: true; usage: numb
     const { data } = (await res.json()) as { data?: { usage?: number; limit_remaining?: number | null } };
     const usage = data?.usage;
     if (typeof usage !== "number") return { ok: false, refusal: closed };
+    await checkBudget(usage); // 50 / 80 / 100% alerts; never throws
     const refusal = budgetVerdict(usage, data?.limit_remaining);
     if (refusal) return { ok: false, refusal };
     return { ok: true, usage };
