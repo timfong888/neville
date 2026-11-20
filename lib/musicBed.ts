@@ -154,8 +154,18 @@ export class MusicBed {
     g.linearRampToValueAtTime(0, ctx.currentTime + seconds);
   }
 
+  /** Pauses and resumes the music with the voice. Scheduled dips keep their place on the audio clock. */
+  pause(): void {
+    void this.ctx?.suspend().catch(() => {});
+  }
+
+  resume(): void {
+    void this.ctx?.resume().catch(() => {});
+  }
+
   stop(): void {
     this.stopped = true;
+    if (this.ctx?.state === "suspended") void this.ctx.resume().catch(() => {});
     const ctx = this.ctx;
     if (!ctx) return;
     this.fadeOut(0.6);

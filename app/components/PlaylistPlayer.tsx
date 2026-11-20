@@ -2,37 +2,61 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
+import type { Manifestation } from "@/lib/library/model";
+import { getStore } from "@/lib/library/useLibrary";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
-import type { Manifestation } from "@/lib/library/model";
-import { getStore } from "@/lib/library/useLibrary";
+import { backPos, DEFAULT_GAP_MS, nextPos, playOrder, REPEATS, skipPos, silenceWav, type Repeat } from "@/lib/playback";
 import { hashOf } from "@/lib/script";
 
-/** Silence between two manifestations. */
-const GAP_MS = 2500;
+const REPEAT_LABEL: Record<Repeat, string> = { off: "Repeat: off", all: "Repeat: all", one: "Repeat: one" };
+
+type Phase = "idle" | "playing" | "paused";
 
 /**
- * Plays a list of manifestations from first to last. Recordings play from the
- * store; one without a recording is read by the device's own voice, or shown
- * line by line when the browser has no speech.
+ * Plays a list of manifestations one after another, with silence between them.
+ *
+ * One <audio> element carries the whole session: each recording, then a short
+ * silent file for the gap, then the next recording. Nothing waits on a timer
+ * between tracks, so it keeps going with the screen locked, and the lock screen
+ * shows the track and its controls (Media Session). A manifestation without a
+ * recording is read by the device's own voice; that part needs the screen on.
  */
-export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
+export default function PlaylistPlayer({
+  items,
+  title = "Neville",
+  gapMs = DEFAULT_GAP_MS,
+}: {
+  items: Manifestation[];
+  /** Shown as the album on the lock screen. */
+  title?: string;
+  gapMs?: number;
+}) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [playing, setPlaying] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [cur, setCur] = useState(-1);
   const [idx, setIdx] = useState(-1);
   const [music, setMusic] = useState(true);
   const [volume, setVolume] = useState(0.6);
+  const [repeat, setRepeat] = useState<Repeat>("off");
+  const [shuffle, setShuffle] = useState(false);
   const [done, setDone] = useState(false);
   const [note, setNote] = useState("");
 
   const token = useRef(0);
   const el = useRef<HTMLAudioElement | null>(null);
   const bed = useRef<MusicBed | null>(null);
-  // Where the voice speaks in each recording, so the music dips under it.
   const speech = useRef<Record<string, Segment[]>>({});
+  const order = useRef<number[]>([]);
+  const pos = useRef(0);
+  const gapUrl = useRef("");
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
+  // The latest settings, for callbacks made before they changed.
+  const live = useRef({ repeat, gapMs, items, urls });
+  live.current = { repeat, gapMs, items, urls };
 
   useEffect(() => {
     setVolume(readMusicVolume());
@@ -40,13 +64,18 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
     setMusic(choice !== "none");
     prefetchMusic(choice);
   }, []);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
+
+  // The silent file played between tracks.
+  useEffect(() => {
+    const u = URL.createObjectURL(new Blob([silenceWav(gapMs)], { type: "audio/wav" }));
+    gapUrl.current = u;
+    return () => URL.revokeObjectURL(u);
+  }, [gapMs]);
 
   // Load every recording before Play is offered, so playback starts inside the tap.
   const key = items.map((m) => `${m.id}:${m.updatedAt}`).join(",");
   useEffect(() => {
-    let live = true;
+    let alive = true;
     const made: string[] = [];
     setLoading(true);
     void Promise.all(
@@ -56,50 +85,93 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         if (!b) return null;
         const u = URL.createObjectURL(b);
         made.push(u);
-        void speechOf(b).then((s) => live && (speech.current[m.id] = s));
+        void speechOf(b).then((s) => alive && (speech.current[m.id] = s));
         return [m.id, u] as const;
       }),
     ).then((pairs) => {
-      if (!live) return;
+      if (!alive) return;
       setUrls(Object.fromEntries(pairs.filter((p): p is readonly [string, string] => !!p)));
       setLoading(false);
     });
     return () => {
-      live = false;
+      alive = false;
       made.forEach((u) => URL.revokeObjectURL(u));
     };
     // `key` stands for `items`: same ids and versions, same recordings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  const halt = useCallback(() => {
+  /** Stops whatever the current track is doing, without ending the session. */
+  const cancelTrack = () => {
     token.current++;
     timers.current.forEach(clearTimeout);
     timers.current = [];
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    if (el.current) {
-      el.current.onended = el.current.ontimeupdate = el.current.onerror = el.current.onplaying = null;
-      el.current.pause();
-    }
+    const a = el.current;
+    if (a) a.onended = a.ontimeupdate = a.onerror = a.onplaying = null;
+    return token.current;
+  };
+
+  const halt = useCallback(() => {
+    cancelTrack();
+    el.current?.pause();
     bed.current?.stop();
     bed.current = null;
-    setPlaying(false);
+    setPhase("idle");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => halt(), [halt]);
 
-  const readAlong = (m: Manifestation, from: number, mine: number, next: () => void) => {
+  const finish = () => {
+    halt();
+    setCur(-1);
+    setIdx(-1);
+    setDone(true);
+  };
+
+  const showOnLockScreen = (m: Manifestation) => {
+    if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: m.title,
+      artist: m.hasAudio && live.current.urls[m.id] ? `Neville · ${m.voiceName}` : "Neville",
+      album: title,
+      artwork: [
+        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+    });
+    navigator.mediaSession.playbackState = "playing";
+  };
+
+  /** After a track: the gap's silence, then whatever comes next. */
+  const afterTrack = (mine: number) => {
+    if (token.current !== mine) return;
+    bed.current?.holdDuck(false);
+    const n = nextPos(pos.current, order.current.length, live.current.repeat);
+    if (n < 0) return finish();
+    const a = el.current!;
+    setIdx(-1);
+    const go = () => token.current === mine && startAt(n, mine);
+    a.onended = go;
+    a.onerror = go;
+    a.src = gapUrl.current;
+    void a.play().catch(() => token.current === mine && later(() => startAt(n, mine), live.current.gapMs));
+  };
+
+  const readAlong = (m: Manifestation, from: number, mine: number) => {
     const dur = (l: string) => 1200 + l.length * 70;
     let at = 0;
     m.lines.slice(from).forEach((l, i) => {
       later(() => token.current === mine && setIdx(from + i), at);
       at += dur(l);
     });
-    later(next, at);
+    later(() => afterTrack(mine), at);
   };
 
-  const speak = (m: Manifestation, mine: number, next: () => void) => {
-    if (!("speechSynthesis" in window) || !m.lines.length) return readAlong(m, 0, mine, next);
+  const speak = (m: Manifestation, mine: number) => {
+    if (!("speechSynthesis" in window) || !m.lines.length) return readAlong(m, 0, mine);
     const synth = window.speechSynthesis;
     let failed = false;
     m.lines.forEach((text, i) => {
@@ -111,40 +183,36 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         setIdx(i);
         bed.current?.holdDuck(true);
       };
+      u.onend = () => {
+        if (token.current !== mine) return;
+        bed.current?.holdDuck(false);
+        if (i === m.lines.length - 1 && !failed) afterTrack(mine);
+      };
       u.onerror = (e) => {
         if (failed || token.current !== mine || e.error === "canceled" || e.error === "interrupted") return;
         failed = true;
         synth.cancel();
-        readAlong(m, i, mine, next);
-      };
-      u.onend = () => {
-        if (token.current !== mine) return;
-        bed.current?.holdDuck(false);
-        if (i === m.lines.length - 1 && !failed) next();
+        readAlong(m, i, mine);
       };
       synth.speak(u);
     });
   };
 
-  const runItem = (i: number, mine: number) => {
+  /** Plays the track at position `p` of the play order. */
+  const startAt = (p: number, mine: number) => {
     if (token.current !== mine) return;
-    if (i >= items.length) {
-      halt();
-      setCur(-1);
-      setIdx(-1);
-      setDone(true);
-      return;
-    }
+    const { items: list, urls: u } = live.current;
+    pos.current = p;
+    const i = order.current[p];
+    const m = list[i];
+    if (!m) return finish();
     setCur(i);
     setIdx(0);
-    const m = items[i];
-    const next = () => token.current === mine && later(() => runItem(i + 1, mine), GAP_MS);
-    const url = urls[m.id];
-    if (!url) return speak(m, mine, next);
+    showOnLockScreen(m);
+    const url = u[m.id];
+    if (!url) return speak(m, mine);
 
-    // One audio element for the whole playlist: once a tap has started it,
-    // browsers let it carry on to the next file without another tap.
-    const a = el.current ?? (el.current = new Audio());
+    const a = el.current!;
     const starts = lineStarts(m.lines);
     a.src = url;
     a.ontimeupdate = () => {
@@ -160,21 +228,27 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
       if (segs?.length) bed.current?.duckFor(segs, a.currentTime);
       else bed.current?.holdDuck(true);
     };
-    a.onended = () => {
-      bed.current?.holdDuck(false);
-      next();
-    };
+    a.onended = () => afterTrack(mine);
     a.onerror = () => {
       if (token.current !== mine) return;
-      a.onerror = a.onended = null;
+      a.onerror = a.onended = a.onplaying = null;
       setNote(`The recording of “${m.title}” could not be played, so your device read it.`);
-      speak(m, mine, next);
+      speak(m, mine);
     };
     void a.play().catch(() => {
       if (token.current !== mine) return;
-      a.onerror = a.onended = null;
-      speak(m, mine, next);
+      a.onerror = a.onended = a.onplaying = null;
+      speak(m, mine);
     });
+  };
+
+  /** Moves to another position without restarting the music. */
+  const jump = (p: number) => {
+    if (p < 0) return finish();
+    const mine = cancelTrack();
+    setPhase("playing");
+    bed.current?.resume();
+    startAt(p, mine);
   };
 
   // Must run inside the tap handler.
@@ -184,26 +258,86 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
     const mine = ++token.current;
     setDone(false);
     setNote("");
-    setPlaying(true);
+    setPhase("playing");
     if (!el.current) el.current = new Audio();
+    // Unlock the element inside the tap even if the first track uses the device voice.
+    el.current.src = gapUrl.current;
+    void el.current.play().catch(() => {});
     if (music) {
       const choice = readMusicChoice();
       bed.current = new MusicBed();
       void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume);
     }
-    runItem(from, mine);
+    order.current = playOrder(items.length, shuffle, from);
+    startAt(shuffle ? 0 : from, mine);
   };
 
+  const pause = () => {
+    if (phase !== "playing") return;
+    el.current?.pause();
+    if ("speechSynthesis" in window) window.speechSynthesis.pause();
+    bed.current?.pause();
+    setPhase("paused");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+  };
+
+  const resume = () => {
+    if (phase !== "paused") return;
+    bed.current?.resume();
+    if ("speechSynthesis" in window) window.speechSynthesis.resume();
+    if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
+    setPhase("playing");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+  };
+
+  const next = () => jump(skipPos(pos.current, order.current.length, repeat));
+  const prev = () => jump(backPos(pos.current, order.current.length, el.current?.currentTime ?? 0, repeat));
+
+  // Lock-screen and headphone controls. Re-bound each render so they see current state.
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    const set = (action: MediaSessionAction, fn: (() => void) | null) => {
+      try {
+        ms.setActionHandler(action, fn);
+      } catch {
+        /* action not supported here */
+      }
+    };
+    const active = phase !== "idle";
+    set("play", active ? resume : () => play(0));
+    set("pause", active ? pause : null);
+    set("nexttrack", active ? next : null);
+    set("previoustrack", active ? prev : null);
+    set("stop", active ? halt : null);
+  });
+  useEffect(
+    () => () => {
+      if (!("mediaSession" in navigator)) return;
+      for (const a of ["play", "pause", "nexttrack", "previoustrack", "stop"] as MediaSessionAction[]) {
+        try {
+          navigator.mediaSession.setActionHandler(a, null);
+        } catch {
+          /* not supported */
+        }
+      }
+      navigator.mediaSession.metadata = null;
+    },
+    [],
+  );
+
+  const playing = phase !== "idle";
   const m = cur >= 0 ? items[cur] : null;
   const line = m && idx >= 0 && idx < m.lines.length ? m.lines[idx] : null;
   const hue = hashOf(m?.want ?? items[0]?.want ?? "neville") % 360;
+  const multi = items.length > 1;
 
   if (!items.length) return <p className="muted">Nothing to play yet.</p>;
 
   return (
     <>
       <div
-        className={`visual${playing ? " playing" : ""}`}
+        className={`visual${phase === "playing" ? " playing" : ""}`}
         style={{ "--h1": hue, "--h2": (hue + 60) % 360, "--h3": (hue + 300) % 360 } as React.CSSProperties}
       >
         <div className="blob" />
@@ -212,24 +346,64 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         </div>
       </div>
       <p className="small muted" aria-live="polite">
-        {m ? `Now playing ${cur + 1} of ${items.length}: ${m.title}` : done ? "Finished." : `${items.length} to play, one after another.`}
+        {m
+          ? `${phase === "paused" ? "Paused" : "Now playing"} ${pos.current + 1} of ${items.length}: ${m.title}`
+          : done
+            ? "Finished."
+            : multi
+              ? `${items.length} to play, one after another.`
+              : ""}
       </p>
       <div className="controls">
-        {playing ? (
-          <button className="btn primary" onClick={halt}>
-            ■ Stop
+        {!playing ? (
+          <button className="btn primary" onClick={() => play(0)} disabled={loading}>
+            {loading ? "Loading…" : done ? "▶ Play again" : multi ? "▶ Play all" : "▶ Play"}
+          </button>
+        ) : phase === "paused" ? (
+          <button className="btn primary" onClick={resume}>
+            ▶ Resume
           </button>
         ) : (
-          <button className="btn primary" onClick={() => play(0)} disabled={loading}>
-            {loading ? "Loading…" : done ? "▶ Play again" : "▶ Play all"}
+          <button className="btn primary" onClick={pause}>
+            ❚❚ Pause
           </button>
         )}
-        <button className="btn sm" disabled={!playing || cur <= 0} onClick={() => play(cur - 1)}>
-          ⏮ Previous
+        {playing && (
+          <button className="btn sm" onClick={halt}>
+            ■ Stop
+          </button>
+        )}
+        {multi && (
+          <>
+            <button className="btn sm" disabled={!playing} onClick={prev}>
+              ⏮ Previous
+            </button>
+            <button className="btn sm" disabled={!playing} onClick={next}>
+              Next ⏭
+            </button>
+          </>
+        )}
+      </div>
+      <div className="controls">
+        <button
+          className="btn sm ghost"
+          aria-pressed={repeat !== "off"}
+          onClick={() => setRepeat((r) => REPEATS[(REPEATS.indexOf(r) + 1) % REPEATS.length])}
+        >
+          {REPEAT_LABEL[repeat]}
         </button>
-        <button className="btn sm" disabled={!playing || cur >= items.length - 1} onClick={() => play(cur + 1)}>
-          Next ⏭
-        </button>
+        {multi && (
+          <button
+            className="btn sm ghost"
+            aria-pressed={shuffle}
+            onClick={() => {
+              setShuffle((v) => !v);
+              // Takes effect from the next Play; the current order keeps going.
+            }}
+          >
+            Shuffle: {shuffle ? "on" : "off"}
+          </button>
+        )}
         <button
           className="btn sm ghost"
           aria-pressed={music}
@@ -260,16 +434,18 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         )}
       </div>
       {note && <p className="small muted">{note}</p>}
-      <ol className="script">
-        {items.map((it, i) => (
-          <li key={it.id} className={i === cur ? "now" : ""}>
-            <button className="linkish" disabled={loading} onClick={() => play(i)} aria-label={`Play from ${it.title}`}>
-              {it.title}
-            </button>
-            <span className="small muted"> · {it.hasAudio && urls[it.id] ? it.voiceName : "device voice"}</span>
-          </li>
-        ))}
-      </ol>
+      {multi && (
+        <ol className="script">
+          {items.map((it, i) => (
+            <li key={it.id} className={i === cur ? "now" : ""}>
+              <button className="linkish" disabled={loading} onClick={() => play(i)} aria-label={`Play from ${it.title}`}>
+                {it.title}
+              </button>
+              <span className="small muted"> · {it.hasAudio && urls[it.id] ? it.voiceName : "device voice"}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </>
   );
 }
