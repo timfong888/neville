@@ -3,9 +3,9 @@ import { LIMITS, underCeiling } from "@/lib/server/limits";
 import { apiKey } from "@/lib/server/openrouter";
 import { currentUser } from "@/lib/server/accounts";
 import { dbConfigured, getPool } from "@/lib/server/db";
-import { createShare } from "@/lib/server/shareDb";
+import { createShare, revokeSharesOf } from "@/lib/server/shareDb";
 import { vetScript } from "@/lib/server/vet";
-import { parseShare } from "@/lib/share";
+import { MANIFESTATION_ID, parseShare } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 
@@ -74,5 +74,24 @@ export async function POST(req: Request) {
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ code: "db_failed", error: "The link could not be made just now." }, { status: 503 });
+  }
+}
+
+// Revokes the signed-in user's links to one manifestation (called when it is
+// deleted), so a link made on another device stops working too.
+export async function DELETE(req: Request) {
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) {
+    return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
+  }
+  const mid = new URL(req.url).searchParams.get("manifestation") ?? "";
+  if (!MANIFESTATION_ID.test(mid)) return NextResponse.json({ error: "Which manifestation?" }, { status: 400 });
+  if (!dbConfigured()) return NextResponse.json({ revoked: 0 });
+  const user = await currentUser(req).catch(() => null);
+  if (!user) return NextResponse.json({ revoked: 0 });
+  try {
+    return NextResponse.json({ revoked: await revokeSharesOf(getPool(), user.id, mid) });
+  } catch {
+    return NextResponse.json({ error: "Could not revoke just now." }, { status: 503 });
   }
 }

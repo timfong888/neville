@@ -18,8 +18,8 @@ export async function createShare(
   const id = randomBytes(16).toString("base64url"); // 22 characters
   const ownerToken = randomBytes(32).toString("base64url"); // 43 characters
   await db.query(
-    "insert into share_link (id, owner_token_hash, user_id, title, lines, voice_name) values ($1, $2, $3, $4, $5::jsonb, $6)",
-    [id, hashToken(ownerToken), userId, input.title, JSON.stringify(input.lines), input.voiceName],
+    "insert into share_link (id, owner_token_hash, user_id, title, lines, voice_name, manifestation_id) values ($1, $2, $3, $4, $5::jsonb, $6, $7)",
+    [id, hashToken(ownerToken), userId, input.title, JSON.stringify(input.lines), input.voiceName, input.manifestationId],
   );
   return { id, ownerToken };
 }
@@ -47,4 +47,13 @@ export async function revokeShare(db: Db, id: string, ownerToken: string | null,
     [id, ownerToken ? hashToken(ownerToken) : null, userId],
   );
   return rows.length > 0;
+}
+
+/** Revokes every link a signed-in user made of one manifestation, from any device. Returns how many. */
+export async function revokeSharesOf(db: Db, userId: string, manifestationId: string): Promise<number> {
+  const { rows } = await db.query(
+    "delete from share_link where user_id = $1 and manifestation_id = $2 returning id",
+    [userId, manifestationId],
+  );
+  return rows.length;
 }

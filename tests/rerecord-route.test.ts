@@ -101,4 +101,18 @@ describe("POST /api/rerecord", () => {
     expect(res.status).toBe(400);
     expect(calls).toHaveLength(0);
   });
+
+  it("counts rejected scripts against the visitor's daily slots", async () => {
+    vetReply = "NO";
+    const from = (ip: string) =>
+      new Request("http://localhost/api/rerecord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-real-ip": ip },
+        body: JSON.stringify(script),
+      });
+    for (let i = 0; i < 6; i++) expect((await POST(from("10.9.9.9"))).status).toBe(422);
+    calls = [];
+    expect((await POST(from("10.9.9.9"))).status).toBe(429);
+    expect(paths()).not.toContain("/chat/completions");
+  });
 });

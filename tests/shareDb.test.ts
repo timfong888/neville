@@ -20,7 +20,7 @@ beforeAll(async () => {
   S = await import("@/lib/server/shareDb");
 });
 
-const input = { title: "Calm", lines: ["Take a breath.", "You are calm."], voiceName: "Nadine" };
+const input = { title: "Calm", lines: ["Take a breath.", "You are calm."], voiceName: "Nadine", manifestationId: "m-1" };
 
 describe("share links in Postgres", () => {
   it("creates a link readable by id, and stores only the token's hash", async () => {
@@ -58,6 +58,17 @@ describe("share links in Postgres", () => {
     expect(await S.getShare(db, anon.id)).not.toBeNull();
   });
 
+  it("revokes a signed-in user's links to one manifestation from any device, and only theirs", async () => {
+    const mine = await S.createShare(db, input, "u-a");
+    const other = await S.createShare(db, { ...input, manifestationId: "m-2" }, "u-a");
+    const anon = await S.createShare(db, input, null);
+    expect(await S.revokeSharesOf(db, "u-x", "m-1")).toBe(0);
+    expect(await S.revokeSharesOf(db, "u-a", "m-1")).toBe(1);
+    expect(await S.getShare(db, mine.id)).toBeNull();
+    expect(await S.getShare(db, other.id)).not.toBeNull();
+    expect(await S.getShare(db, anon.id)).not.toBeNull();
+  });
+
   it("ignores malformed ids without querying", async () => {
     expect(await S.getShare(db, "../etc")).toBeNull();
     expect(await S.revokeShare(db, "x", "y", null)).toBe(false);
@@ -68,7 +79,7 @@ describe("share requests and device memory", () => {
   it("validates title, lines and length", () => {
     expect(parseShare({ title: "  A  title ", lines: [" one ", ""], voiceName: "Nadine<script>" }, 700)).toEqual({
       ok: true,
-      value: { title: "A title", lines: ["one"], voiceName: "Nadinescript" },
+      value: { title: "A title", lines: ["one"], voiceName: "Nadinescript", manifestationId: null },
     });
     expect(parseShare({ title: "", lines: ["x"] }, 700).ok).toBe(false);
     expect(parseShare({ title: "t", lines: [] }, 700).ok).toBe(false);

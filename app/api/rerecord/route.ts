@@ -54,7 +54,10 @@ export async function POST(req: Request) {
 
   const vet = await vetScript(key, lines);
   if (!vet.ok) {
-    returnSlot(ip);
+    // A rejection was a paid model call, so it keeps its slot: otherwise a
+    // caller could loop rejected scripts past the daily limits. Only a check
+    // that never answered gives the slot back.
+    if (vet.reason === "unavailable") returnSlot(ip);
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },

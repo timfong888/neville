@@ -15,6 +15,7 @@ create table if not exists share_link (
   title            text not null check (char_length(title) between 1 and 80),
   lines            jsonb not null check (jsonb_typeof(lines) = 'array'),
   voice_name       text not null default '',
+  manifestation_id text,                         -- which saved manifestation it copies, so a signed-in owner can revoke it from any device
   created_at       timestamptz not null default now()
 );
-create index if not exists share_link_user_idx on share_link(user_id);
+create index if not exists share_link_user_idx on share_link(user_id, manifestation_id);

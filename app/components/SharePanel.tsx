@@ -18,19 +18,25 @@ function storage(): Storage | null {
  * Returns false only if a link exists and could not be revoked.
  */
 export async function revokeShareFor(manifestationId: string): Promise<boolean> {
-  const held = readHeld(storage())[manifestationId];
-  if (!held) return true;
   try {
-    const res = await fetch(`/api/share/${held.shareId}`, {
-      method: "DELETE",
-      headers: { "X-Owner-Token": held.ownerToken },
-    });
-    if (!res.ok && res.status !== 404) return false;
+    // Links the signed-in account made of it, from any device. Signed out or
+    // with accounts off this revokes nothing and answers 200.
+    const all = await fetch(`/api/share?manifestation=${encodeURIComponent(manifestationId)}`, { method: "DELETE" });
+    if (!all.ok && all.status !== 400) return false;
+    // The link this device made, by its owner token.
+    const held = readHeld(storage())[manifestationId];
+    if (held) {
+      const res = await fetch(`/api/share/${held.shareId}`, {
+        method: "DELETE",
+        headers: { "X-Owner-Token": held.ownerToken },
+      });
+      if (!res.ok && res.status !== 404) return false;
+      writeHeld(storage(), manifestationId, null);
+    }
+    return true;
   } catch {
     return false;
   }
-  writeHeld(storage(), manifestationId, null);
-  return true;
 }
 
 /**
@@ -61,7 +67,7 @@ export default function SharePanel({ m }: { m: Manifestation }) {
       const res = await fetch("/api/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: m.title, lines: m.lines, voiceName: m.hasAudio ? m.voiceName : "" }),
+        body: JSON.stringify({ title: m.title, lines: m.lines, voiceName: m.hasAudio ? m.voiceName : "", manifestationId: m.id }),
       });
       const j = (await res.json().catch(() => null)) as { id?: string; ownerToken?: string; error?: string } | null;
       if (!res.ok || !j?.id || !j.ownerToken) {

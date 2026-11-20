@@ -64,10 +64,16 @@ export default function ManifestationPage() {
       }
       const used = resolveVoice(res.headers.get("X-Voice-Id"));
       const blob = await res.blob();
-      await store.updateManifestation(
-        { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
-        blob,
-      );
+      try {
+        await store.updateManifestation(
+          { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
+          blob,
+        );
+      } catch {
+        // The recording was made; only keeping it failed (storage full or blocked).
+        setMsg("The new recording was made but this browser could not save it. Free some space and try again.");
+        return;
+      }
       setMsg(`Re-recorded in the voice of ${used.name}.`);
     } catch {
       setMsg("The recording could not be made just now. Your device's voice reads it meanwhile.");
@@ -117,7 +123,7 @@ export default function ManifestationPage() {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists, and its public link stops working.`)) return;
+    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists. A public link made on this device or in your account stops working.`)) return;
     // Take the public page down first: once the manifestation is gone there
     // is no screen left to revoke it from.
     if (!(await revokeShareFor(m.id))) {
