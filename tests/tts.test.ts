@@ -89,6 +89,8 @@ describe("synthesize with pauses", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].input).toBe(lines.join("\n\n"));
     expect(out.ok && out.starts).toBeUndefined();
+    // Not normalised: MP3 comes back byte for byte (see #40).
+    expect(out.ok && Buffer.from(out.audio).toString()).toBe("ID3");
   });
 
   it("stops starting new lines once one fails", async () => {
