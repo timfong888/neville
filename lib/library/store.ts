@@ -160,6 +160,15 @@ export class DeviceStore implements LibraryStore {
     else window.localStorage.removeItem(MOVED_KEY);
   }
 
+  async idsUsedByOtherAccounts(accountId: string): Promise<Set<string>> {
+    const used = new Set<string>();
+    for (const acc of Object.keys(this.readMoved())) {
+      if (acc === accountId) continue;
+      for (const e of Object.values(await this.movedIds(acc))) used.add(e.id);
+    }
+    return used;
+  }
+
   private readMoved(): Record<string, unknown> {
     try {
       const raw = JSON.parse(window.localStorage.getItem(MOVED_KEY) ?? "{}");

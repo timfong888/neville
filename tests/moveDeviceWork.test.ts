@@ -22,6 +22,7 @@ function fakes(ms: Manifestation[], ps: Playlist[], opts: { audio?: Record<strin
     deletePlaylist: async (id) => void deleted.p.push(id),
     movedIds: async () => ({}),
     setMovedIds: async () => {},
+    idsUsedByOtherAccounts: async () => new Set(),
   };
   const target: MoveTarget = {
     saveManifestation: async (x, a) => {
@@ -78,6 +79,8 @@ describe("moveDeviceWork", () => {
       },
       movedIds: async (acc) => ({ ...(state.movedIds[acc] ?? {}) }),
       setMovedIds: async (acc, ids) => void (state.movedIds[acc] = { ...ids }),
+      idsUsedByOtherAccounts: async (acc) =>
+        new Set(Object.entries(state.movedIds).filter(([a]) => a !== acc).flatMap(([, r]) => Object.values(r).map((e) => e.id))),
     };
     return { device, state };
   }
@@ -182,22 +185,33 @@ describe("moveDeviceWork", () => {
     expect(state.lib.manifestations).toEqual([]);
   });
 
-  it("keeps the record per account", async () => {
-    const { device } = realDevice(
+  it("moves a held item to a second account under a fresh id", async () => {
+    const { device, state } = realDevice(
       [m(U1, false, 1), m(U2, true, 2)],
       [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
       () => false,
       new Blob(["x"]),
     );
+    // Like the server: ids are global, and one account cannot save over another's.
+    const owner = new Map<string, string>();
     const savedBy: string[] = [];
     const t = (who: string): MoveTarget => ({
-      saveManifestation: async (x) => void savedBy.push(`${who}:${x.id}`),
+      saveManifestation: async (x) => {
+        if (owner.has(x.id) && owner.get(x.id) !== who) throw new Error("Not found.");
+        owner.set(x.id, who);
+        savedBy.push(`${who}:${x.id}`);
+      },
       savePlaylist: async () => {},
     });
     await moveDeviceWork(device, t("a"), "acct-a");
-    await moveDeviceWork(device, t("b"), "acct-b");
-    expect(savedBy).toEqual([`a:${U1}`, `b:${U1}`]);
+    const r = await moveDeviceWork(device, t("b"), "acct-b");
+    expect(r.kept.map((k) => k.reason)).not.toContain("Not found.");
+    expect(savedBy[0]).toBe(`a:${U1}`);
+    const bId = savedBy[1].slice(2);
+    expect(savedBy[1].startsWith("b:") && bId !== U1 && isUuid(bId)).toBe(true);
+    expect(state.movedIds["acct-b"][U1].id).toBe(bId);
   });
+
 
   it("carries on past an item the account rejects", async () => {
     const f = fakes([m(U1, false, 1), m(U2, false, 2)], [], { reject: [U1] });
