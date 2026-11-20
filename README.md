@@ -69,10 +69,22 @@ Limits are in `config/limits.json`:
   OpenRouter keeps the count, so it holds across every server instance. If the
   usage cannot be read, nothing is recorded. This is the only server-side guard
   that bounds spend.
-- **Soft MVP caps: `perIpPerDay`, `globalPerDay`.** Counters held in memory, one
-  copy per server instance, lost on restart. They slow casual overuse; they are
-  not a cap. Making them durable needs a store: see issue #8. The two free creations before the sign-up prompt are softer still:
-  that count is in the browser's own storage.
+- **Daily caps: `perIpPerDay`, `globalPerDay`.** Counted in Upstash Redis when
+  it is connected (Vercel Marketplace, Storage, Upstash for Redis; it sets
+  `UPSTASH_REDIS_REST_URL`/`_TOKEN` or `KV_REST_API_URL`/`_TOKEN`, and both
+  pairs are read). Then every server instance shares one count, it survives
+  restarts, and a visitor cannot get extra recordings by landing on another
+  instance. Both limits are checked before anything is counted, in one Redis script,
+  so a refused request changes no count and one visitor's retries cannot use
+  up other visitors' share of the day. A visitor (or day) already known to
+  be full is refused for a minute from memory, without a Redis call. If
+  Redis cannot be reached, recording is refused (fail closed), like the spend
+  ceiling. Visitor addresses are stored only as an HMAC
+  keyed by a server secret (`LIMITS_SALT` if set, otherwise derived from the
+  OpenRouter key) and the day, and keys expire after two days. Without the variables
+  (local dev, tests) the counters fall back to memory, one copy per instance.
+  The two free creations before the sign-up prompt are softer: that count is
+  in the browser's own storage. No bot check yet.
 - `maxWantChars`, `maxScriptChars` — input and script length.
 - `generationEnabled` — `false` switches recording off. Setting the environment
   variable `SPEECH_ENABLED=false` does the same without a code change.

@@ -6,16 +6,21 @@
 //     is the only guard that holds across every server instance, because the
 //     count is kept by OpenRouter, not by us.
 //  2. The key's own credit limit and the account balance at OpenRouter.
-//  3. Per-visitor and per-day counters held in memory. They reset when a
-//     server instance restarts and are not shared between instances, so they
-//     slow abuse down but do not cap it on their own.
+//  3. Per-visitor and per-day counters. With Upstash Redis configured
+//     (lib/server/redis.ts) they are shared by every instance and survive
+//     restarts, and they fail closed if Redis cannot be reached. Without it
+//     they fall back to memory, one copy per instance.
 import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
-import { type Refusal, budgetVerdict } from "@/lib/limits";
+import { type Refusal, budgetVerdict, takeSlot as takeIn } from "@/lib/limits";
 import { checkBudget } from "@/lib/server/ledger";
+import { counter, visitorKey } from "@/lib/server/redis";
 
-export { returnSlot, takeSlot } from "@/lib/limits";
+/** Counts one request against the visitor and the day, in Redis when configured. */
+export function takeSlot(ip: string) {
+  return takeIn(visitorKey(ip), counter());
+}
 
 export const LIMITS = limits;
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { OPENROUTER, apiKey, paidCallsAllowed } from "@/lib/server/openrouter";
+import { counterKind } from "@/lib/server/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,15 @@ export async function GET() {
     environment: process.env.VERCEL_ENV ?? "local",
     paidCallsAllowed: paidCallsAllowed(),
     keyPresent: Boolean(key),
+    // Where the daily limits are counted: "redis" (shared) or "memory" (per instance).
+    limitsStore: counterKind(),
   };
   // The live site is public: it says only whether a key exists, never the budget.
-  if (!key || !paidCallsAllowed()) return NextResponse.json(base);
+  // This route never touches Redis: it is public and uncached, so a live check
+  // here would let anyone spend the store's command quota by polling it, and
+  // once the quota is gone recording fails closed for everyone.
+  if (!paidCallsAllowed()) return NextResponse.json(base);
+  if (!key) return NextResponse.json(base);
 
   try {
     const res = await fetch(`${OPENROUTER}/key`, {
