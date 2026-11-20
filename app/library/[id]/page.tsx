@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
+import { type Manifestation } from "@/lib/library/model";
+import { resolveVoice } from "@/lib/voices";
 
 export default function ManifestationPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +20,7 @@ export default function ManifestationPage() {
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
   const [target, setTarget] = useState("");
+  const [recording, setRecording] = useState(false);
 
   useEffect(() => {
     if (m && !editing) {
@@ -39,24 +42,62 @@ export default function ManifestationPage() {
 
   const newLines = linesFromText(text);
   const scriptChanged = !sameLines(newLines, m.lines);
+  // The voice a re-recording uses: the one it was saved with, or the default
+  // if that voice is no longer offered.
+  const voice = resolveVoice(m.voiceId);
 
-  const saveEdits = async () => {
+  /** Records `base`'s script in `voice` and stores it with the manifestation. */
+  const rerecord = async (base: Manifestation) => {
+    setRecording(true);
+    setMsg("Recording… this takes up to half a minute.");
+    try {
+      const res = await fetch("/api/rerecord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines: base.lines, voiceId: voice.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setMsg(`${j?.error ?? "The recording could not be made just now."} Your device's voice reads it meanwhile.`);
+        return;
+      }
+      const used = resolveVoice(res.headers.get("X-Voice-Id"));
+      const blob = await res.blob();
+      try {
+        await store.updateManifestation(
+          { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
+          blob,
+        );
+      } catch {
+        // The recording was made; only keeping it failed (storage full or blocked).
+        setMsg("The new recording was made but this browser could not save it. Free some space and try again.");
+        return;
+      }
+      setMsg(`Re-recorded in the voice of ${used.name}.`);
+    } catch {
+      setMsg("The recording could not be made just now. Your device's voice reads it meanwhile.");
+    } finally {
+      setRecording(false);
+    }
+  };
+
+  const saveEdits = async (andRecord = false) => {
     const t = cleanTitle(title);
     if (!t || !newLines.length) {
       setMsg("A title and at least one line are needed.");
       return;
     }
+    const next = { ...m, title: t, lines: newLines, updatedAt: Date.now() };
     try {
       // A recording of the old words would no longer match the script, so it goes.
-      await store.updateManifestation(
-        { ...m, title: t, lines: newLines, updatedAt: Date.now() },
-        scriptChanged ? null : undefined,
-      );
+      await store.updateManifestation(next, scriptChanged ? null : undefined);
       setEditing(false);
       setMsg(scriptChanged && m.hasAudio ? "Saved. Your device's voice now reads the new words." : "Saved.");
     } catch {
       setMsg("Could not save on this device.");
+      return;
     }
+    if (andRecord) await rerecord({ ...next, hasAudio: false });
   };
 
   const addTo = async () => {
@@ -112,14 +153,25 @@ export default function ManifestationPage() {
           </div>
           {scriptChanged && m.hasAudio && (
             <p className="notice">
-              The recording has the AI draft&apos;s words. Saving new words removes it, and your device&apos;s own
-              voice reads them instead.
+              The recording has the old words. Save and re-record makes a new one in the voice of {voice.name};
+              saving without recording removes it, and your device&apos;s own voice reads the new words.
             </p>
           )}
           <div className="controls">
-            <button className="btn primary" onClick={saveEdits}>
-              Save changes
-            </button>
+            {scriptChanged ? (
+              <>
+                <button className="btn primary" onClick={() => saveEdits(true)} disabled={recording}>
+                  Save and re-record
+                </button>
+                <button className="btn sm" onClick={() => saveEdits()} disabled={recording}>
+                  Save without recording
+                </button>
+              </>
+            ) : (
+              <button className="btn primary" onClick={() => saveEdits()}>
+                Save changes
+              </button>
+            )}
             <button className="btn sm ghost" onClick={() => setEditing(false)}>
               Cancel
             </button>
@@ -127,9 +179,14 @@ export default function ManifestationPage() {
         </div>
       ) : (
         <div className="controls">
-          <button className="btn sm" onClick={() => setEditing(true)}>
+          <button className="btn sm" onClick={() => setEditing(true)} disabled={recording}>
             Edit title and script
           </button>
+          {!m.hasAudio && (
+            <button className="btn sm primary" onClick={() => rerecord(m)} disabled={recording}>
+              {recording ? "Recording…" : `Re-record in ${voice.name}`}
+            </button>
+          )}
           <select aria-label="Add to playlist" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">Add to playlist…</option>
             {lib.playlists.map((p) => (
