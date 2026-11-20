@@ -74,13 +74,14 @@ export const DEFAULT_MUSIC_VOLUME = 0.6;
 
 /**
  * Gain for a slider position. The tracks are mastered near -22 dBFS and
- * recordings are normalised near -20 dBFS (lib/loudness.ts), so even at the top
- * of the slider the music sits about 16 dB under the voice. 0 is silent.
+ * recordings are normalised near -20 dBFS (lib/loudness.ts), so at the top of
+ * the slider the music sits about 10 dB under the voice between lines and,
+ * ducked, about 19 dB under it while the voice speaks. 0 is silent.
  */
 export function musicGain(volume: number): number {
   const v = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : DEFAULT_MUSIC_VOLUME));
   if (v === 0) return 0;
-  const db = -14 - (1 - v) * 24;
+  const db = -8 - (1 - v) * 24;
   return Math.round(10 ** (db / 20) * 10000) / 10000;
 }
 
