@@ -13,7 +13,10 @@
 // - the device remembers, per account, which items it already has (device id ->
 //   account id), so a later pass never saves them again. Edits made in the
 //   account in the meantime are kept, and a legacy id keeps the one account id
-//   it was first given.
+//   it was first given;
+// - if a remembered item was changed on the device after it moved (signed out,
+//   then edited), the changed copy is saved to the account as a new
+//   manifestation, so neither the account's version nor the device edit is lost.
 import { isUuid, type Library, type Manifestation, newId, type Playlist } from "@/lib/library/model";
 
 export type MoveSource = {
@@ -21,10 +24,18 @@ export type MoveSource = {
   getAudio(id: string): Promise<Blob | null>;
   deleteManifestation(id: string): Promise<void>;
   deletePlaylist(id: string): Promise<void>;
-  /** Items an earlier pass already saved to this account: device id -> account id. */
-  movedIds(accountId: string): Promise<Record<string, string>>;
-  setMovedIds(accountId: string, ids: Record<string, string>): Promise<void>;
+  /** Items an earlier pass already saved to this account. */
+  movedIds(accountId: string): Promise<MovedIds>;
+  setMovedIds(accountId: string, ids: MovedIds): Promise<void>;
 };
+
+/** Device id -> the account id it was saved under, and a fingerprint of the device copy at that time. */
+export type MovedIds = Record<string, { id: string; v: string }>;
+
+/** Changes whenever the device copy is edited or re-recorded. */
+export function fingerprint(m: Manifestation): string {
+  return JSON.stringify([m.updatedAt, m.title, m.want, m.firstName, m.lines, m.voiceId, m.voiceName, m.hasAudio]);
+}
 
 export type MoveTarget = {
   saveManifestation(m: Manifestation, audio?: Blob | null): Promise<void>;
@@ -42,7 +53,7 @@ export async function moveDeviceWork(
   const lib = await device.load();
   const total = lib.manifestations.length + lib.playlists.length;
   let done = 0;
-  const known = { ...(await device.movedIds(accountId)) }; // device id -> account id, saved on earlier passes
+  const known: MovedIds = { ...(await device.movedIds(accountId)) }; // saved on earlier passes
   const newIdFor = new Map<string, string>(); // device id -> account id, for items now in the account
   let moved = 0;
   const kept: MoveResult["kept"] = [];
@@ -50,18 +61,22 @@ export async function moveDeviceWork(
   // Oldest first, so the account keeps the same order.
   for (const m of [...lib.manifestations].sort((a, b) => a.createdAt - b.createdAt)) {
     try {
-      if (known[m.id]) {
-        // Already in the account: never save it again over whatever was done there since.
-        newIdFor.set(m.id, known[m.id]);
+      const prior = known[m.id];
+      if (prior && prior.v === fingerprint(m)) {
+        // Already in the account and unchanged here: never save it again over
+        // whatever was done to it in the account since.
+        newIdFor.set(m.id, prior.id);
       } else {
         const audio = m.hasAudio ? await device.getAudio(m.id) : null;
         if (m.hasAudio && !audio) {
           kept.push({ title: m.title, reason: "its recording could not be read on this device just now" });
         } else {
-          const id = isUuid(m.id) ? m.id : newId();
+          // A changed copy of an item already in the account goes in as a new
+          // item beside it, rather than over it.
+          const id = !prior && isUuid(m.id) ? m.id : newId();
           await target.saveManifestation({ ...m, id }, audio);
           newIdFor.set(m.id, id);
-          known[m.id] = id;
+          known[m.id] = { id, v: fingerprint(m) };
           moved++;
           await device.setMovedIds(accountId, known);
         }

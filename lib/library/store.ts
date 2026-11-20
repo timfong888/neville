@@ -9,6 +9,7 @@ import {
   parseLibrary,
   withoutManifestation,
 } from "@/lib/library/model";
+import type { MovedIds } from "@/lib/account/moveDeviceWork";
 
 export interface LibraryStore {
   /** Where the data lives, for the copy shown to people. */
@@ -26,7 +27,7 @@ export interface LibraryStore {
 const KEY = "nv_library_v1";
 // Device items already copied into an account, per account id (device id -> account id). Not
 // under the nv_library prefix, so writing it does not reload open views.
-const MOVED_KEY = "nv_moved_to_account_v1";
+const MOVED_KEY = "nv_moved_to_account_v2";
 const DB = "neville";
 const AUDIO = "audio";
 
@@ -139,14 +140,19 @@ export class DeviceStore implements LibraryStore {
     this.write({ ...lib, playlists: lib.playlists.filter((x) => x.id !== id) });
   }
 
-  /** Items already copied into this account: device id -> account id. */
-  async movedIds(accountId: string): Promise<Record<string, string>> {
+  /** Items already copied into this account (see MovedIds). */
+  async movedIds(accountId: string): Promise<MovedIds> {
     const raw = this.readMoved()[accountId];
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string"));
+    const out: MovedIds = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const e = v as { id?: unknown; v?: unknown } | null;
+      if (e && typeof e.id === "string" && typeof e.v === "string") out[k] = { id: e.id, v: e.v };
+    }
+    return out;
   }
 
-  async setMovedIds(accountId: string, ids: Record<string, string>): Promise<void> {
+  async setMovedIds(accountId: string, ids: MovedIds): Promise<void> {
     const all = this.readMoved();
     if (Object.keys(ids).length) all[accountId] = ids;
     else delete all[accountId];
