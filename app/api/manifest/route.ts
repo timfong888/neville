@@ -54,12 +54,12 @@ export async function POST(req: Request) {
   const tone = resolveTone(body.tone);
 
   const ip = visitor(req);
-  const refused = takeSlot(ip);
+  const refused = await takeSlot(ip);
   if (refused) return NextResponse.json(refused, { status: refused.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    returnSlot(ip);
+    await returnSlot(ip);
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 

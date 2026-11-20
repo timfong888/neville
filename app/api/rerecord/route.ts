@@ -43,12 +43,12 @@ export async function POST(req: Request) {
   const voice = resolveVoice(parsed.value.voiceId);
 
   const ip = visitor(req);
-  const refused = takeSlot(ip);
+  const refused = await takeSlot(ip);
   if (refused) return NextResponse.json(refused, { status: refused.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    returnSlot(ip);
+    await returnSlot(ip);
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     // A rejection was a paid model call, so it keeps its slot: otherwise a
     // caller could loop rejected scripts past the daily limits. Only a check
     // that never answered gives the slot back.
-    if (vet.reason === "unavailable") returnSlot(ip);
+    if (vet.reason === "unavailable") await returnSlot(ip);
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
   }
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
-    returnSlot(ip);
+    await returnSlot(ip);
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 

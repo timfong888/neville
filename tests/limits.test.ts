@@ -42,33 +42,33 @@ describe("spend ceiling (the hard cap)", () => {
 describe("per-visitor counter (soft cap)", () => {
   it("refuses the request after the daily allowance", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) expect(takeSlot("1.1.1.1")).toBeNull();
-    expect(takeSlot("1.1.1.1")?.code).toBe("visitor_full");
+    for (let i = 0; i < limits.perIpPerDay; i++) expect(await takeSlot("1.1.1.1")).toBeNull();
+    expect((await takeSlot("1.1.1.1"))?.code).toBe("visitor_full");
   });
   it("counts each visitor separately", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) takeSlot("1.1.1.1");
-    expect(takeSlot("2.2.2.2")).toBeNull();
+    for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
+    expect(await takeSlot("2.2.2.2")).toBeNull();
   });
   it("gives a slot back when nothing was spent", async () => {
     const { takeSlot, returnSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) takeSlot("1.1.1.1");
-    returnSlot("1.1.1.1");
-    expect(takeSlot("1.1.1.1")).toBeNull();
-    expect(takeSlot("1.1.1.1")?.code).toBe("visitor_full");
+    for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
+    await returnSlot("1.1.1.1");
+    expect(await takeSlot("1.1.1.1")).toBeNull();
+    expect((await takeSlot("1.1.1.1"))?.code).toBe("visitor_full");
   });
   it("starts again the next day", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) takeSlot("1.1.1.1");
+    for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
     vi.setSystemTime(new Date("2026-11-20T00:00:05Z"));
-    expect(takeSlot("1.1.1.1")).toBeNull();
+    expect(await takeSlot("1.1.1.1")).toBeNull();
   });
 });
 
 describe("per-day counter (soft cap)", () => {
   it("refuses everyone once the day's total is reached", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.globalPerDay; i++) expect(takeSlot(`10.0.${i >> 8}.${i & 255}`)).toBeNull();
-    expect(takeSlot("9.9.9.9")?.code).toBe("day_full");
+    for (let i = 0; i < limits.globalPerDay; i++) expect(await takeSlot(`10.0.${i >> 8}.${i & 255}`)).toBeNull();
+    expect((await takeSlot("9.9.9.9"))?.code).toBe("day_full");
   });
 });
