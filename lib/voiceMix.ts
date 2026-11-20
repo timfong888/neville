@@ -71,3 +71,42 @@ export function spreadVoices(order: number[], voiceOf: (i: number) => string): n
   }
   return out;
 }
+
+/** Same-voice neighbours in `order`, counting the wrap from last to first (Repeat all). */
+function repeatsInCycle(order: number[], voiceOf: (i: number) => string): number {
+  let n = 0;
+  for (let k = 0; k < order.length; k++) {
+    if (voiceOf(order[k]) === voiceOf(order[(k + 1) % order.length])) n++;
+  }
+  return n;
+}
+
+/**
+ * The play order with mixed voices. Without shuffle, play starts at the tapped
+ * track `from` and runs round the whole playlist (from, ..., last, first, ...,
+ * from - 1), so no part of the order is left unspread. The join from the last
+ * track back to the first is checked too, for Repeat all. Returns the order and
+ * the position to start at.
+ */
+export function mixedOrder(
+  order: number[],
+  from: number,
+  shuffle: boolean,
+  voiceOf: (i: number) => string,
+): { order: number[]; start: number } {
+  const ring = shuffle ? order : [...order.slice(from), ...order.slice(0, from)];
+  const out = spreadVoices(ring, voiceOf);
+  // Fix the wrap: swap the last track with one in the middle when that leaves fewer repeats.
+  if (out.length >= 3 && voiceOf(out[out.length - 1]) === voiceOf(out[0])) {
+    const base = repeatsInCycle(out, voiceOf);
+    for (let k = out.length - 2; k >= 1; k--) {
+      const t = out.slice();
+      [t[k], t[t.length - 1]] = [t[t.length - 1], t[k]];
+      if (repeatsInCycle(t, voiceOf) < base) {
+        out.splice(0, out.length, ...t);
+        break;
+      }
+    }
+  }
+  return { order: out, start: 0 };
+}

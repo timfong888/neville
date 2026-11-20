@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanMix, DEFAULT_MIX, honoursPace, MIXABLE_VOICES, mixVoiceAt, paceSupport, spreadVoices } from "@/lib/voiceMix";
+import { cleanMix, DEFAULT_MIX, honoursPace, MIXABLE_VOICES, mixedOrder, mixVoiceAt, paceSupport, spreadVoices } from "@/lib/voiceMix";
 
 describe("voice mix", () => {
   it("defaults to the voices that honour pace, which leaves out Nadine", () => {
@@ -42,5 +42,38 @@ describe("paceSupport", () => {
     expect(paceSupport({ model: "google/gemini-3.8-flash-lite-tts" })).toBe("honours");
     expect(paceSupport({ model: "heygen/heygen-voice-1-turbo" })).toBe("ignores");
     expect(paceSupport({ model: "hexgrad/kokoro-82m" })).toBe("untested");
+  });
+});
+
+describe("mixedOrder", () => {
+  const cycleRepeats = (o: number[], v: (i: number) => string) =>
+    o.filter((x, k) => v(x) === v(o[(k + 1) % o.length])).length;
+
+  it("starts at the tapped track and spreads the whole playlist, so Repeat all never plays a voice twice running", () => {
+    // A,A,B,C: tapping track 3 used to leave A,A in the unspread prefix.
+    const voices = ["A", "A", "B", "C"];
+    const v = (i: number) => voices[i];
+    const { order, start } = mixedOrder([0, 1, 2, 3], 2, false, v);
+    expect(order[start]).toBe(2);
+    expect([...order].sort()).toEqual([0, 1, 2, 3]);
+    expect(cycleRepeats(order, v)).toBe(0);
+  });
+
+  it("checks the wrap from the last track to the first", () => {
+    const voices = ["A", "B", "A", "B", "A", "C"];
+    const v = (i: number) => voices[i];
+    for (let from = 0; from < voices.length; from++) {
+      const { order } = mixedOrder([0, 1, 2, 3, 4, 5], from, false, v);
+      expect(order[0]).toBe(from);
+      expect(cycleRepeats(order, v)).toBe(0);
+    }
+  });
+
+  it("keeps a shuffled order's first track", () => {
+    const v = (i: number) => ["A", "A", "B", "B"][i];
+    const { order, start } = mixedOrder([3, 0, 2, 1], 0, true, v);
+    expect(start).toBe(0);
+    expect(order[0]).toBe(3);
+    expect(cycleRepeats(order, v)).toBe(0);
   });
 });
