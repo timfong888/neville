@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
-import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
@@ -496,7 +496,7 @@ export default function DemoPage() {
               />
             </div>
             <div>
-              <label htmlFor="voice">Backup device voice</label>
+              <label htmlFor="voice">Device voice, only if recording fails</label>
               <select
                 id="voice"
                 value={voiceURI}
@@ -512,18 +512,14 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
-          <p className="small muted voiceline">
-            {mixOn ? (
-              <>
-                Next recording: <b>{nextVoice.name}</b>, rotating through your voice mix.{" "}
-              </>
-            ) : (
-              <>
-                Recorded in the voice of <b>{nextVoice.name}</b>.{" "}
-              </>
-            )}
-            <Link href="/settings">Change voice</Link>
-          </p>
+          <Link className="voicesummary" href="/settings#voice">
+            <span className="small muted">Voice</span>
+            <span>
+              <b>{nextVoice.name}</b>
+              <span className="small muted"> {mixOn ? "· next in your voice mix" : voiceBlurb(nextVoice) && `· ${voiceBlurb(nextVoice)}`}</span>
+            </span>
+            <span className="change">Change</span>
+          </Link>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>

@@ -16,7 +16,7 @@ export default function SettingsBody() {
       <ModePicker onApplied={() => setRev((r) => r + 1)} />
       <h2>Delivery</h2>
       <DeliveryPicker key={`d${rev}`} />
-      <h2>Voice</h2>
+      <h2 id="voice">Voice</h2>
       <VoicePicker />
       <MixPicker />
       <h2>Music</h2>
