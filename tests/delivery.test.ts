@@ -27,12 +27,19 @@ describe("presets", () => {
   it("defaults to slow and calm", () => {
     expect([DEFAULT_PACE_ID, DEFAULT_TONE_ID]).toEqual(["slow", "calm"]);
   });
-  it("never speeds up and never goes below the floor", () => {
+  it("never speeds up except Brisk, and never goes below the floor", () => {
     for (const p of PACES) for (const t of TONES) {
       const s = speedFor(p, t);
       expect(s).toBeGreaterThanOrEqual(0.6);
-      expect(s).toBeLessThan(1);
+      if (p.id === "brisk") expect(s).toBeLessThanOrEqual(1.1);
+      else expect(s).toBeLessThan(1);
     }
+  });
+  it("Energetic lifts the energy instead of lowering it", () => {
+    const i = styleInstruction(resolvePace("brisk"), resolveTone("energetic"));
+    expect(i).toMatch(/brisk/);
+    expect(i).not.toMatch(/keep your energy low/);
+    expect(i).toMatch(/never shout/);
   });
   it("very slow and sleep are each slower than their alternatives", () => {
     const calm = resolveTone("calm");

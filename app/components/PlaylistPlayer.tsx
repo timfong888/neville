@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
-import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
+import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
-import { backPos, DEFAULT_GAP_MS, nextPos, playOrder, REPEATS, skipPos, silenceWav, type Repeat } from "@/lib/playback";
+import { applyMode, readMode } from "@/lib/modeStore";
+import { MODES, resolveMode, SLEEP_TIMER_MINUTES, sleepState, type ModeId } from "@/lib/modes";
+import { backPos, nextPos, playOrder, REPEATS, skipPos, silenceWav, type Repeat } from "@/lib/playback";
 import { hashOf } from "@/lib/script";
 
 const REPEAT_LABEL: Record<Repeat, string> = { off: "Repeat: off", all: "Repeat: all", one: "Repeat: one" };
@@ -26,13 +28,18 @@ type Phase = "idle" | "playing" | "paused";
 export default function PlaylistPlayer({
   items,
   title = "Neville",
-  gapMs = DEFAULT_GAP_MS,
 }: {
   items: Manifestation[];
   /** Shown as the album on the lock screen. */
   title?: string;
-  gapMs?: number;
 }) {
+  // The mode sets the music, its volume, the gap between tracks and the sleep timer.
+  const [modeId, setModeId] = useState<ModeId>("calm");
+  const mode = resolveMode(modeId);
+  const gapMs = mode.gapMs;
+  const [sleepMin, setSleepMin] = useState(0);
+  const sleepEndsAt = useRef<number | null>(null);
+  const fading = useRef<{ from: number; ms: number } | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -100,6 +107,9 @@ export default function PlaylistPlayer({
     const choice = readMusicChoice();
     setMusic(choice !== "none");
     prefetchMusic(choice);
+    const md = readMode();
+    setModeId(md.id);
+    if (md.sleepTimer) setSleepMin(30);
   }, []);
 
   // The silent file played between tracks.
@@ -159,6 +169,9 @@ export default function PlaylistPlayer({
     cancelTrack();
     active.current = false;
     el.current?.pause();
+    if (el.current) el.current.volume = 1;
+    sleepEndsAt.current = null;
+    fading.current = null;
     bed.current?.stop();
     bed.current = null;
     stale.current.forEach((u) => URL.revokeObjectURL(u));
@@ -196,10 +209,45 @@ export default function PlaylistPlayer({
     navigator.mediaSession.playbackState = "playing";
   };
 
+  /**
+   * The sleep timer. The music fades over the last minute; the voice fades too
+   * where the browser allows (iPhone does not), and the session ends at the
+   * next track boundary after time is up, so no line is cut off mid-word
+   * unless it runs two minutes over.
+   */
+  const checkSleep = () => {
+    const st = sleepState(sleepEndsAt.current, Date.now());
+    if (st.kind === "fading" || st.kind === "over") {
+      if (!fading.current) {
+        fading.current = { from: Date.now(), ms: st.left * 1000 };
+        bed.current?.fadeOut(st.left);
+      }
+      const f = fading.current;
+      const v = f.ms > 0 ? Math.max(0, 1 - (Date.now() - f.from) / f.ms) : 0;
+      if (el.current) el.current.volume = Math.max(0.05, v);
+    }
+    if (st.kind === "over" && sleepEndsAt.current !== null && Date.now() > sleepEndsAt.current + 120_000) {
+      finish();
+      setNote("Sleep timer ended.");
+    }
+    return st.kind;
+  };
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const t = setInterval(checkSleep, 1000);
+    return () => clearInterval(t);
+  });
+
   /** After a track: the gap's silence, then whatever comes next. */
   const afterTrack = (mine: number) => {
     if (token.current !== mine) return;
     bed.current?.holdDuck(false);
+    if (checkSleep() === "over") {
+      finish();
+      setNote("Sleep timer ended.");
+      return;
+    }
     const n = nextPos(pos.current, order.current.length, live.current.repeat);
     if (n < 0) return finish();
     const a = el.current!;
@@ -291,6 +339,7 @@ export default function PlaylistPlayer({
     a.src = url;
     a.ontimeupdate = () => {
       if (token.current !== mine || !a.duration) return;
+      checkSleep();
       const at = a.currentTime / a.duration;
       let k = 0;
       while (k + 1 < starts.length && starts[k + 1] <= at) k++;
@@ -326,6 +375,7 @@ export default function PlaylistPlayer({
   /** Moves to another position without restarting the music. */
   const jump = (p: number) => {
     if (p < 0) return finish();
+    if (paused.current) unpauseClocks();
     const mine = cancelTrack();
     // A device-voice track does not touch the element, so stop the recording that was playing.
     // Marked as a switch so the pause listener does not take it for a system pause.
@@ -334,6 +384,43 @@ export default function PlaylistPlayer({
     setPhase("playing");
     bed.current?.resume();
     startAt(p, mine);
+  };
+
+  /** Starts the music bed. A mode chosen on the player passes its own track and fade, so it does not depend on storage. */
+  const startMusic = (vol = volume, on = music, track?: MusicChoice, fadeInS?: number) => {
+    if (!on) return;
+    const choice = track ?? readMusicChoice();
+    bed.current = new MusicBed();
+    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? resolveMode(readMode().id).fadeInS);
+  };
+
+  /** Applies a mode. While playing, the music crossfades to the mode's track at once. */
+  const chooseMode = (id: ModeId) => {
+    applyMode(id);
+    const md = resolveMode(id);
+    setModeId(id);
+    setVolume(md.volume);
+    setMusic(md.music !== "none");
+    prefetchMusic(md.music);
+    if (phase !== "idle") {
+      bed.current?.stop();
+      bed.current = null;
+      if (md.music !== "none") startMusic(md.volume, true, md.music, md.fadeInS);
+      if (phase === "paused") (bed.current as MusicBed | null)?.pause();
+    }
+    // Sleep turns the timer on (30 min unless one is set); the others turn it off. Either way
+    // any fade in progress is undone and, while playing, the timer starts now.
+    chooseSleep(md.sleepTimer ? sleepMin || 30 : 0);
+  };
+
+  const chooseSleep = (min: number) => {
+    setSleepMin(min);
+    if (fading.current) bed.current?.fadeIn(2);
+    fading.current = null;
+    if (el.current) el.current.volume = 1;
+    // While paused, count from the moment of pausing: Resume adds the pause length back on.
+    const base = paused.current ? pausedAt.current : Date.now();
+    if (phase !== "idle") sleepEndsAt.current = min > 0 ? base + min * 60_000 : null;
   };
 
   // Must run inside the tap handler.
@@ -361,11 +448,8 @@ export default function PlaylistPlayer({
     switching.current = true;
     el.current.src = gapUrl.current;
     void el.current.play().catch(() => {});
-    if (music) {
-      const choice = readMusicChoice();
-      bed.current = new MusicBed();
-      void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume);
-    }
+    startMusic();
+    sleepEndsAt.current = sleepMin > 0 ? Date.now() + sleepMin * 60_000 : null;
     order.current = playOrder(items.length, shuffle, from);
     startAt(shuffle ? 0 : from, mine);
   };
@@ -386,6 +470,17 @@ export default function PlaylistPlayer({
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
   };
 
+  /**
+   * Leaving a pause by any route (Resume, Next, Previous): the sleep timer stops while paused,
+   * so move its deadline and any fade under way by the pause. Returns the pause length.
+   */
+  const unpauseClocks = () => {
+    const pausedFor = Date.now() - pausedAt.current;
+    if (sleepEndsAt.current !== null) sleepEndsAt.current += pausedFor;
+    if (fading.current) fading.current.from += pausedFor;
+    return pausedFor;
+  };
+
   const resume = () => {
     if (!paused.current) {
       // Playing by our state but the system stopped the element: just start it again.
@@ -393,7 +488,7 @@ export default function PlaylistPlayer({
       return;
     }
     paused.current = false;
-    trackStart.current += Date.now() - pausedAt.current;
+    trackStart.current += unpauseClocks();
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
     if (usesElement.current && el.current?.paused && !el.current.ended) void el.current.play().catch(() => {});
@@ -513,6 +608,23 @@ export default function PlaylistPlayer({
             </button>
           </>
         )}
+      </div>
+      <div className="controls" role="group" aria-label="Mode">
+        {MODES.map((md) => (
+          <button key={md.id} className="btn sm ghost" aria-pressed={modeId === md.id} onClick={() => chooseMode(md.id)}>
+            {md.label}
+          </button>
+        ))}
+        <label className="small muted volume">
+          Sleep timer
+          <select value={sleepMin} onChange={(e) => chooseSleep(Number(e.target.value))} aria-label="Sleep timer">
+            {SLEEP_TIMER_MINUTES.map((n) => (
+              <option key={n} value={n}>
+                {n ? `${n} min` : "Off"}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="controls">
         <button

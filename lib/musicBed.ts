@@ -94,8 +94,8 @@ export class MusicBed {
     if (this.ctx?.state !== "running") void this.ctx?.resume().catch(() => {});
   }
 
-  /** Starts `id` looping at `volume` (0 to 1), fading in over two seconds. */
-  async start(id: MusicChoice, volume: number): Promise<void> {
+  /** Starts `id` looping at `volume` (0 to 1), fading in over `fadeInS` seconds. */
+  async start(id: MusicChoice, volume: number, fadeInS = 2): Promise<void> {
     const ctx = this.ctx;
     const t = musicTrack(id);
     if (!ctx || !t) return;
@@ -109,7 +109,7 @@ export class MusicBed {
     src.connect(this.volume);
     src.start(ctx.currentTime + 0.05, t.loopStart);
     this.fade.gain.setValueAtTime(0, ctx.currentTime);
-    this.fade.gain.linearRampToValueAtTime(1, ctx.currentTime + 2);
+    this.fade.gain.linearRampToValueAtTime(1, ctx.currentTime + Math.max(0.1, fadeInS));
     this.src = src;
   }
 
@@ -161,6 +161,16 @@ export class MusicBed {
 
   resume(): void {
     void this.ctx?.resume().catch(() => {});
+  }
+
+  /** Undoes a fade-out (a sleep timer extended or turned off), back to full over `seconds`. */
+  fadeIn(seconds: number): void {
+    const ctx = this.ctx;
+    const g = this.fade?.gain;
+    if (!ctx || !g) return;
+    g.cancelScheduledValues(ctx.currentTime);
+    g.setValueAtTime(g.value, ctx.currentTime);
+    g.linearRampToValueAtTime(1, ctx.currentTime + seconds);
   }
 
   stop(): void {

@@ -3,8 +3,8 @@
 // React or browser APIs. The browser sends only a preset id; the server resolves
 // it here, so a request cannot choose its own speed, pause or instruction.
 
-export type PaceId = "slow" | "very-slow";
-export type ToneId = "calm" | "soft" | "sleep";
+export type PaceId = "brisk" | "slow" | "very-slow";
+export type ToneId = "energetic" | "calm" | "soft" | "sleep";
 
 export type Pace = {
   id: PaceId;
@@ -31,9 +31,19 @@ export type Tone = {
   style: string;
   /** Tells the script writer how the lines should feel. */
   scriptNote: string;
+  /** "lifted" for Active: energy up instead of down. */
+  energy?: "low" | "lifted";
 };
 
 export const PACES: readonly Pace[] = [
+  {
+    id: "brisk",
+    label: "Brisk",
+    note: "A natural, forward pace with short pauses. For Active mode.",
+    speed: 1.05,
+    pauseMs: 900,
+    style: "at a brisk, natural pace",
+  },
   {
     id: "slow",
     label: "Slow",
@@ -53,6 +63,16 @@ export const PACES: readonly Pace[] = [
 ];
 
 export const TONES: readonly Tone[] = [
+  {
+    id: "energetic",
+    label: "Energetic",
+    note: "Bright and confident, like a coach beside you on a morning walk.",
+    speedFactor: 1,
+    pauseFactor: 0.8,
+    style: "in a bright, warm, confident and encouraging voice, like a coach walking beside you in the morning",
+    scriptNote: "Upbeat, confident and forward-moving. Short, strong lines about action and momentum. Still calm words, no exclamation marks.",
+    energy: "lifted",
+  },
   {
     id: "calm",
     label: "Calm",
@@ -94,10 +114,10 @@ export function resolveTone(id: unknown): Tone {
   return TONES.find((t) => t.id === id) ?? TONES.find((t) => t.id === DEFAULT_TONE_ID)!;
 }
 
-/** Speed to ask the model for. Never faster than normal, never so slow it slurs. */
+/** Speed to ask the model for. Never so slow it slurs; only Brisk goes past normal, and not by much. */
 export function speedFor(pace: Pace, tone: Tone): number {
   const s = Math.round(pace.speed * tone.speedFactor * 100) / 100;
-  return Math.min(1, Math.max(0.6, s));
+  return Math.min(1.1, Math.max(0.6, s));
 }
 
 /** Silence between lines, in ms. */
@@ -110,6 +130,13 @@ export function pauseFor(pace: Pace, tone: Tone): number {
  * never part of the spoken text, so it cannot be read aloud.
  */
 export function styleInstruction(pace: Pace, tone: Tone): string {
+  if (tone.energy === "lifted") {
+    return (
+      `Speak ${pace.style}, ${tone.style}. ` +
+      "Use the present tense. Sound alive and sure, but never shout, never sell, and do not stress any single word. " +
+      "Let your pitch settle at the end of each line, and leave a short pause after every line."
+    );
+  }
   return (
     `Speak ${pace.style}, ${tone.style}. ` +
     "Use the present tense and keep your energy low. Do not sound excited, and do not lean on or stress any word. " +

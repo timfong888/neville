@@ -361,3 +361,5 @@ label.volume.small { margin: 8px 0; }
 .onb-dots span.on { background: var(--accent); }
 .onb-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .onb-actions .ghost { margin-right: auto; }
+.btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text); }
+.volume select { width: auto; }
