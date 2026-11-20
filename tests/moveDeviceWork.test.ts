@@ -5,6 +5,7 @@ import { addItem, isUuid, makePlaylist, type Manifestation, newId, type Playlist
 const U1 = "11111111-1111-4111-8111-111111111111";
 const U2 = "22222222-2222-4222-8222-222222222222";
 const U3 = "33333333-3333-4333-8333-333333333333";
+const ACC = "acct-1";
 
 const m = (id: string, hasAudio: boolean, t: number): Manifestation => ({
   id, title: `T ${id.slice(0, 4)}`, want: "w", firstName: "", lines: ["a"], voiceId: "v", voiceName: "V",
@@ -19,6 +20,8 @@ function fakes(ms: Manifestation[], ps: Playlist[], opts: { audio?: Record<strin
     getAudio: async (id) => opts.audio?.[id] ?? null,
     deleteManifestation: async (id) => void deleted.m.push(id),
     deletePlaylist: async (id) => void deleted.p.push(id),
+    movedIds: async () => ({}),
+    setMovedIds: async () => {},
   };
   const target: MoveTarget = {
     saveManifestation: async (x, a) => {
@@ -36,7 +39,7 @@ describe("moveDeviceWork", () => {
     const blob = new Blob(["x"]);
     const p = addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2);
     const f = fakes([m(U1, true, 1), m(U2, false, 2)], [p], { audio: { [U1]: blob } });
-    const r = await moveDeviceWork(f.device, f.target);
+    const r = await moveDeviceWork(f.device, f.target, ACC);
     expect(r).toEqual({ moved: 2, kept: [] });
     expect(f.saved.audio[0]).toBe(blob);
     expect(f.saved.p[0].itemIds).toEqual([U1, U2]);
@@ -47,53 +50,128 @@ describe("moveDeviceWork", () => {
   it("keeps a manifestation on the device when its recording cannot be read", async () => {
     const p = addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2);
     const f = fakes([m(U1, true, 1), m(U2, false, 2)], [p], { audio: { [U1]: null } });
-    const r = await moveDeviceWork(f.device, f.target);
+    const r = await moveDeviceWork(f.device, f.target, ACC);
     expect(r.moved).toBe(1);
     expect(r.kept[0].reason).toMatch(/recording/);
     expect(f.saved.m.map((x) => x.id)).toEqual([U2]);
-    expect(f.saved.p[0].itemIds).toEqual([U2]);
+    expect(f.saved.p).toEqual([]); // no partial playlist in the account
+    expect(r.kept.map((k) => k.title)).toContain("P");
     expect(f.deleted.p).toEqual([]); // playlist still references U1, so it stays
     expect(f.deleted.m).toEqual([]); // and so do both items it lists, U1's recording included
   });
 
-  it("a retry after a partial move keeps the whole playlist, in order", async () => {
-    // A real-ish device: deleting a manifestation strips it from playlists, as DeviceStore does.
-    const blob = new Blob(["x"]);
-    let lib = {
-      manifestations: [m(U1, false, 1), m(U2, true, 2)],
-      playlists: [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
-    };
-    let readable = false;
+  // A real-ish device: deleting a manifestation strips it from playlists, as
+  // DeviceStore does, and the moved-ids record persists between passes.
+  function realDevice(ms: Manifestation[], ps: Playlist[], readable: () => boolean, blob: Blob) {
+    const state = { lib: { manifestations: ms, playlists: ps }, movedIds: {} as Record<string, Record<string, string>> };
     const device: MoveSource = {
-      load: async () => lib,
-      getAudio: async (id) => (id === U2 && readable ? blob : null),
+      load: async () => state.lib,
+      getAudio: async (id) => (ms.find((x) => x.id === id)?.hasAudio && readable() ? blob : null),
       deleteManifestation: async (id) => {
-        lib = {
-          manifestations: lib.manifestations.filter((x) => x.id !== id),
-          playlists: lib.playlists.map((p) => ({ ...p, itemIds: p.itemIds.filter((x) => x !== id) })),
+        state.lib = {
+          manifestations: state.lib.manifestations.filter((x) => x.id !== id),
+          playlists: state.lib.playlists.map((p) => ({ ...p, itemIds: p.itemIds.filter((x) => x !== id) })),
         };
       },
       deletePlaylist: async (id) => {
-        lib = { ...lib, playlists: lib.playlists.filter((p) => p.id !== id) };
+        state.lib = { ...state.lib, playlists: state.lib.playlists.filter((p) => p.id !== id) };
       },
+      movedIds: async (acc) => ({ ...(state.movedIds[acc] ?? {}) }),
+      setMovedIds: async (acc, ids) => void (state.movedIds[acc] = { ...ids }),
     };
-    const account = new Map<string, Playlist>();
-    const target: MoveTarget = { saveManifestation: async () => {}, savePlaylist: async (p) => void account.set(p.id, p) };
+    return { device, state };
+  }
 
-    const first = await moveDeviceWork(device, target);
-    expect(first.kept).toHaveLength(1);
-    expect(account.get(U3)?.itemIds).toEqual([U1]);
+  it("a retry after a partial move saves the whole playlist once, in order", async () => {
+    let readable = false;
+    const { device, state } = realDevice(
+      [m(U1, false, 1), m(U2, true, 2)],
+      [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
+      () => readable,
+      new Blob(["x"]),
+    );
+    const account = new Map<string, Playlist>();
+    const savedM: string[] = [];
+    const target: MoveTarget = {
+      saveManifestation: async (x) => void savedM.push(x.id),
+      savePlaylist: async (p) => void account.set(p.id, p),
+    };
+
+    const first = await moveDeviceWork(device, target, ACC);
+    expect(first.kept.map((k) => k.title)).toEqual(["T 2222", "P"]);
+    expect(account.size).toBe(0);
 
     readable = true;
-    const second = await moveDeviceWork(device, target);
-    expect(second.kept).toEqual([]);
+    const second = await moveDeviceWork(device, target, ACC);
+    expect(second).toEqual({ moved: 1, kept: [] });
     expect(account.get(U3)?.itemIds).toEqual([U1, U2]);
-    expect(lib).toEqual({ manifestations: [], playlists: [] });
+    expect(savedM).toEqual([U1, U2]); // U1 was not saved a second time
+    expect(state.lib).toEqual({ manifestations: [], playlists: [] });
+    expect(state.movedIds[ACC]).toEqual({});
+  });
+
+  it("does not overwrite account edits to an item it already moved", async () => {
+    const { device } = realDevice(
+      [m(U1, false, 1), m(U2, true, 2)],
+      [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
+      () => false,
+      new Blob(["x"]),
+    );
+    const account = new Map<string, Manifestation>();
+    const target: MoveTarget = {
+      saveManifestation: async (x) => void account.set(x.id, x),
+      savePlaylist: async () => {},
+    };
+    await moveDeviceWork(device, target, ACC);
+    account.set(U1, { ...account.get(U1)!, title: "Renamed in the account" });
+    await moveDeviceWork(device, target, ACC);
+    await moveDeviceWork(device, target, ACC);
+    expect(account.get(U1)?.title).toBe("Renamed in the account");
+  });
+
+  it("gives a held legacy item one account id across passes", async () => {
+    let readable = false;
+    const { device } = realDevice(
+      [m("lx3k-abc", false, 1), m(U2, true, 2)],
+      [addItem(addItem({ ...makePlaylist("P"), id: "old-pl" }, "lx3k-abc"), U2)],
+      () => readable,
+      new Blob(["x"]),
+    );
+    const savedM: string[] = [];
+    const playlists: Playlist[] = [];
+    const target: MoveTarget = {
+      saveManifestation: async (x) => void savedM.push(x.id),
+      savePlaylist: async (p) => void playlists.push(p),
+    };
+    await moveDeviceWork(device, target, ACC);
+    await moveDeviceWork(device, target, ACC);
+    readable = true;
+    await moveDeviceWork(device, target, ACC);
+    expect(savedM).toHaveLength(2); // the legacy item once, U2 once
+    expect(playlists).toHaveLength(1);
+    expect(playlists[0].itemIds).toEqual(savedM);
+  });
+
+  it("keeps the record per account", async () => {
+    const { device } = realDevice(
+      [m(U1, false, 1), m(U2, true, 2)],
+      [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
+      () => false,
+      new Blob(["x"]),
+    );
+    const savedBy: string[] = [];
+    const t = (who: string): MoveTarget => ({
+      saveManifestation: async (x) => void savedBy.push(`${who}:${x.id}`),
+      savePlaylist: async () => {},
+    });
+    await moveDeviceWork(device, t("a"), "acct-a");
+    await moveDeviceWork(device, t("b"), "acct-b");
+    expect(savedBy).toEqual([`a:${U1}`, `b:${U1}`]);
   });
 
   it("carries on past an item the account rejects", async () => {
     const f = fakes([m(U1, false, 1), m(U2, false, 2)], [], { reject: [U1] });
-    const r = await moveDeviceWork(f.device, f.target);
+    const r = await moveDeviceWork(f.device, f.target, ACC);
     expect(r.moved).toBe(1);
     expect(r.kept).toEqual([{ title: "T 1111", reason: "Bad id." }]);
     expect(f.deleted.m).toEqual([U2]);
@@ -102,7 +180,7 @@ describe("moveDeviceWork", () => {
   it("gives old non-UUID ids a fresh id and updates playlists to match", async () => {
     const p = addItem({ ...makePlaylist("P"), id: "old-playlist" }, "lx3k-abc");
     const f = fakes([m("lx3k-abc", false, 1)], [p]);
-    const r = await moveDeviceWork(f.device, f.target);
+    const r = await moveDeviceWork(f.device, f.target, ACC);
     expect(r.moved).toBe(1);
     const newMid = f.saved.m[0].id;
     expect(isUuid(newMid)).toBe(true);
