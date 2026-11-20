@@ -63,10 +63,16 @@ export default function ManifestationPage() {
       }
       const used = resolveVoice(res.headers.get("X-Voice-Id"));
       const blob = await res.blob();
-      await store.updateManifestation(
-        { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
-        blob,
-      );
+      try {
+        await store.updateManifestation(
+          { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
+          blob,
+        );
+      } catch {
+        // The recording was made; only keeping it failed (storage full or blocked).
+        setMsg("The new recording was made but this browser could not save it. Free some space and try again.");
+        return;
+      }
       setMsg(`Re-recorded in the voice of ${used.name}.`);
     } catch {
       setMsg("The recording could not be made just now. Your device's voice reads it meanwhile.");
