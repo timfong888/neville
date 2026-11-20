@@ -53,9 +53,16 @@ export default async function SharedPage({ params }: { params: Promise<{ id: str
         ))}
       </ol>
       <p className="small muted">Read by your device&apos;s own voice.</p>
-      <Link className="btn primary" href="/">
-        Make your own
-      </Link>
+      <div className="card cta">
+        <h2>Make yours</h2>
+        <p className="muted">
+          Type one thing you want. Neville writes a short affirmation for you and reads it in a calm voice. Free, no
+          sign-up.
+        </p>
+        <Link className="btn primary block" href="/">
+          Make yours
+        </Link>
+      </div>
     </>
   );
 }
