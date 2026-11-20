@@ -11,7 +11,15 @@ export function lineStarts(lines: string[]): number[] {
   });
 }
 
-/** Soft ambient pad made with WebAudio, so the prototype ships no audio files. */
+/**
+ * Soft ambient pad made with WebAudio, so the prototype ships no audio files.
+ *
+ * It used to read as a hum: a 110 Hz sine carried most of the weight, 220.6 Hz
+ * sat 0.6 Hz away from the 220 Hz octave and beat against it, and nothing
+ * softened the plain sine tones. Now: no sub-bass root, a clean A major triad
+ * (no detune, so nothing beats), a low-pass filter over the top, and a quieter,
+ * slower swell.
+ */
 export function startPad(): () => void {
   const Ctx: typeof AudioContext | undefined =
     window.AudioContext ??
@@ -20,20 +28,24 @@ export function startPad(): () => void {
   const ctx = new Ctx();
   const master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(ctx.destination);
-  master.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 3);
-  const oscs = [110, 164.81, 220.6, 277.18].map((f, i) => {
+  const soften = ctx.createBiquadFilter();
+  soften.type = "lowpass";
+  soften.frequency.value = 700;
+  soften.connect(master).connect(ctx.destination);
+  master.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 4);
+  // A3, C#4, E4, A4: an A major chord an octave up from the old root.
+  const oscs = [220, 277.18, 329.63, 440].map((f, i) => {
     const o = ctx.createOscillator();
     o.type = "sine";
     o.frequency.value = f;
     const g = ctx.createGain();
-    g.gain.value = i === 0 ? 0.9 : 0.35;
+    g.gain.value = i === 3 ? 0.2 : 0.4;
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.05 + i * 0.03;
+    lfo.frequency.value = 0.03 + i * 0.02;
     const lg = ctx.createGain();
-    lg.gain.value = 0.25;
+    lg.gain.value = 0.1;
     lfo.connect(lg).connect(g.gain);
-    o.connect(g).connect(master);
+    o.connect(g).connect(soften);
     o.start();
     lfo.start();
     return [o, lfo];
@@ -47,4 +59,3 @@ export function startPad(): () => void {
     }, 700);
   };
 }
-
