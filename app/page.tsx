@@ -214,6 +214,8 @@ export default function DemoPage() {
       // Dip the music under each spoken stretch, on the audio clock.
       a.onplaying = () => {
         if (token.current !== mine) return;
+        // iOS can leave the music's AudioContext suspended or interrupted once the voice starts (#52).
+        bed.current?.resume();
         if (speech.current.length) bed.current?.duckFor(speech.current, a.currentTime);
         else bed.current?.holdDuck(true);
       };

@@ -349,6 +349,8 @@ export default function PlaylistPlayer({
     };
     a.onplaying = () => {
       if (token.current !== mine) return;
+      // iOS can leave the music's AudioContext suspended or interrupted once the voice starts (#52).
+      bed.current?.resume();
       const segs = speech.current[m.id];
       if (segs?.length) bed.current?.duckFor(segs, a.currentTime);
       else bed.current?.holdDuck(true);
