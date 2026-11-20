@@ -13,8 +13,7 @@
       "voice": "Charon",
       "note": "Gemini Charon, low male voice, coach prompt",
       "file": "A.mp3",
-      "seconds": 30.9,
-      "costUsd": 0.00029
+      "seconds": 30.9
     },
     {
       "letter": "B",
@@ -22,8 +21,7 @@
       "voice": "Gacrux",
       "note": "Gemini Gacrux, mature female voice, coach prompt",
       "file": "B.mp3",
-      "seconds": 30.3,
-      "costUsd": 0
+      "seconds": 30.3
     },
     {
       "letter": "C",
@@ -31,8 +29,7 @@
       "voice": "Sulafat",
       "note": "Gemini Sulafat (already in the app), warm female voice, coach prompt",
       "file": "C.mp3",
-      "seconds": 28.6,
-      "costUsd": 0
+      "seconds": 28.6
     },
     {
       "letter": "D",
@@ -40,8 +37,8 @@
       "voice": "am_michael",
       "note": "Kokoro Michael, plain male voice, no style prompt (model already wired in)",
       "file": "D.mp3",
-      "seconds": 24,
-      "costUsd": 0
+      "seconds": 24
     }
-  ]
+  ],
+  "costNote": "Run total from OpenRouter key usage; per-candidate costs are not recorded because the usage counter updates late."
 }

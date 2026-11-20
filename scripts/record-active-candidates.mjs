@@ -63,6 +63,7 @@ const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7).split("
 const kept = only && existsSync(`${OUT}/manifest.json`) ? JSON.parse(readFileSync(`${OUT}/manifest.json`, "utf8")) : null;
 const rows = kept ? kept.candidates.filter((r) => !only.includes(r.letter)) : [];
 for (const c of CANDIDATES.filter((x) => !only || only.includes(x.letter))) {
+  // The usage counter lags, so this guard is coarse; a full run costs cents against the $0.50 cap.
   const before = await usage();
   if (before - start >= BUDGET) {
     console.log(`Budget reached; stopping before ${c.letter}.`);
@@ -90,6 +91,9 @@ for (const c of CANDIDATES.filter((x) => !only || only.includes(x.letter))) {
   }
   if (!res.ok) {
     console.log(`${c.letter} ${c.voice}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    // Keep the earlier recording's row, so the manifest still matches the file on disk.
+    const prev = kept?.candidates.find((r) => r.letter === c.letter);
+    if (prev) rows.push(prev);
     continue;
   }
   const audio = Buffer.from(await res.arrayBuffer());
@@ -110,9 +114,9 @@ for (const c of CANDIDATES.filter((x) => !only || only.includes(x.letter))) {
     "-map", "[x]", "-t", dur.toFixed(2), "-codec:a", "libmp3lame", "-b:a", "96k", `${OUT}/${c.letter}.mp3`,
   ]);
   spawnSync("rm", [voiceFile]);
-  const after = await usage();
-  rows.push({ ...c, file: `${c.letter}.mp3`, seconds: +dur.toFixed(1), costUsd: +(after - before).toFixed(5) });
-  console.log(`${c.letter} ${c.voice}: ${dur.toFixed(0)} s, $${(after - before).toFixed(4)}`);
+  // No per-candidate cost: OpenRouter's usage counter updates late, so only the run total means anything.
+  rows.push({ ...c, file: `${c.letter}.mp3`, seconds: +dur.toFixed(1) });
+  console.log(`${c.letter} ${c.voice}: ${dur.toFixed(0)} s`);
 }
 const total = (await usage()) - start + (kept?.totalCostUsd ?? 0);
 rows.sort((a, b) => a.letter.localeCompare(b.letter));
