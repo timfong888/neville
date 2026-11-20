@@ -55,7 +55,8 @@ if (!V) throw new Error(`unknown --voice; one of ${Object.keys(VOICES).join(", "
 
 // Mirrors lib/modes.ts for Calm: morning-light at 0.6 with a 2 s fade-in.
 const CALM = { music: "morning-light", volume: 0.6, fadeIn: 2 };
-// A quote needs longer to land than a manifestation line, so the gap is longer than Calm's 1.5 s.
+// A quote needs longer to land than a manifestation line, so the gap is longer than Calm's 1.5 s
+// pause between lines (lib/delivery.ts). Calm's 2.5 s gapMs in lib/modes.ts is the gap between tracks.
 const GAP_MS = 3500;
 const RATE = 24000; // everything is decoded to 24 kHz mono before joining
 const musicDb = (v) => (v === 0 ? -120 : -8 - (1 - v) * 24);
@@ -88,8 +89,19 @@ async function speak(text, tries = 5) {
   }
 }
 
+// Spend guard. OpenRouter's usage figure lags behind calls, so it can't stop a run in time.
+// Instead every request attempt (retries and the no-speed retry included) is counted at its
+// estimated price, as if each one were billed, and checked against the budget before it is sent.
+let committedUsd = 0;
+function chargeAttempt(text) {
+  const cost = text.length * V.usdPerChar;
+  if (committedUsd + cost > BUDGET) throw new Error(`budget reached: $${committedUsd.toFixed(4)} committed of $${BUDGET}`);
+  committedUsd += cost;
+}
+
 async function speakOnce(text) {
   for (const withSpeed of V.speed ? [true, false] : [false]) {
+    chargeAttempt(text);
     const res = await fetch(`${API}/audio/speech`, {
       method: "POST",
       headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", "X-Title": "Neville" },
@@ -137,11 +149,11 @@ if (estimate > BUDGET) throw new Error(`estimate $${estimate.toFixed(4)} is over
 const before = await usage();
 const parts = [];
 for (const [i, q] of quotes.entries()) {
-  if ((await usage()) - before + q.text.length * V.usdPerChar > BUDGET) throw new Error("budget reached");
   parts.push(toLevelledPcm(await speak(q.text)), silence(i < quotes.length - 1 ? GAP_MS : 0));
   process.stdout.write(`quote ${q.n} (p. ${q.page}) recorded\n`);
 }
-// OpenRouter updates usage a little after the call; read again later for the true figure.
+// OpenRouter updates usage a little after the call, so this can read low (even 0); the
+// committed estimate is recorded beside it. Read the key's usage again later for the true figure.
 const spent = (await usage()) - before;
 
 mkdirSync(OUT, { recursive: true });
@@ -171,6 +183,7 @@ const info = {
   chars,
   durationS: Math.round(dur),
   estimateUsd: estimate,
+  committedUsd,
   spentUsd: spent,
   recorded: new Date().toISOString(),
 };

@@ -24,11 +24,11 @@ A **quote set**: Neville's exact words only, read by one calm voice.
 | Quote length | At most about 3 sentences each. Each one says how to apply one big idea. |
 | Chosen for | Recall and use the same day, not to cover the whole source |
 | Big-idea label | 3 to 5 words per quote, shown on screen, never spoken (for example "Make elsewhere here, now") |
-| Voice | **Gemini Sadaltager** (`google/gemini-3.8-flash-tts`, voice `Sadaltager`), with this style instruction: "Read as a warm, authoritative British lecturer with a light received-pronunciation accent. Measured and crisp, every consonant clear, never theatrical or sing-song. Do not sound excited. Let your pitch settle at the end of each sentence." One fixed voice for every quote, in every mode. Tim chose it on 2026-11-20 ("Gemini C was pretty Good, let's go with that.") over ElevenLabs George and Daniel. The accent comes from the prompt, so each stored recording is checked by ear before it ships. |
+| Voice | **Gemini Sadaltager** (`google/gemini-3.8-flash-tts`, voice `Sadaltager`), with this style instruction: "Read as a warm, authoritative British lecturer with a light received-pronunciation accent. Measured and crisp, every consonant clear, never theatrical or sing-song. Do not sound excited. Let your pitch settle at the end of each sentence." This is the **default** quote voice (Tim, 2026-11-20: "Gemini C was pretty Good, let's go with that."). **Alternates for mixing:** ElevenLabs George and ElevenLabs Daniel (`elevenlabs/eleven-v4-turbo`) stay available. Tim: "I liked all three, keep them available in order to mix things up, so don't lose the information or the files, we can use all of the voices." Each quote is recorded in all three voices. A set can rotate voices from quote to quote or from session to session, but never switches voice in the middle of a quote. The Sadaltager accent comes from the prompt, so each stored recording is checked by ear before it ships. |
 | Delivery | The lecturer voice speaks at its natural pace, so it keeps its clip. The mode sets the calm through the gap between quotes and the music (Calm sample: 3.5 s gaps over morning-light). |
 | Attribution | On screen: "Neville Goddard, *Five Lessons*, Lesson 1 (1948), p. 9". Kept with each quote in the metadata. |
 | Source text | Original transcript only (for lesson 1, the 1948 class), never a modern edition with its own additions |
-| Recording | Recorded once per quote and stored. Quotes are curated, not per listener, so a play costs nothing. Lesson 1's nine quotes cost about $0.015 in Sadaltager, once. |
+| Recording | Recorded once per quote and stored. Quotes are curated, not per listener, so a play costs nothing. Lesson 1's nine quotes cost about $0.015 in Sadaltager and about $0.05 each in George or Daniel, once. |
 
 Each quote is stored and recorded on its own, so a set can be cut to a different length or mix for each mode and placement.
 
@@ -47,7 +47,7 @@ A **short quote set** plays before or after the person's own playlist. A setting
 
 A standalone session that is **quotes only**, with no manifestations, in Calm, Sleep or Active.
 
-- It plays the whole ranked set for a lesson (5 to 8 quotes, about 2 to 3 minutes), or several lessons back to back.
+- It plays the whole ranked set for a lesson (5 to 9 quotes, about 2 to 3 minutes), or several lessons back to back.
 - It uses the mode's pace, music and gap, as a playlist does.
 - In Sleep it can loop with the sleep timer.
 
@@ -95,7 +95,7 @@ Marked **[REVIEW]** in each lesson file. Nothing is recorded for production unti
 ## Open questions
 
 1. **Rights (#43).** Option (a), (b) or (c). Recommended: (a), short verbatim quotes, plus an hour of a lawyer's time on when *Five Lessons* was first published. This decides whether the feature ships.
-2. **Quote voice: decided.** Gemini Sadaltager (Tim, 2026-11-20). The quote voice is a product setting, not a voice the listener picks, so it does not go into `config/voices.json` (that file is the list listeners choose from). The implementation PR adds it as its own config, so it can't be offered or swapped by accident.
+2. **Quote voices: decided.** The default is Gemini Sadaltager. ElevenLabs George and Daniel are alternates for mixing (Tim, 2026-11-20). Still open: how voices are mixed. Options are a random voice per quote, one voice per session, or a listener setting. The recommendation is one voice per session, so a set sounds like a single lecturer. The quote voice is a product setting, not a voice the listener picks, so it does not go into `config/voices.json` (that file is the list listeners choose from). The implementation PR adds it as its own config, so it can't be offered or swapped by accident.
 3. **Spoken attribution.** Should a set open with a single spoken line naming Neville, such as "Neville Goddard, 1948"? That would be the only words in a set that are not his. Not done in the sample.
 4. **How many sets at launch?** *Five Lessons* gives five, one per night of the 1948 class, if (a) holds.
 5. **PRD.** Add quote sets to the PRD and to `prd-coverage.md` once Tim agrees with this shape.
