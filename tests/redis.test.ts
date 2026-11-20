@@ -67,6 +67,21 @@ describe("Upstash counter", () => {
     expect(R.counterKind()).toBe("redis");
   });
 
+  it("warns once and uses memory when the variables are half set or not https", async () => {
+    const R = await import("@/lib/server/redis");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    R.resetRedisWarning();
+    process.env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+    expect(R.redisEnv()).toBeNull();
+    expect(R.counterKind()).toBe("memory");
+    process.env.UPSTASH_REDIS_REST_TOKEN = "t";
+    process.env.UPSTASH_REDIS_REST_URL = "http://example.upstash.io";
+    expect(R.redisEnv()).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).not.toContain("example.upstash.io");
+    warn.mockRestore();
+  });
+
   it("enforces the per-visitor limit across instances that share Redis", async () => {
     const { RedisCounter } = await import("@/lib/server/redis");
     // Two counters stand in for two server instances: they share only Redis.
@@ -88,11 +103,15 @@ describe("Upstash counter", () => {
     expect((await takeSlot("late", new RedisCounter(base, "t"))).refusal?.code).toBe("day_full");
   });
 
-  it("fails closed when Redis cannot be reached", async () => {
+  it("fails closed when Redis cannot be reached, and logs it", async () => {
     const { RedisCounter } = await import("@/lib/server/redis");
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
     fail = true;
     expect((await takeSlot("v1", new RedisCounter(base, "t"))).refusal?.code).toBe("limits_unavailable");
     expect((await takeSlot("v1", new RedisCounter("http://127.0.0.1:1", "t", 500))).refusal?.status).toBe(503);
+    expect(err).toHaveBeenCalled();
+    expect(String(err.mock.calls[0][0])).toContain("[limits]");
+    err.mockRestore();
   });
 
   it("hashes visitor addresses before they reach Redis", async () => {

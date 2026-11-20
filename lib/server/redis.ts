@@ -6,10 +6,32 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { type Counter, MemoryCounter } from "@/lib/limits";
 
+let warned = false;
+/** One log line per instance when the configuration is half there; never logs values. */
+function warnOnce(why: string) {
+  if (warned) return;
+  warned = true;
+  console.warn(`[limits] Redis not used (${why}); counting daily limits in memory, per instance.`);
+}
+
 export function redisEnv(): { url: string; token: string } | null {
   const url = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "").trim();
   const token = (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "").trim();
-  return url && token ? { url: url.replace(/\/+$/, ""), token } : null;
+  if (!url && !token) return null;
+  if (!url || !token) {
+    warnOnce(url ? "a REST URL is set but no token" : "a token is set but no REST URL");
+    return null;
+  }
+  if (!/^https:\/\//.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url)) {
+    warnOnce("the REST URL is not https");
+    return null;
+  }
+  return { url: url.replace(/\/+$/, ""), token };
+}
+
+/** For tests. */
+export function resetRedisWarning() {
+  warned = false;
 }
 
 type Reply = { result?: unknown; error?: string };

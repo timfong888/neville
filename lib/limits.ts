@@ -83,7 +83,9 @@ export async function takeSlot(visitor: string, counter: Counter = memory): Prom
   let total: number, mine: number;
   try {
     [total, mine] = await counter.incr(keys, DAY_TTL);
-  } catch {
+  } catch (e) {
+    // The store is down: refuse, and say so in the log (no visitor data in it).
+    console.error("[limits] counter unavailable, refusing recording:", e instanceof Error ? e.message : String(e));
     return {
       refusal: { status: 503, code: "limits_unavailable", error: "Recording is paused for a moment." },
       release: nothing,
