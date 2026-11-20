@@ -3,7 +3,7 @@
 // which sets either UPSTASH_REDIS_REST_URL / _TOKEN or KV_REST_API_URL /
 // _TOKEN; both pairs are read. Without them the app counts in memory.
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { type Counter, MemoryCounter } from "@/lib/limits";
 
 let warned = false;
@@ -108,10 +108,24 @@ export function counterKind(): "redis" | "memory" {
 }
 
 /**
- * The visitor key: a hash of the address, so raw IPs are never written to
- * Redis. Salted with the day, so keys cannot be joined across days.
+ * The key that salts visitor hashes. A server secret, so someone who can read
+ * Redis cannot brute-force addresses back from the hashes: LIMITS_SALT if set,
+ * otherwise a hash of the OpenRouter key (the key itself is never used or
+ * stored). Changing either resets the day's per-visitor counts.
+ */
+function salt(): string {
+  const own = process.env.LIMITS_SALT?.trim();
+  if (own) return own;
+  const key = process.env.OPENROUTER_API_KEY?.trim();
+  return key ? createHash("sha256").update(`neville-limits:${key}`, "utf8").digest("hex") : "neville-limits-dev";
+}
+
+/**
+ * The visitor key: an HMAC of the address with a server secret, also keyed by
+ * the day, so raw IPs are never written to Redis and keys cannot be joined
+ * across days.
  */
 export function visitorKey(ip: string): string {
   const day = new Date().toISOString().slice(0, 10);
-  return createHash("sha256").update(`neville:${day}:${ip}`, "utf8").digest("hex").slice(0, 32);
+  return createHmac("sha256", salt()).update(`${day}:${ip}`, "utf8").digest("hex").slice(0, 32);
 }

@@ -75,8 +75,9 @@ Limits are in `config/limits.json`:
   pairs are read). Then every server instance shares one count, it survives
   restarts, and a visitor cannot get extra recordings by landing on another
   instance. If Redis cannot be reached, recording is refused (fail closed),
-  like the spend ceiling. Visitor addresses are hashed with the day before
-  they are stored, and keys expire after two days. Without the variables
+  like the spend ceiling. Visitor addresses are stored only as an HMAC
+  keyed by a server secret (`LIMITS_SALT` if set, otherwise derived from the
+  OpenRouter key) and the day, and keys expire after two days. Without the variables
   (local dev, tests) the counters fall back to memory, one copy per instance.
   The two free creations before the sign-up prompt are softer: that count is
   in the browser's own storage. No bot check yet.

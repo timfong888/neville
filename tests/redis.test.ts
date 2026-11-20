@@ -121,6 +121,10 @@ describe("Upstash counter", () => {
     expect(k).not.toContain("203");
     expect(visitorKey("203.0.113.9")).toBe(k);
     expect(visitorKey("203.0.113.10")).not.toBe(k);
+    // Salted with a server secret: a different secret gives a different key.
+    process.env.LIMITS_SALT = "another-secret";
+    expect(visitorKey("203.0.113.9")).not.toBe(k);
+    delete process.env.LIMITS_SALT;
   });
 
   it("answers PING when reachable, and says so when not", async () => {
