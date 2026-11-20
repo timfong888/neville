@@ -27,6 +27,8 @@ export type MoveSource = {
   /** Items an earlier pass already saved to this account. */
   movedIds(accountId: string): Promise<MovedIds>;
   setMovedIds(accountId: string, ids: MovedIds): Promise<void>;
+  /** Account ids this device already used for other accounts; ids are global, so they cannot be reused. */
+  idsUsedByOtherAccounts(accountId: string): Promise<Set<string>>;
 };
 
 /** Device id -> the account id it was saved under, and a fingerprint of the device copy at that time. */
@@ -54,6 +56,7 @@ export async function moveDeviceWork(
   const total = lib.manifestations.length + lib.playlists.length;
   let done = 0;
   const known: MovedIds = { ...(await device.movedIds(accountId)) }; // saved on earlier passes
+  const taken = await device.idsUsedByOtherAccounts(accountId);
   const newIdFor = new Map<string, string>(); // device id -> account id, for items now in the account
   let moved = 0;
   const kept: MoveResult["kept"] = [];
@@ -72,8 +75,9 @@ export async function moveDeviceWork(
           kept.push({ title: m.title, reason: "its recording could not be read on this device just now" });
         } else {
           // A changed copy of an item already in the account goes in as a new
-          // item beside it, rather than over it.
-          const id = !prior && isUuid(m.id) ? m.id : newId();
+          // item beside it, rather than over it. An id another account on this
+          // device already holds is taken server-wide, so it gets a fresh one.
+          const id = !prior && isUuid(m.id) && !taken.has(m.id) ? m.id : newId();
           await target.saveManifestation({ ...m, id }, audio);
           newIdFor.set(m.id, id);
           known[m.id] = { id, v: fingerprint(m) };
