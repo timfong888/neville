@@ -7,28 +7,7 @@ import { fetchAccount, useAccount } from "@/lib/account/useAccount";
 import { AccountStore } from "@/lib/library/accountStore";
 import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { getDeviceStore } from "@/lib/library/useLibrary";
-
-/** Moves everything saved on this device into the account, then clears the device. */
-async function moveDeviceWork(onStep: (done: number, total: number) => void): Promise<number> {
-  const device = getDeviceStore();
-  const target = new AccountStore();
-  const lib = await device.load();
-  const total = lib.manifestations.length + lib.playlists.length;
-  let done = 0;
-  // Oldest first, so the account keeps the same order.
-  for (const m of [...lib.manifestations].sort((a, b) => a.createdAt - b.createdAt)) {
-    const audio = m.hasAudio ? await device.getAudio(m.id) : null;
-    await target.saveManifestation(m, audio);
-    onStep(++done, total);
-  }
-  for (const p of lib.playlists) {
-    await target.savePlaylist(p);
-    onStep(++done, total);
-  }
-  for (const p of lib.playlists) await device.deletePlaylist(p.id);
-  for (const m of lib.manifestations) await device.deleteManifestation(m.id);
-  return lib.manifestations.length;
-}
+import { moveDeviceWork } from "@/lib/account/moveDeviceWork";
 
 export default function AccountPage() {
   const { account, ready } = useAccount();
@@ -47,10 +26,17 @@ export default function AccountPage() {
   const move = useCallback(async () => {
     setBusy("Moving your saved work into your account…");
     try {
-      const n = await moveDeviceWork((d, t) => setBusy(`Moving your saved work into your account… ${d} of ${t}`));
-      setMsg(`Moved ${n} ${n === 1 ? "manifestation" : "manifestations"} from this device into your account.`);
+      const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), (d, t) =>
+        setBusy(`Moving your saved work into your account… ${d} of ${t}`),
+      );
+      const movedLine = `Moved ${r.moved} ${r.moved === 1 ? "manifestation" : "manifestations"} from this device into your account.`;
+      setMsg(
+        r.kept.length
+          ? `${movedLine} Still on this device, try again later: ${r.kept.map((k) => `“${k.title}” (${k.reason})`).join("; ")}.`
+          : movedLine,
+      );
     } catch (e) {
-      setMsg(`Some items could not be moved: ${e instanceof Error ? e.message : "unknown error"}. They are still on this device.`);
+      setMsg(`Your saved work could not be moved: ${e instanceof Error ? e.message : "unknown error"}. It is still on this device.`);
     }
     setBusy("");
     refreshDevice();
