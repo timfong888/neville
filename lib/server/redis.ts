@@ -119,12 +119,6 @@ export function counter(): Counter {
   return shared;
 }
 
-/** On previews and locally: does Redis answer? Null when it is not configured. */
-export async function redisReachable(): Promise<boolean | null> {
-  const env = redisEnv();
-  return env ? new RedisCounter(env.url, env.token).ping() : null;
-}
-
 /** Where the limits are counted, for the status route and the admin page. */
 export function counterKind(): "redis" | "memory" {
   return redisEnv() ? "redis" : "memory";
