@@ -72,10 +72,10 @@ describe("Upstash counter", () => {
     // Two counters stand in for two server instances: they share only Redis.
     const a = new RedisCounter(base, "t");
     const b = new RedisCounter(base, "t");
-    for (let i = 0; i < limits.perIpPerDay; i++) expect(await takeSlot("v1", i % 2 ? a : b)).toBeNull();
-    expect((await takeSlot("v1", a))?.code).toBe("visitor_full");
-    expect((await takeSlot("v1", b))?.code).toBe("visitor_full");
-    expect(await takeSlot("v2", a)).toBeNull();
+    for (let i = 0; i < limits.perIpPerDay; i++) expect((await takeSlot("v1", i % 2 ? a : b)).refusal).toBeNull();
+    expect((await takeSlot("v1", a)).refusal?.code).toBe("visitor_full");
+    expect((await takeSlot("v1", b)).refusal?.code).toBe("visitor_full");
+    expect((await takeSlot("v2", a)).refusal).toBeNull();
     expect(seenAuth).toBe("Bearer t");
     // Every key got an expiry, set once.
     expect([...ttls.values()].every((t) => t > 86400)).toBe(true);
@@ -84,15 +84,15 @@ describe("Upstash counter", () => {
   it("enforces the day's total across instances", async () => {
     const { RedisCounter } = await import("@/lib/server/redis");
     const a = new RedisCounter(base, "t");
-    for (let i = 0; i < limits.globalPerDay; i++) expect(await takeSlot(`v${i}`, a)).toBeNull();
-    expect((await takeSlot("late", new RedisCounter(base, "t")))?.code).toBe("day_full");
+    for (let i = 0; i < limits.globalPerDay; i++) expect((await takeSlot(`v${i}`, a)).refusal).toBeNull();
+    expect((await takeSlot("late", new RedisCounter(base, "t"))).refusal?.code).toBe("day_full");
   });
 
   it("fails closed when Redis cannot be reached", async () => {
     const { RedisCounter } = await import("@/lib/server/redis");
     fail = true;
-    expect((await takeSlot("v1", new RedisCounter(base, "t")))?.code).toBe("limits_unavailable");
-    expect((await takeSlot("v1", new RedisCounter("http://127.0.0.1:1", "t", 500)))?.status).toBe(503);
+    expect((await takeSlot("v1", new RedisCounter(base, "t"))).refusal?.code).toBe("limits_unavailable");
+    expect((await takeSlot("v1", new RedisCounter("http://127.0.0.1:1", "t", 500))).refusal?.status).toBe(503);
   });
 
   it("hashes visitor addresses before they reach Redis", async () => {
@@ -109,5 +109,11 @@ describe("Upstash counter", () => {
     expect(await new RedisCounter(base, "t").ping()).toBe(true);
     fail = true;
     expect(await new RedisCounter(base, "t").ping()).toBe(false);
+  });
+
+  it("gives every decremented key an expiry, so none can live forever", async () => {
+    const { RedisCounter } = await import("@/lib/server/redis");
+    await new RedisCounter(base, "t").decr(["nv:slots:orphan"]);
+    expect(ttls.get("nv:slots:orphan")).toBeGreaterThan(86400);
   });
 });

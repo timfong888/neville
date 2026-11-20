@@ -17,12 +17,21 @@ export interface Counter {
   decr(keys: string[]): Promise<void>;
 }
 
-/** One copy per server instance; old days are dropped as the date changes. */
+/** One copy per server instance. Entries expire with their TTL. */
 export class MemoryCounter implements Counter {
   private counts = new Map<string, { n: number; until: number }>();
+
+  /** Keeps memory bounded without ever dropping a day's total (the `:all` keys). */
+  private prune(now: number) {
+    if (this.counts.size <= 20000) return;
+    for (const [k, c] of this.counts) if (c.until <= now) this.counts.delete(k);
+    if (this.counts.size <= 20000) return;
+    for (const k of this.counts.keys()) if (!k.endsWith(":all")) this.counts.delete(k);
+  }
+
   async incr(keys: string[], ttlSec: number): Promise<number[]> {
     const now = Date.now();
-    if (this.counts.size > 20000) this.counts.clear(); // keep memory bounded
+    this.prune(now);
     return keys.map((k) => {
       const c = this.counts.get(k);
       const live = c && c.until > now ? c : { n: 0, until: now + ttlSec * 1000 };
@@ -31,11 +40,19 @@ export class MemoryCounter implements Counter {
       return live.n;
     });
   }
+
   async decr(keys: string[]): Promise<void> {
     for (const k of keys) {
       const c = this.counts.get(k);
-      if (c && c.n > 0) c.n--;
+      if (!c) continue;
+      if (c.n <= 1 && !k.endsWith(":all")) this.counts.delete(k); // refused visitors leave nothing behind
+      else if (c.n > 0) c.n--;
     }
+  }
+
+  /** For tests. */
+  size(): number {
+    return this.counts.size;
   }
 }
 
@@ -50,18 +67,27 @@ const keysFor = (visitor: string) => {
   return [`nv:slots:${d}:all`, `nv:slots:${d}:v:${visitor}`];
 };
 
+/** A counted request. `release` gives the slot back when nothing was spent. */
+export type Slot = { refusal: null; release: () => Promise<void> } | { refusal: Refusal; release: () => Promise<void> };
+
+const nothing = async () => undefined;
+
 /**
- * Counts one request against the visitor and the day. Returns a refusal when
- * over, and then counts nothing. If the counter cannot be reached, refuses:
- * the limits fail closed, like the spend ceiling.
+ * Counts one request against the visitor and the day. On refusal nothing
+ * stays counted. If the counter cannot be reached, refuses: the limits fail
+ * closed, like the spend ceiling. `release` undoes exactly the keys counted
+ * here, so a request that crosses midnight cannot touch the next day's count.
  */
-export async function takeSlot(visitor: string, counter: Counter = memory): Promise<Refusal | null> {
+export async function takeSlot(visitor: string, counter: Counter = memory): Promise<Slot> {
   const keys = keysFor(visitor);
   let total: number, mine: number;
   try {
     [total, mine] = await counter.incr(keys, DAY_TTL);
   } catch {
-    return { status: 503, code: "limits_unavailable", error: "Recording is paused for a moment." };
+    return {
+      refusal: { status: 503, code: "limits_unavailable", error: "Recording is paused for a moment." },
+      release: nothing,
+    };
   }
   const refusal: Refusal | null =
     total > limits.globalPerDay
@@ -69,13 +95,19 @@ export async function takeSlot(visitor: string, counter: Counter = memory): Prom
       : mine > limits.perIpPerDay
         ? { status: 429, code: "visitor_full", error: "You have used today's free recordings." }
         : null;
-  if (refusal) await counter.decr(keys).catch(() => undefined);
-  return refusal;
-}
-
-/** Gives a slot back when nothing was spent. */
-export async function returnSlot(visitor: string, counter: Counter = memory): Promise<void> {
-  await counter.decr(keysFor(visitor)).catch(() => undefined);
+  if (refusal) {
+    await counter.decr(keys).catch(() => undefined);
+    return { refusal, release: nothing };
+  }
+  let released = false;
+  return {
+    refusal: null,
+    release: async () => {
+      if (released) return;
+      released = true;
+      await counter.decr(keys).catch(() => undefined);
+    },
+  };
 }
 
 /** Null while there is budget left; a refusal once the key's usage reaches the ceiling or its credit runs out. */

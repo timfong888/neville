@@ -42,33 +42,58 @@ describe("spend ceiling (the hard cap)", () => {
 describe("per-visitor counter (soft cap)", () => {
   it("refuses the request after the daily allowance", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) expect(await takeSlot("1.1.1.1")).toBeNull();
-    expect((await takeSlot("1.1.1.1"))?.code).toBe("visitor_full");
+    for (let i = 0; i < limits.perIpPerDay; i++) expect((await takeSlot("1.1.1.1")).refusal).toBeNull();
+    expect((await takeSlot("1.1.1.1")).refusal?.code).toBe("visitor_full");
   });
   it("counts each visitor separately", async () => {
     const { takeSlot } = await fresh();
     for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
-    expect(await takeSlot("2.2.2.2")).toBeNull();
+    expect((await takeSlot("2.2.2.2")).refusal).toBeNull();
   });
   it("gives a slot back when nothing was spent", async () => {
-    const { takeSlot, returnSlot } = await fresh();
-    for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
-    await returnSlot("1.1.1.1");
-    expect(await takeSlot("1.1.1.1")).toBeNull();
-    expect((await takeSlot("1.1.1.1"))?.code).toBe("visitor_full");
+    const { takeSlot } = await fresh();
+    let last = await takeSlot("1.1.1.1");
+    for (let i = 1; i < limits.perIpPerDay; i++) last = await takeSlot("1.1.1.1");
+    await last.release();
+    await last.release(); // twice gives back one slot, not two
+    expect((await takeSlot("1.1.1.1")).refusal).toBeNull();
+    expect((await takeSlot("1.1.1.1")).refusal?.code).toBe("visitor_full");
   });
   it("starts again the next day", async () => {
     const { takeSlot } = await fresh();
     for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("1.1.1.1");
     vi.setSystemTime(new Date("2026-11-20T00:00:05Z"));
-    expect(await takeSlot("1.1.1.1")).toBeNull();
+    expect((await takeSlot("1.1.1.1")).refusal).toBeNull();
   });
 });
 
 describe("per-day counter (soft cap)", () => {
   it("refuses everyone once the day's total is reached", async () => {
     const { takeSlot } = await fresh();
-    for (let i = 0; i < limits.globalPerDay; i++) expect(await takeSlot(`10.0.${i >> 8}.${i & 255}`)).toBeNull();
-    expect((await takeSlot("9.9.9.9"))?.code).toBe("day_full");
+    for (let i = 0; i < limits.globalPerDay; i++) expect((await takeSlot(`10.0.${i >> 8}.${i & 255}`)).refusal).toBeNull();
+    expect((await takeSlot("9.9.9.9")).refusal?.code).toBe("day_full");
+  });
+});
+
+describe("slot release and memory bounds", () => {
+  it("releases the day it was taken, even after midnight", async () => {
+    const { takeSlot, MemoryCounter } = await fresh();
+    const c = new MemoryCounter();
+    vi.setSystemTime(new Date("2026-11-19T23:59:59Z"));
+    const slot = await takeSlot("1.1.1.1", c);
+    vi.setSystemTime(new Date("2026-11-20T00:00:02Z"));
+    await slot.release();
+    // The new day is untouched: a full allowance, and no negative start.
+    for (let i = 0; i < limits.perIpPerDay; i++) expect((await takeSlot("1.1.1.1", c)).refusal).toBeNull();
+    expect((await takeSlot("1.1.1.1", c)).refusal?.code).toBe("visitor_full");
+  });
+
+  it("never drops the day's total when memory fills, and refused visitors leave no entry", async () => {
+    const { takeSlot, MemoryCounter } = await fresh();
+    const c = new MemoryCounter();
+    for (let i = 0; i < limits.globalPerDay; i++) await takeSlot(`v${i}`, c);
+    for (let i = 0; i < 25000; i++) expect((await takeSlot(`flood${i}`, c)).refusal?.code).toBe("day_full");
+    expect(c.size()).toBeLessThan(limits.globalPerDay + 10);
+    expect((await takeSlot("late", c)).refusal?.code).toBe("day_full");
   });
 });

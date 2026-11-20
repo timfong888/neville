@@ -49,7 +49,8 @@ export class RedisCounter implements Counter {
   }
 
   async decr(keys: string[]): Promise<void> {
-    await this.pipeline(keys.map((k) => ["DECR", k]));
+    // The expiry again (NX), so a key can never be left without one.
+    await this.pipeline(keys.flatMap((k) => [["DECR", k], ["EXPIRE", k, 2 * 24 * 60 * 60, "NX"]]));
   }
 
   /** True when Redis answers PING. */

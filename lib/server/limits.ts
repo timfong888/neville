@@ -13,17 +13,12 @@
 import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
-import { type Refusal, budgetVerdict, returnSlot as returnIn, takeSlot as takeIn } from "@/lib/limits";
+import { type Refusal, budgetVerdict, takeSlot as takeIn } from "@/lib/limits";
 import { counter, visitorKey } from "@/lib/server/redis";
 
 /** Counts one request against the visitor and the day, in Redis when configured. */
 export function takeSlot(ip: string) {
   return takeIn(visitorKey(ip), counter());
-}
-
-/** Gives a slot back when nothing was spent. */
-export function returnSlot(ip: string) {
-  return returnIn(visitorKey(ip), counter());
 }
 
 export const LIMITS = limits;

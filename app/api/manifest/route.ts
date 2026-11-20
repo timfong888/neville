@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
-import { LIMITS, generationEnabled, returnSlot, takeSlot, underCeiling } from "@/lib/server/limits";
+import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { writeScript } from "@/lib/server/writer";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
@@ -54,12 +54,12 @@ export async function POST(req: Request) {
   const tone = resolveTone(body.tone);
 
   const ip = visitor(req);
-  const refused = await takeSlot(ip);
-  if (refused) return NextResponse.json(refused, { status: refused.status });
+  const slot = await takeSlot(ip);
+  if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    await returnSlot(ip);
+    await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
