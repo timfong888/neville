@@ -1,6 +1,6 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { APPLE_SECRET_TTL_S, appleClientSecret } from "@/lib/server/appleSecret";
+import { APPLE_SECRET_TTL_S, appleClientSecret, tryAppleClientSecret } from "@/lib/server/appleSecret";
 
 describe("appleClientSecret", () => {
   const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
@@ -25,5 +25,21 @@ describe("appleClientSecret", () => {
   it("accepts a key pasted with escaped newlines", () => {
     const escaped = pem.trim().replace(/\n/g, "\\n");
     expect(appleClientSecret({ teamId: "T", keyId: "K", clientId: "c", privateKey: escaped }).split(".")).toHaveLength(3);
+  });
+});
+
+describe("tryAppleClientSecret", () => {
+  const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const base = { teamId: "T", keyId: "K", clientId: "c" };
+
+  it("returns null for a key that cannot be read, instead of throwing", () => {
+    expect(tryAppleClientSecret({ ...base, privateKey: "not a key" })).toBeNull();
+    expect(tryAppleClientSecret({ ...base, privateKey: pem.slice(0, 60) })).toBeNull();
+  });
+
+  it("tolerates quotes and Windows line ends from a paste", () => {
+    expect(tryAppleClientSecret({ ...base, privateKey: `"${pem.replace(/\n/g, "\r\n")}"` })).not.toBeNull();
+    expect(tryAppleClientSecret({ ...base, privateKey: pem.trim().replace(/\n/g, "\\r\\n") })).not.toBeNull();
   });
 });

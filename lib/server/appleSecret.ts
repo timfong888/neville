@@ -27,7 +27,28 @@ export function appleClientSecret(opts: {
     sub: opts.clientId,
   };
   const input = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
-  const key = createPrivateKey(opts.privateKey.replace(/\\n/g, "\n"));
+  const key = createPrivateKey(normalizePem(opts.privateKey));
   const sig = sign("sha256", Buffer.from(input), { key, dsaEncoding: "ieee-p1363" });
   return `${input}.${b64url(sig)}`;
+}
+
+/** Undoes the usual paste damage: surrounding quotes, escaped newlines, Windows line ends. */
+export function normalizePem(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\r\\n|\\n/g, "\n")
+    .replace(/\r\n/g, "\n");
+}
+
+/**
+ * Like appleClientSecret, but returns null instead of throwing when the key
+ * cannot be used, so a bad optional Apple key never takes Google sign-in down.
+ */
+export function tryAppleClientSecret(opts: Parameters<typeof appleClientSecret>[0]): string | null {
+  try {
+    return appleClientSecret(opts);
+  } catch {
+    return null;
+  }
 }
