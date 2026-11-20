@@ -8,7 +8,7 @@ import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { lineStarts, startPad } from "@/lib/audio";
 import { newId } from "@/lib/library/model";
-import { getStore } from "@/lib/library/useLibrary";
+import { resolveStore } from "@/lib/library/useLibrary";
 
 type Stage = "form" | "making" | "player";
 
@@ -333,7 +333,7 @@ export default function DemoPage() {
       const audio = made ? await (await fetch(made.url)).blob() : null;
       const now = Date.now();
       const id = newId();
-      await getStore().saveManifestation(
+      await (await resolveStore()).saveManifestation(
         {
           id,
           // The general fallback is not about the wish, so its title is not either.
@@ -552,7 +552,7 @@ export default function DemoPage() {
 
       <p className="small muted">
         {made
-          ? `Recorded in the voice of ${made.voiceName}. ${savedId ? "Saved in your library on this device." : "Not kept unless you tap Save."}`
+          ? `Recorded in the voice of ${made.voiceName}. ${savedId ? "Saved in your library." : "Not kept unless you tap Save."}`
           : "Read by your device's own voice. Nothing was recorded."}
       </p>
 
@@ -579,23 +579,16 @@ export default function DemoPage() {
 }
 
 function Gate() {
-  const [msg, setMsg] = useState(false);
   return (
     <div className="gate">
       <h3>Keep this, in a voice you choose</h3>
       <p className="muted">
-        A free account saves your manifestations and plays them back to back. A
+        A free account saves your manifestations and plays them back to back, on any device. A
         subscription adds studio voices, daily variations, images and music.
       </p>
-      <button className="btn primary" onClick={() => setMsg(true)}>
+      <Link className="btn primary" href="/account">
         Create a free account
-      </button>
-      {msg && (
-        <p className="small muted" style={{ marginTop: 10 }}>
-          Sign-up and payment are not wired in this prototype. This is where Demo 1 hands
-          over to account creation, then to the paywall.
-        </p>
-      )}
+      </Link>
     </div>
   );
 }

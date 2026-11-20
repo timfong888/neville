@@ -19,7 +19,7 @@ export default function LibraryPage() {
         <Link href="/playlists">playlist</Link>.
       </p>
       {store.kind === "device" && (
-        <p className="small muted">Saved on this device only. An account keeps them everywhere (coming soon).</p>
+        <p className="small muted">Saved on this device only. <Link href="/account">An account</Link> keeps them on every device.</p>
       )}
 
       {!ready ? null : items.length === 0 ? (

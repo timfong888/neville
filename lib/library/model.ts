@@ -37,10 +37,28 @@ export const MAX_LINES = 40;
 export const MAX_PLAYLIST_NAME = 60;
 export const MAX_PLAYLIST_ITEMS = 100;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** True for the id format the server accepts. */
+export function isUuid(s: unknown): s is string {
+  return typeof s === "string" && UUID.test(s);
+}
+
+/**
+ * Always a version-4 UUID, which the account store requires. Browsers without
+ * crypto.randomUUID (older Safari, plain-http pages) get one built from
+ * getRandomValues, or from Math.random as a last resort.
+ */
 export function newId(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const c = (globalThis as { crypto?: { randomUUID?: () => string; getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
   if (c?.randomUUID) return c.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const b = new Uint8Array(16);
+  if (c?.getRandomValues) c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 export function cleanTitle(s: string): string {
