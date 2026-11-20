@@ -20,15 +20,15 @@ A **quote set**: Neville's exact words only, read by one calm voice.
 
 | Rule | Value |
 |---|---|
-| Content | 5 to 8 short quotes per source lesson, ranked strongest first. No AI-written text, no narrator, no explanations. |
+| Content | 5 to 9 short quotes per source lesson, ranked strongest first, with a summary quote to close where the source has one. No AI-written text, no narrator, no explanations. |
 | Quote length | At most about 3 sentences each. Each one says how to apply one big idea. |
 | Chosen for | Recall and use the same day, not to cover the whole source |
 | Big-idea label | 3 to 5 words per quote, shown on screen, never spoken (for example "Make elsewhere here, now") |
-| Voice | One fixed calm voice for all quotes, chosen per mode. The dev sample uses Gemini Vindemiatrix, which honours pace and style. |
-| Delivery | The mode's pace and music. A longer pause between quotes than between manifestation lines (sample: 3.5 s). |
+| Voice | One fixed voice for every quote, in every mode. Tim, 2026-11-20: "a male voice, authoritative, perhaps slightly british, speaks with a warm voice, but with the \"clip\" of a lecturer". Candidates: A ElevenLabs George (dev sample), B ElevenLabs Daniel, C Gemini Sadaltager with a British-lecturer style prompt. Tim picks one. |
+| Delivery | The lecturer voice speaks at its natural pace, so it keeps its clip. The mode sets the calm through the gap between quotes and the music (Calm sample: 3.5 s gaps over morning-light). |
 | Attribution | On screen: "Neville Goddard, *Five Lessons*, Lesson 1 (1948), p. 9". Kept with each quote in the metadata. |
 | Source text | Original transcript only (for lesson 1, the 1948 class), never a modern edition with its own additions |
-| Recording | Recorded once per quote and stored. Quotes are curated, not per listener, so a play costs nothing. |
+| Recording | Recorded once per quote and stored. Quotes are curated, not per listener, so a play costs nothing. A premium voice is affordable for this reason: lesson 1's nine quotes cost about $0.05 in ElevenLabs George, once. |
 
 Each quote is stored and recorded on its own, so a set can be cut to a different length or mix for each mode and placement.
 
@@ -95,7 +95,7 @@ Marked **[REVIEW]** in each lesson file. Nothing is recorded for production unti
 ## Open questions
 
 1. **Rights (#43).** Option (a), (b) or (c). Recommended: (a), short verbatim quotes, plus an hour of a lawyer's time on when *Five Lessons* was first published. This decides whether the feature ships.
-2. **Quote voice.** One voice in every mode, or one per mode? The sample uses Gemini Vindemiatrix in Calm.
+2. **Quote voice.** Tim to pick A, B or C from the audition clips. George and Daniel are on OpenRouter (`elevenlabs/eleven-v4-turbo`, $40 per 1M characters), and George is already in `config/voices.json`, disabled. Sadaltager is about a tenth of the price, but its accent depends on the prompt.
 3. **Spoken attribution.** Should a set open with a single spoken line naming Neville, such as "Neville Goddard, 1948"? That would be the only words in a set that are not his. Not done in the sample.
 4. **How many sets at launch?** *Five Lessons* gives five, one per night of the 1948 class, if (a) holds.
 5. **PRD.** Add quote sets to the PRD and to `prd-coverage.md` once Tim agrees with this shape.

@@ -6,9 +6,11 @@ Source: Neville Goddard, *Five Lessons*, Lesson 1, "Consciousness Is the Only Re
 
 Quotes are Neville's exact words from the PDF, with nothing added. The PDF prints some words in capitals for emphasis (FEELING, HERE, NOW). The spoken text below uses normal case and keeps every word. One fix: "mans" in quote 7 is printed that way in the PDF and is spoken as "man's".
 
-## Quote set (ranked strongest first)
+## Quote set
 
-Picked for recall and for use the same day, not to cover the whole lesson. The recorder reads rows 1 to 6 for the sample.
+Tim approved all 8 ranked quotes plus the p. 5 summary on 2026-11-20. That approval covers the selection only. The rights decision in #43 is still open.
+
+Picked for recall and for use the same day, not to cover the whole lesson. Rows 1 to 8 are ranked strongest first. **Play order is the table order, so the p. 5 summary (row 9) closes the set.** After eight separate techniques, ending on the whole method in three steps gives the listener one thing to carry away, and the last words heard are the ones remembered best. In a short Before or After set of 2 or 3 quotes, the summary can stand alone or close the set.
 
 | # | Page | Big idea | Quote (spoken text) |
 |---|---|---|---|
@@ -20,13 +22,13 @@ Picked for recall and for use the same day, not to cover the whole lesson. The r
 | 6 | 9–10 | Drowsy "thank you" lullaby | A most effective way to embody a desire is to assume the feeling of the wish fulfilled and then, in a relaxed and drowsy state, repeat over and over again like a lullaby, any short phrase which implies fulfillment of your desire, such as, thank you, thank you, thank you. |
 | 7 | 3 | Self-concept is the cornerstone | The corner-stone on which all things are based is man's concept of himself. |
 | 8 | 6 | Don't fight what is | You do not send your visible world hunting, as so many people do, by denial. By saying it does not exist you make it all the more real. |
-
-Reserve, the whole method in one quote (p. 5): "Know that your consciousness is the only reality. Then know what you want to be. Then assume the feeling of being that which you want to be, and remain faithful to your assumption, living and acting on your conviction."
+| 9 | 5 | The whole method, in three | Know that your consciousness is the only reality. Then know what you want to be. Then assume the feeling of being that which you want to be, and remain faithful to your assumption, living and acting on your conviction. |
 
 Mode notes:
 - Quote 6 asks for a relaxed, drowsy state (`needsStillness`). Leave it out of Active sets.
 - Quotes 1, 4 and 5 suit Active best.
 - Quotes 2, 6 and 7 suit Sleep.
+- Quote 9 suits every mode.
 
 [REVIEW] items:
 - Quote 2 ("alters his future") and quote 3 ("success and failure") are Neville's claims, quoted as his. Nothing in the app may restate them as a promise. [REVIEW: outcome claims]

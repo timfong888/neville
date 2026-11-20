@@ -1,0 +1,23 @@
+{
+  "src": "docs/specs/lessons/lesson-01.md",
+  "mode": "calm",
+  "voice": {
+    "key": "george",
+    "label": "ElevenLabs George",
+    "model": "elevenlabs/eleven-v4-turbo",
+    "voice": "george",
+    "instructions": null
+  },
+  "quotes": [
+    {
+      "n": 1,
+      "page": "9",
+      "idea": "Make elsewhere here, now"
+    }
+  ],
+  "chars": 191,
+  "durationS": 15,
+  "estimateUsd": 0.007640000000000001,
+  "spentUsd": 0,
+  "recorded": "2026-11-20T06:44:10.430Z"
+}
