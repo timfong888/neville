@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveDeviceWork, type MoveSource, type MoveTarget } from "@/lib/account/moveDeviceWork";
+import { moveDeviceWork, type MovedIds, type MoveSource, type MoveTarget } from "@/lib/account/moveDeviceWork";
 import { addItem, isUuid, makePlaylist, type Manifestation, newId, type Playlist } from "@/lib/library/model";
 
 const U1 = "11111111-1111-4111-8111-111111111111";
@@ -63,7 +63,7 @@ describe("moveDeviceWork", () => {
   // A real-ish device: deleting a manifestation strips it from playlists, as
   // DeviceStore does, and the moved-ids record persists between passes.
   function realDevice(ms: Manifestation[], ps: Playlist[], readable: () => boolean, blob: Blob) {
-    const state = { lib: { manifestations: ms, playlists: ps }, movedIds: {} as Record<string, Record<string, string>> };
+    const state = { lib: { manifestations: ms, playlists: ps }, movedIds: {} as Record<string, MovedIds> };
     const device: MoveSource = {
       load: async () => state.lib,
       getAudio: async (id) => (ms.find((x) => x.id === id)?.hasAudio && readable() ? blob : null),
@@ -150,6 +150,36 @@ describe("moveDeviceWork", () => {
     expect(savedM).toHaveLength(2); // the legacy item once, U2 once
     expect(playlists).toHaveLength(1);
     expect(playlists[0].itemIds).toEqual(savedM);
+  });
+
+  it("saves a device edit made after the first move as a new item, losing nothing", async () => {
+    let readable = false;
+    const { device, state } = realDevice(
+      [m(U1, false, 1), m(U2, true, 2)],
+      [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
+      () => readable,
+      new Blob(["x"]),
+    );
+    const account = new Map<string, Manifestation>();
+    const playlists: Playlist[] = [];
+    const target: MoveTarget = {
+      saveManifestation: async (x) => void account.set(x.id, x),
+      savePlaylist: async (p) => void playlists.push(p),
+    };
+    await moveDeviceWork(device, target, ACC);
+    // Signed out, the person renames U1 on the device.
+    state.lib = {
+      ...state.lib,
+      manifestations: state.lib.manifestations.map((x) => (x.id === U1 ? { ...x, title: "Edited on device", updatedAt: 9 } : x)),
+    };
+    readable = true;
+    const r = await moveDeviceWork(device, target, ACC);
+    expect(r.kept).toEqual([]);
+    expect(account.get(U1)?.title).toBe("T 1111"); // the account's copy is untouched
+    const copy = [...account.values()].find((x) => x.title === "Edited on device");
+    expect(copy && copy.id !== U1).toBe(true); // and the edit is kept beside it
+    expect(playlists[0].itemIds).toEqual([copy!.id, U2]);
+    expect(state.lib.manifestations).toEqual([]);
   });
 
   it("keeps the record per account", async () => {
