@@ -359,6 +359,7 @@ export default function PlaylistPlayer({
   /** Moves to another position without restarting the music. */
   const jump = (p: number) => {
     if (p < 0) return finish();
+    if (paused.current) unpauseClocks();
     const mine = cancelTrack();
     // A device-voice track does not touch the element, so stop the recording that was playing.
     // Marked as a switch so the pause listener does not take it for a system pause.
@@ -458,6 +459,17 @@ export default function PlaylistPlayer({
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
   };
 
+  /**
+   * Leaving a pause by any route (Resume, Next, Previous): the sleep timer stops while paused,
+   * so move its deadline and any fade under way by the pause. Returns the pause length.
+   */
+  const unpauseClocks = () => {
+    const pausedFor = Date.now() - pausedAt.current;
+    if (sleepEndsAt.current !== null) sleepEndsAt.current += pausedFor;
+    if (fading.current) fading.current.from += pausedFor;
+    return pausedFor;
+  };
+
   const resume = () => {
     if (!paused.current) {
       // Playing by our state but the system stopped the element: just start it again.
@@ -465,11 +477,7 @@ export default function PlaylistPlayer({
       return;
     }
     paused.current = false;
-    const pausedFor = Date.now() - pausedAt.current;
-    trackStart.current += pausedFor;
-    // The sleep timer stops while paused: move its deadline, and any fade under way, by the pause.
-    if (sleepEndsAt.current !== null) sleepEndsAt.current += pausedFor;
-    if (fading.current) fading.current.from += pausedFor;
+    trackStart.current += unpauseClocks();
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
     if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
