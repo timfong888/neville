@@ -78,9 +78,9 @@ values, and not on production).
 | `ACCOUNTS_ENABLED` | set to `true` |
 | `DATABASE_URL` | Neon, added from the Vercel Marketplace |
 | `BLOB_READ_WRITE_TOKEN` | a **private** Vercel Blob store connected to the project |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web client; redirect URI `https://<host>/api/auth/callback/google` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web client. Authorized redirect URIs: `https://getneville.vercel.app/api/auth/callback/google` and `https://neville-delta.vercel.app/api/auth/callback/google` (plus a preview branch URL if you test sign-in there); JavaScript origins: the same two hosts |
 | `BETTER_AUTH_SECRET` | 32+ random characters |
-| `BETTER_AUTH_URL` | optional; defaults to the production or branch URL |
+| `BETTER_AUTH_URL` | optional; production defaults to `https://getneville.vercel.app`, previews to their branch URL. `https://neville-delta.vercel.app` stays a trusted origin |
 
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
 build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
