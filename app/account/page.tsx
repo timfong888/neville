@@ -23,10 +23,12 @@ export default function AccountPage() {
   const signedIn = account.enabled && !!account.user;
   const deviceCount = deviceLib.manifestations.length;
 
+  const userId = account.user?.id ?? "";
   const move = useCallback(async () => {
+    if (!userId) return;
     setBusy("Moving your saved work into your account…");
     try {
-      const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), (d, t) =>
+      const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), userId, (d, t) =>
         setBusy(`Moving your saved work into your account… ${d} of ${t}`),
       );
       const movedLine = `Moved ${r.moved} ${r.moved === 1 ? "manifestation" : "manifestations"} from this device into your account.`;
@@ -40,7 +42,7 @@ export default function AccountPage() {
     }
     setBusy("");
     refreshDevice();
-  }, [refreshDevice]);
+  }, [refreshDevice, userId]);
 
   // First visit after signing in: bring device work across once.
   useEffect(() => {

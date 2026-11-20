@@ -24,6 +24,9 @@ export interface LibraryStore {
 }
 
 const KEY = "nv_library_v1";
+// Device items already copied into an account, per account id (device id -> account id). Not
+// under the nv_library prefix, so writing it does not reload open views.
+const MOVED_KEY = "nv_moved_to_account_v1";
 const DB = "neville";
 const AUDIO = "audio";
 
@@ -134,5 +137,29 @@ export class DeviceStore implements LibraryStore {
   async deletePlaylist(id: string): Promise<void> {
     const lib = this.read();
     this.write({ ...lib, playlists: lib.playlists.filter((x) => x.id !== id) });
+  }
+
+  /** Items already copied into this account: device id -> account id. */
+  async movedIds(accountId: string): Promise<Record<string, string>> {
+    const raw = this.readMoved()[accountId];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string"));
+  }
+
+  async setMovedIds(accountId: string, ids: Record<string, string>): Promise<void> {
+    const all = this.readMoved();
+    if (Object.keys(ids).length) all[accountId] = ids;
+    else delete all[accountId];
+    if (Object.keys(all).length) window.localStorage.setItem(MOVED_KEY, JSON.stringify(all));
+    else window.localStorage.removeItem(MOVED_KEY);
+  }
+
+  private readMoved(): Record<string, unknown> {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(MOVED_KEY) ?? "{}");
+      return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    } catch {
+      return {};
+    }
   }
 }
