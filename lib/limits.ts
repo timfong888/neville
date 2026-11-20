@@ -13,6 +13,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 let day = today();
 let total = 0;
 const perIp = new Map<string, number>();
+// Text-only expansion costs a fraction of a cent, so it has its own per-visitor
+// count and does not use up the day's recordings.
+const expandPerIp = new Map<string, number>();
 
 function roll() {
   const t = today();
@@ -20,6 +23,7 @@ function roll() {
     day = t;
     total = 0;
     perIp.clear();
+    expandPerIp.clear();
   }
 }
 
@@ -55,4 +59,21 @@ export function budgetVerdict(usage: number, limitRemaining: number | null | und
   return spent || empty
     ? { status: 429, code: "budget_spent", error: "The free recording budget is used up for now." }
     : null;
+}
+
+/** Counts one text expansion against the visitor. Same soft, in-memory caveats as takeSlot. */
+export function takeExpandSlot(ip: string): Refusal | null {
+  roll();
+  const used = expandPerIp.get(ip) ?? 0;
+  if (used >= limits.expandPerIpPerDay) {
+    return { status: 429, code: "expand_full", error: "You have used today's free drafts." };
+  }
+  if (expandPerIp.size > 5000) expandPerIp.clear();
+  expandPerIp.set(ip, used + 1);
+  return null;
+}
+
+export function returnExpandSlot(ip: string) {
+  const used = expandPerIp.get(ip) ?? 0;
+  if (used > 0) expandPerIp.set(ip, used - 1);
 }

@@ -15,7 +15,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { type Refusal, budgetVerdict } from "@/lib/limits";
 import { checkBudget } from "@/lib/server/ledger";
 
-export { returnSlot, takeSlot } from "@/lib/limits";
+export { returnExpandSlot, returnSlot, takeExpandSlot, takeSlot } from "@/lib/limits";
 
 export const LIMITS = limits;
 
