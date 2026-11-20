@@ -8,6 +8,7 @@ import {
   resolveVoice,
 } from "@/lib/voices";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
+import { honoursPace } from "@/lib/voiceMix";
 
 export default function VoicePicker() {
   const [chosen, setChosen] = useState(DEFAULT_VOICE_ID);
@@ -77,7 +78,9 @@ export default function VoicePicker() {
                 {v.id === DEFAULT_VOICE_ID && <span className="pill">Default</span>}
               </span>
               <span className="small muted">
-                {[v.generate ? "" : "Sample only", v.label, v.provider, TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
+                {[v.generate ? "" : "Sample only", v.label, v.provider, TIER_LABEL[v.tier], v.generate && !honoursPace(v) ? "Ignores pace" : ""]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </label>
             <button

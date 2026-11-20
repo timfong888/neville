@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import DeliveryPicker from "./DeliveryPicker";
+import MixPicker from "./MixPicker";
 import ModePicker from "./ModePicker";
 import MusicPicker from "./MusicPicker";
 import VoicePicker from "./VoicePicker";
@@ -17,6 +18,7 @@ export default function SettingsBody() {
       <DeliveryPicker key={`d${rev}`} />
       <h2>Voice</h2>
       <VoicePicker />
+      <MixPicker />
       <h2>Music</h2>
       <MusicPicker key={`m${rev}`} />
     </>
