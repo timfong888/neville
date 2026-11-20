@@ -18,7 +18,10 @@ export async function PUT(req: Request, { params }: Ctx) {
     id,
     name: body.name,
     itemIds: body.itemIds.filter((x): x is string => typeof x === "string"),
-    createdAt: typeof body.createdAt === "number" && body.createdAt <= Date.now() + 60_000 ? body.createdAt : Date.now(),
+    createdAt:
+      typeof body.createdAt === "number" && Number.isFinite(body.createdAt) && body.createdAt > 0 && body.createdAt <= Date.now() + 60_000
+        ? body.createdAt
+        : Date.now(),
     updatedAt: Date.now(),
   };
   return asOwner(req, async (db, profileId) =>
