@@ -88,16 +88,15 @@ read by the device's own voice, which costs nothing.
   that waits on the delivery work in #19. The ceiling and alerts are not
   affected: they use OpenRouter's own usage counter.
 - **Admin page.** Set `ADMIN_TOKEN` in Vercel, open `/admin/usage` and enter
-  it once (a 12-hour httpOnly cookie holds a hash of it; the token never goes
-  in a URL): a banner at 50/80/100%, kill-switch state and recent ledger rows.
+  it once (a 12-hour httpOnly cookie holds a signed session whose expiry the
+  server checks; the token never goes in a URL or the cookie): a banner at 50/80/100%, kill-switch state and recent ledger rows.
   Without `ADMIN_TOKEN` the page is a 404. Use a long random token (32+
   characters, e.g. `openssl rand -base64 32`); after 10 wrong tries a visitor
   is refused for 15 minutes. That throttle is best effort: it is counted in
   memory per server instance (durable once a shared store such as Upstash is
   added, issue #8), and it identifies the visitor by `x-real-ip` /
   `x-forwarded-for`, which only Vercel's own edge sets reliably; behind any
-  other proxy those headers can be forged. The cookie stays valid until it expires or the
-  token is changed.
+  other proxy those headers can be forged. Changing the token signs every session out.
 - **Kill switch.** `SPEECH_ENABLED=false` (Vercel env, then redeploy: about a
   minute) or `generationEnabled: false` in `config/limits.json`. For an
   instant stop, disable the key at openrouter.ai: recording refuses whenever

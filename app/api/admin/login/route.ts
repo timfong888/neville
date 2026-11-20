@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE, adminCookieValue, adminToken, clearFailedLogins, loginBlocked, noteFailedLogin, tokenMatches } from "@/lib/server/admin";
+import { ADMIN_COOKIE, SESSION_SECONDS, adminCookieValue, adminToken, clearFailedLogins, loginBlocked, noteFailedLogin, tokenMatches } from "@/lib/server/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     secure: self.protocol === "https:",
     sameSite: "strict",
     path: "/admin",
-    maxAge: 12 * 60 * 60,
+    maxAge: SESSION_SECONDS, // the server also enforces this, in isAdminCookie
   });
   return res;
 }
