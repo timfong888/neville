@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { lineStarts, startPad } from "@/lib/audio";
+import { lineStarts } from "@/lib/audio";
+import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
+import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
+import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
 import type { Manifestation } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
 import { hashOf } from "@/lib/script";
@@ -21,12 +24,22 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
   const [cur, setCur] = useState(-1);
   const [idx, setIdx] = useState(-1);
   const [music, setMusic] = useState(true);
+  const [volume, setVolume] = useState(0.6);
   const [done, setDone] = useState(false);
   const [note, setNote] = useState("");
 
   const token = useRef(0);
   const el = useRef<HTMLAudioElement | null>(null);
-  const stopPad = useRef<(() => void) | null>(null);
+  const bed = useRef<MusicBed | null>(null);
+  // Where the voice speaks in each recording, so the music dips under it.
+  const speech = useRef<Record<string, Segment[]>>({});
+
+  useEffect(() => {
+    setVolume(readMusicVolume());
+    const choice = readMusicChoice();
+    setMusic(choice !== "none");
+    prefetchMusic(choice);
+  }, []);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
 
@@ -43,6 +56,7 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         if (!b) return null;
         const u = URL.createObjectURL(b);
         made.push(u);
+        void speechOf(b).then((s) => live && (speech.current[m.id] = s));
         return [m.id, u] as const;
       }),
     ).then((pairs) => {
@@ -64,11 +78,11 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
     timers.current = [];
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     if (el.current) {
-      el.current.onended = el.current.ontimeupdate = el.current.onerror = null;
+      el.current.onended = el.current.ontimeupdate = el.current.onerror = el.current.onplaying = null;
       el.current.pause();
     }
-    stopPad.current?.();
-    stopPad.current = null;
+    bed.current?.stop();
+    bed.current = null;
     setPlaying(false);
   }, []);
 
@@ -92,14 +106,22 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
       const u = new SpeechSynthesisUtterance(text);
       u.rate = 0.82;
       u.pitch = 0.95;
-      u.onstart = () => token.current === mine && setIdx(i);
+      u.onstart = () => {
+        if (token.current !== mine) return;
+        setIdx(i);
+        bed.current?.holdDuck(true);
+      };
       u.onerror = (e) => {
         if (failed || token.current !== mine || e.error === "canceled" || e.error === "interrupted") return;
         failed = true;
         synth.cancel();
         readAlong(m, i, mine, next);
       };
-      if (i === m.lines.length - 1) u.onend = () => !failed && next();
+      u.onend = () => {
+        if (token.current !== mine) return;
+        bed.current?.holdDuck(false);
+        if (i === m.lines.length - 1 && !failed) next();
+      };
       synth.speak(u);
     });
   };
@@ -132,7 +154,16 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
       while (k + 1 < starts.length && starts[k + 1] <= at) k++;
       setIdx(k);
     };
-    a.onended = next;
+    a.onplaying = () => {
+      if (token.current !== mine) return;
+      const segs = speech.current[m.id];
+      if (segs?.length) bed.current?.duckFor(segs, a.currentTime);
+      else bed.current?.holdDuck(true);
+    };
+    a.onended = () => {
+      bed.current?.holdDuck(false);
+      next();
+    };
     a.onerror = () => {
       if (token.current !== mine) return;
       a.onerror = a.onended = null;
@@ -155,7 +186,11 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
     setNote("");
     setPlaying(true);
     if (!el.current) el.current = new Audio();
-    if (music) stopPad.current = startPad();
+    if (music) {
+      const choice = readMusicChoice();
+      bed.current = new MusicBed();
+      void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume);
+    }
     runItem(from, mine);
   };
 
@@ -205,6 +240,24 @@ export default function PlaylistPlayer({ items }: { items: Manifestation[] }) {
         >
           Music: {music ? "on" : "off"}
         </button>
+        {music && (
+          <label className="small muted volume">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              aria-label="Music volume"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setVolume(v);
+                writeMusicVolume(v);
+                bed.current?.setVolume(v);
+              }}
+            />
+          </label>
+        )}
       </div>
       {note && <p className="small muted">{note}</p>}
       <ol className="script">
