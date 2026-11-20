@@ -13,6 +13,27 @@ function storage(): Storage | null {
 }
 
 /**
+ * Revokes the public link this device made for a manifestation, if any.
+ * Called when the manifestation is deleted, so its page stops being public.
+ * Returns false only if a link exists and could not be revoked.
+ */
+export async function revokeShareFor(manifestationId: string): Promise<boolean> {
+  const held = readHeld(storage())[manifestationId];
+  if (!held) return true;
+  try {
+    const res = await fetch(`/api/share/${held.shareId}`, {
+      method: "DELETE",
+      headers: { "X-Owner-Token": held.ownerToken },
+    });
+    if (!res.ok && res.status !== 404) return false;
+  } catch {
+    return false;
+  }
+  writeHeld(storage(), manifestationId, null);
+  return true;
+}
+
+/**
  * Make a public link to one manifestation, copy it, and revoke it. The link
  * is a frozen copy of the title and script at the time it was made. The
  * owner token that allows revoking stays on this device.

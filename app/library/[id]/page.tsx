@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
-import SharePanel from "@/app/components/SharePanel";
+import SharePanel, { revokeShareFor } from "@/app/components/SharePanel";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
 import { type Manifestation } from "@/lib/library/model";
@@ -117,7 +117,13 @@ export default function ManifestationPage() {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists.`)) return;
+    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists, and its public link stops working.`)) return;
+    // Take the public page down first: once the manifestation is gone there
+    // is no screen left to revoke it from.
+    if (!(await revokeShareFor(m.id))) {
+      setMsg("Its public link could not be revoked just now, so nothing was deleted. Try again.");
+      return;
+    }
     await store.deleteManifestation(m.id);
     router.push("/library");
   };
