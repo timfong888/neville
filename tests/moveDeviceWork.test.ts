@@ -51,9 +51,44 @@ describe("moveDeviceWork", () => {
     expect(r.moved).toBe(1);
     expect(r.kept[0].reason).toMatch(/recording/);
     expect(f.saved.m.map((x) => x.id)).toEqual([U2]);
-    expect(f.deleted.m).toEqual([U2]); // U1 and its recording stay
     expect(f.saved.p[0].itemIds).toEqual([U2]);
-    expect(f.deleted.p).toEqual([]); // playlist still references U1, so it stays too
+    expect(f.deleted.p).toEqual([]); // playlist still references U1, so it stays
+    expect(f.deleted.m).toEqual([]); // and so do both items it lists, U1's recording included
+  });
+
+  it("a retry after a partial move keeps the whole playlist, in order", async () => {
+    // A real-ish device: deleting a manifestation strips it from playlists, as DeviceStore does.
+    const blob = new Blob(["x"]);
+    let lib = {
+      manifestations: [m(U1, false, 1), m(U2, true, 2)],
+      playlists: [addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2)],
+    };
+    let readable = false;
+    const device: MoveSource = {
+      load: async () => lib,
+      getAudio: async (id) => (id === U2 && readable ? blob : null),
+      deleteManifestation: async (id) => {
+        lib = {
+          manifestations: lib.manifestations.filter((x) => x.id !== id),
+          playlists: lib.playlists.map((p) => ({ ...p, itemIds: p.itemIds.filter((x) => x !== id) })),
+        };
+      },
+      deletePlaylist: async (id) => {
+        lib = { ...lib, playlists: lib.playlists.filter((p) => p.id !== id) };
+      },
+    };
+    const account = new Map<string, Playlist>();
+    const target: MoveTarget = { saveManifestation: async () => {}, savePlaylist: async (p) => void account.set(p.id, p) };
+
+    const first = await moveDeviceWork(device, target);
+    expect(first.kept).toHaveLength(1);
+    expect(account.get(U3)?.itemIds).toEqual([U1]);
+
+    readable = true;
+    const second = await moveDeviceWork(device, target);
+    expect(second.kept).toEqual([]);
+    expect(account.get(U3)?.itemIds).toEqual([U1, U2]);
+    expect(lib).toEqual({ manifestations: [], playlists: [] });
   });
 
   it("carries on past an item the account rejects", async () => {
