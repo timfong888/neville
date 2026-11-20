@@ -40,6 +40,18 @@ export async function revokeShareFor(manifestationId: string): Promise<boolean> 
 }
 
 /**
+ * Revokes every public link this device holds a token for, and the account's
+ * links to the given manifestations. Used before wiping the device, which
+ * would otherwise leave links live with no screen left to revoke them from.
+ * Returns false if any could not be revoked; nothing should be deleted then.
+ */
+export async function revokeAllShares(manifestationIds: string[]): Promise<boolean> {
+  const ids = new Set([...manifestationIds, ...Object.keys(readHeld(storage()))]);
+  for (const id of ids) if (!(await revokeShareFor(id))) return false;
+  return true;
+}
+
+/**
  * Make a public link to one manifestation, copy it, and revoke it. The link
  * is a frozen copy of the title and script at the time it was made. The
  * owner token that allows revoking stays on this device.

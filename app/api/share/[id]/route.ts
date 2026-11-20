@@ -14,7 +14,10 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   if (origin && origin !== new URL(req.url).origin) {
     return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   }
-  if (!dbConfigured()) return NextResponse.json({ error: "Public links are not switched on." }, { status: 503 });
+  // With links switched off no public page can be served, so there is nothing
+  // to revoke: answer as for a link that is already gone, so deleting the
+  // manifestation it came from is never blocked.
+  if (!dbConfigured()) return NextResponse.json({ error: "Public links are not switched on." }, { status: 404 });
   const { id } = await ctx.params;
   const t = req.headers.get("x-owner-token")?.trim() ?? "";
   const token = OWNER_TOKEN.test(t) ? t : null;

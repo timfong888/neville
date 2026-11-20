@@ -8,6 +8,7 @@ import { AccountStore } from "@/lib/library/accountStore";
 import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { getDeviceStore } from "@/lib/library/useLibrary";
 import { moveDeviceWork } from "@/lib/account/moveDeviceWork";
+import { revokeAllShares } from "@/app/components/SharePanel";
 
 export default function AccountPage() {
   const { account, ready } = useAccount();
@@ -80,6 +81,11 @@ export default function AccountPage() {
 
   const clearDevice = async () => {
     if (!window.confirm("Delete every manifestation and playlist saved on this device?")) return;
+    // Take public links down first: after the wipe no screen can revoke them.
+    if (!(await revokeAllShares(deviceLib.manifestations.map((m) => m.id)))) {
+      setMsg("A public link could not be revoked just now, so nothing was deleted. Try again.");
+      return;
+    }
     const d = getDeviceStore();
     for (const p of deviceLib.playlists) await d.deletePlaylist(p.id);
     for (const m of deviceLib.manifestations) await d.deleteManifestation(m.id);
