@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
-import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
+import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
 import { applyMode, readMode } from "@/lib/modeStore";
@@ -93,6 +93,10 @@ export default function PlaylistPlayer({
   const stale = useRef<string[]>([]);
   // True from setting the element's src until it plays, so a pause that comes with a src change is not taken for a system pause.
   const switching = useRef(false);
+  // True while the current track (or its gap) plays through the <audio> element; false during the
+  // device voice. Resume only restarts the element when it is in use, so an old recording left
+  // paused on it cannot start again under the device voice.
+  const usesElement = useRef(false);
   // For Previous: when the current track started (moved forward by pauses), and whether the gap after it is playing.
   const trackStart = useRef(0);
   const inGap = useRef(false);
@@ -261,6 +265,7 @@ export default function PlaylistPlayer({
     a.onended = go;
     a.onerror = go;
     inGap.current = true;
+    usesElement.current = true;
     switching.current = true;
     a.src = gapUrl.current;
     void a.play().catch(() => {
@@ -322,7 +327,11 @@ export default function PlaylistPlayer({
     setIdx(0);
     showOnLockScreen(m);
     const url = u[m.id];
-    if (!url) return speak(m, mine);
+    if (!url) {
+      usesElement.current = false;
+      return speak(m, mine);
+    }
+    usesElement.current = true;
 
     const a = el.current!;
     const starts = lineStarts(m.lines);
@@ -343,16 +352,22 @@ export default function PlaylistPlayer({
       else bed.current?.holdDuck(true);
     };
     a.onended = () => afterTrack(mine);
-    a.onerror = () => {
-      if (token.current !== mine) return;
-      a.onerror = a.onended = a.onplaying = null;
-      setNote(`The recording of “${m.title}” could not be played, so your device read it.`);
+    // The error event and the play() rejection can both report one failure: fall back once.
+    let fellBack = false;
+    const fallBack = (why?: string) => {
+      if (fellBack || token.current !== mine) return;
+      fellBack = true;
+      a.onerror = a.onended = a.onplaying = a.ontimeupdate = null;
+      usesElement.current = false;
+      if (why) setNote(why);
       speak(m, mine);
     };
-    void a.play().catch(() => {
-      if (token.current !== mine || paused.current) return;
-      a.onerror = a.onended = a.onplaying = null;
-      speak(m, mine);
+    a.onerror = () => fallBack(`The recording of “${m.title}” could not be played, so your device read it.`);
+    void a.play().catch((err: unknown) => {
+      if (fellBack || token.current !== mine || paused.current || a.src !== url) return;
+      // AbortError without a Pause from us: the system interrupted (a call, Siri). Show it as paused.
+      if ((err as { name?: string })?.name === "AbortError") return pauseRef.current();
+      fallBack();
     });
   };
 
@@ -370,11 +385,12 @@ export default function PlaylistPlayer({
     startAt(p, mine);
   };
 
-  const startMusic = (vol = volume, on = music) => {
+  /** Starts the music bed. A mode chosen on the player passes its own track and fade, so it does not depend on storage. */
+  const startMusic = (vol = volume, on = music, track?: MusicChoice, fadeInS?: number) => {
     if (!on) return;
-    const choice = readMusicChoice();
+    const choice = track ?? readMusicChoice();
     bed.current = new MusicBed();
-    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, resolveMode(readMode().id).fadeInS);
+    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? resolveMode(readMode().id).fadeInS);
   };
 
   /** Applies a mode. While playing, the music crossfades to the mode's track at once. */
@@ -388,7 +404,7 @@ export default function PlaylistPlayer({
     if (phase !== "idle") {
       bed.current?.stop();
       bed.current = null;
-      if (md.music !== "none") startMusic(md.volume, true);
+      if (md.music !== "none") startMusic(md.volume, true, md.music, md.fadeInS);
       if (phase === "paused") (bed.current as MusicBed | null)?.pause();
     }
     // Sleep turns the timer on (30 min unless one is set); the others turn it off. Either way
@@ -473,14 +489,14 @@ export default function PlaylistPlayer({
   const resume = () => {
     if (!paused.current) {
       // Playing by our state but the system stopped the element: just start it again.
-      if (active.current && el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
+      if (active.current && usesElement.current && el.current?.paused && !el.current.ended) void el.current.play().catch(() => {});
       return;
     }
     paused.current = false;
     trackStart.current += unpauseClocks();
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
-    if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
+    if (usesElement.current && el.current?.paused && !el.current.ended) void el.current.play().catch(() => {});
     setPhase("playing");
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
     timers.current.forEach((t, id) => arm(id, t, t.left));
@@ -495,7 +511,13 @@ export default function PlaylistPlayer({
     jump(
       inGap.current
         ? pos.current
-        : backPos(pos.current, order.current.length, (Date.now() - trackStart.current) / 1000, repeat),
+        : backPos(
+            pos.current,
+            order.current.length,
+            // Time into the track, not counting a pause still under way.
+            ((paused.current ? pausedAt.current : Date.now()) - trackStart.current) / 1000,
+            repeat,
+          ),
     );
 
   // Lock-screen and headphone controls. Re-bound each render so they see current state.
@@ -533,7 +555,9 @@ export default function PlaylistPlayer({
   );
 
   const playing = phase !== "idle";
-  const m = cur >= 0 ? items[cur] : null;
+  // While a session plays, show what it plays (the snapshot taken at Play), not the edited list.
+  const shown = phase !== "idle" ? session.current.items : items;
+  const m = cur >= 0 ? shown[cur] ?? null : null;
   const line = m && idx >= 0 && idx < m.lines.length ? m.lines[idx] : null;
   const hue = hashOf(m?.want ?? items[0]?.want ?? "neville") % 360;
   const multi = items.length > 1;
@@ -553,7 +577,7 @@ export default function PlaylistPlayer({
       </div>
       <p className="small muted" aria-live="polite">
         {m
-          ? `${phase === "paused" ? "Paused" : "Now playing"} ${pos.current + 1} of ${items.length}: ${m.title}`
+          ? `${phase === "paused" ? "Paused" : "Now playing"} ${pos.current + 1} of ${shown.length}: ${m.title}`
           : done
             ? "Finished."
             : multi
@@ -660,7 +684,7 @@ export default function PlaylistPlayer({
       {multi && (
         <ol className="script">
           {items.map((it, i) => (
-            <li key={it.id} className={i === cur ? "now" : ""}>
+            <li key={it.id} className={m && it.id === m.id ? "now" : ""}>
               <button className="linkish" disabled={loading} onClick={() => play(i)} aria-label={`Play from ${it.title}`}>
                 {it.title}
               </button>
