@@ -27,6 +27,7 @@ beforeAll(async () => {
       }
       const out = (JSON.parse(raw) as (string | number)[][]).map(([cmd, key, ...rest]) => {
         const k = String(key);
+        if (cmd === "PING") return { result: "PONG" };
         if (cmd === "INCR") return { result: store.set(k, (store.get(k) ?? 0) + 1).get(k) };
         if (cmd === "DECR") return { result: store.set(k, (store.get(k) ?? 0) - 1).get(k) };
         if (cmd === "EXPIRE") {
@@ -101,5 +102,12 @@ describe("Upstash counter", () => {
     expect(k).not.toContain("203");
     expect(visitorKey("203.0.113.9")).toBe(k);
     expect(visitorKey("203.0.113.10")).not.toBe(k);
+  });
+
+  it("answers PING when reachable, and says so when not", async () => {
+    const { RedisCounter } = await import("@/lib/server/redis");
+    expect(await new RedisCounter(base, "t").ping()).toBe(true);
+    fail = true;
+    expect(await new RedisCounter(base, "t").ping()).toBe(false);
   });
 });

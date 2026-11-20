@@ -51,6 +51,15 @@ export class RedisCounter implements Counter {
   async decr(keys: string[]): Promise<void> {
     await this.pipeline(keys.map((k) => ["DECR", k]));
   }
+
+  /** True when Redis answers PING. */
+  async ping(): Promise<boolean> {
+    try {
+      return (await this.pipeline([["PING"]]))[0] === "PONG";
+    } catch {
+      return false;
+    }
+  }
 }
 
 const memory = new MemoryCounter();
@@ -64,7 +73,13 @@ export function counter(): Counter {
   return shared;
 }
 
-/** Where the limits are counted, for the README and the admin page. */
+/** On previews and locally: does Redis answer? Null when it is not configured. */
+export async function redisReachable(): Promise<boolean | null> {
+  const env = redisEnv();
+  return env ? new RedisCounter(env.url, env.token).ping() : null;
+}
+
+/** Where the limits are counted, for the status route and the admin page. */
 export function counterKind(): "redis" | "memory" {
   return redisEnv() ? "redis" : "memory";
 }
