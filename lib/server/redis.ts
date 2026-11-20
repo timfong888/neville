@@ -36,6 +36,13 @@ export function resetRedisWarning() {
 
 type Reply = { result?: unknown; error?: string };
 
+const DECR_FLOORED = `for i, k in ipairs(KEYS) do
+  local v = tonumber(redis.call('GET', k) or '0')
+  if v > 0 then redis.call('DECR', k) end
+  if redis.call('TTL', k) == -1 then redis.call('EXPIRE', k, ARGV[1]) end
+end
+return 1`;
+
 export class RedisCounter implements Counter {
   constructor(
     private url: string,
@@ -70,9 +77,14 @@ export class RedisCounter implements Counter {
     });
   }
 
+  /**
+   * Takes one off each key that is above zero, and gives it an expiry if it
+   * has none. Run as one Lua script so a compensating decrement (after an
+   * INCR whose reply was lost) can never push a count below zero.
+   */
   async decr(keys: string[]): Promise<void> {
-    // The expiry again (NX), so a key can never be left without one.
-    await this.pipeline(keys.flatMap((k) => [["DECR", k], ["EXPIRE", k, 2 * 24 * 60 * 60, "NX"]]));
+    if (!keys.length) return;
+    await this.pipeline([["EVAL", DECR_FLOORED, keys.length, ...keys, 2 * 24 * 60 * 60]]);
   }
 
   /** True when Redis answers PING. */

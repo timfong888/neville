@@ -12,6 +12,7 @@ let base = "";
 const store = new Map<string, number>();
 const ttls = new Map<string, number>();
 let fail = false;
+let applyThenFail = false;
 let seenAuth = "";
 
 beforeAll(async () => {
@@ -28,6 +29,17 @@ beforeAll(async () => {
       const out = (JSON.parse(raw) as (string | number)[][]).map(([cmd, key, ...rest]) => {
         const k = String(key);
         if (cmd === "PING") return { result: "PONG" };
+        if (cmd === "EVAL") {
+          // ["EVAL", script, numkeys, ...keys, ttl]: here key is the script.
+          const n = Number(rest[0]);
+          const keys = rest.slice(1, 1 + n).map(String);
+          for (const kk of keys) {
+            const v = store.get(kk) ?? 0;
+            if (v > 0) store.set(kk, v - 1);
+            if (!ttls.has(kk)) ttls.set(kk, Number(rest[1 + n]));
+          }
+          return { result: 1 };
+        }
         if (cmd === "INCR") return { result: store.set(k, (store.get(k) ?? 0) + 1).get(k) };
         if (cmd === "DECR") return { result: store.set(k, (store.get(k) ?? 0) - 1).get(k) };
         if (cmd === "EXPIRE") {
@@ -37,6 +49,11 @@ beforeAll(async () => {
         }
         return { error: `ERR unknown command ${cmd}` };
       });
+      if (applyThenFail) {
+        // Commands ran, but the reply never arrives in time.
+        res.statusCode = 504;
+        return res.end("{}");
+      }
       res.end(JSON.stringify(out));
     });
   });
@@ -50,6 +67,7 @@ beforeEach(() => {
   store.clear();
   ttls.clear();
   fail = false;
+  applyThenFail = false;
   for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) delete process.env[k];
 });
 
@@ -134,9 +152,24 @@ describe("Upstash counter", () => {
     expect(await new RedisCounter(base, "t").ping()).toBe(false);
   });
 
-  it("gives every decremented key an expiry, so none can live forever", async () => {
+  it("gives every decremented key an expiry and never takes a count below zero", async () => {
     const { RedisCounter } = await import("@/lib/server/redis");
     await new RedisCounter(base, "t").decr(["nv:slots:orphan"]);
     expect(ttls.get("nv:slots:orphan")).toBeGreaterThan(86400);
+    expect(store.get("nv:slots:orphan") ?? 0).toBe(0);
+  });
+
+  it("gives the slot back when Redis applied the increment but the reply was lost", async () => {
+    const { RedisCounter } = await import("@/lib/server/redis");
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const c = new RedisCounter(base, "t");
+    applyThenFail = true;
+    expect((await takeSlot("v1", c)).refusal?.code).toBe("limits_unavailable");
+    applyThenFail = false;
+    // The compensating decrement ran while replies were failing; whatever it
+    // did, no count is left above zero and none went below.
+    expect([...store.values()].every((v) => v === 0)).toBe(true);
+    for (let i = 0; i < limits.perIpPerDay; i++) expect((await takeSlot("v1", c)).refusal).toBeNull();
+    err.mockRestore();
   });
 });

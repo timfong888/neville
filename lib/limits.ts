@@ -86,6 +86,10 @@ export async function takeSlot(visitor: string, counter: Counter = memory): Prom
   } catch (e) {
     // The store is down: refuse, and say so in the log (no visitor data in it).
     console.error("[limits] counter unavailable, refusing recording:", e instanceof Error ? e.message : String(e));
+    // The increment may have been applied with its reply lost (a timeout).
+    // Undo it on a best-effort basis; the decrement floors at zero, so this
+    // cannot turn an increment that never ran into extra credit.
+    await counter.decr(keys).catch(() => undefined);
     return {
       refusal: { status: 503, code: "limits_unavailable", error: "Recording is paused for a moment." },
       release: nothing,
