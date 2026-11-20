@@ -28,6 +28,11 @@ export function appleClientSecret(opts: {
   };
   const input = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
   const key = createPrivateKey(normalizePem(opts.privateKey));
+  // Apple's keys are P-256. Node signs happily with any key type, so check,
+  // or a wrong key would produce a secret Apple rejects with invalid_client.
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new Error("Sign in with Apple needs a P-256 (ES256) .p8 key.");
+  }
   const sig = sign("sha256", Buffer.from(input), { key, dsaEncoding: "ieee-p1363" });
   return `${input}.${b64url(sig)}`;
 }
