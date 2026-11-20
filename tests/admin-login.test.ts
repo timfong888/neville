@@ -1,4 +1,5 @@
 // POST /api/admin/login and the admin cookie, without a server.
+import { createHash, createHmac } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -80,10 +81,18 @@ describe("admin login", () => {
     expect(A.isAdminCookie(`${iat}.${exp}.${"0".repeat(64)}`, t0 + 60_000)).toBe(false);
     expect(A.isAdminCookie(`${iat}.${exp}`, t0 + 60_000)).toBe(false);
     expect(A.isAdminCookie(A.adminCookieValue("some-other-token-of-similar-length-000", t0), t0 + 60_000)).toBe(false);
-    // A session that claims to last longer than 12 hours is refused even if signed.
-    const saved = process.env.ADMIN_TOKEN!;
-    expect(A.isAdminCookie(v.replace(/^\d+/, String(Number(iat) + 99999)), t0)).toBe(false);
-    expect(saved).toBe(process.env.ADMIN_TOKEN);
+  });
+
+  it("refuses a validly signed session that claims to last longer than 12 hours", () => {
+    const t0 = Date.UTC(2026, 10, 20, 6, 0, 0);
+    const iat = Math.floor(t0 / 1000);
+    const exp = iat + 30 * 24 * 3600;
+    // Signed exactly as the server signs, so only the lifetime bound can refuse it.
+    const key = createHash("sha256").update(`neville-admin-session:${process.env.ADMIN_TOKEN}`, "utf8").digest();
+    const mac = createHmac("sha256", key).update(`${iat}.${exp}`, "utf8").digest("hex");
+    const sameKeyOk = createHmac("sha256", key).update(`${iat}.${iat + 3600}`, "utf8").digest("hex");
+    expect(A.isAdminCookie(`${iat}.${iat + 3600}.${sameKeyOk}`, t0 + 60_000)).toBe(true); // the signing here matches
+    expect(A.isAdminCookie(`${iat}.${exp}.${mac}`, t0 + 60_000)).toBe(false);
   });
 
   it("signs everyone out when ADMIN_TOKEN changes", () => {
