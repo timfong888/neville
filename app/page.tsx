@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
-import VoiceChooser from "@/app/components/VoiceChooser";
-import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
@@ -513,7 +512,14 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
-          <VoiceChooser chosenId={studioVoice.id} mixOn={mixOn} nextName={nextVoice.name} onChange={refreshNextVoice} />
+          <Link className="voicesummary" href="/settings#voice">
+            <span className="small muted">Voice</span>
+            <span>
+              <b>{nextVoice.name}</b>
+              <span className="small muted"> {mixOn ? "· next in your voice mix" : voiceBlurb(nextVoice) && `· ${voiceBlurb(nextVoice)}`}</span>
+            </span>
+            <span className="change">Change</span>
+          </Link>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>
