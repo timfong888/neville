@@ -96,4 +96,16 @@ describe("slot release and memory bounds", () => {
     expect(c.size()).toBeLessThan(limits.globalPerDay + 10);
     expect((await takeSlot("late", c)).refusal?.code).toBe("day_full");
   });
+
+  it("memory also checks before counting: a full visitor's burst takes no share of the day", async () => {
+    const { takeSlot, MemoryCounter, forgetDenied } = await fresh();
+    const c = new MemoryCounter();
+    for (let i = 0; i < limits.perIpPerDay; i++) await takeSlot("greedy", c);
+    const burst = await Promise.all(Array.from({ length: 300 }, () => (forgetDenied(), takeSlot("greedy", c))));
+    expect(burst.every((s) => s.refusal?.code === "visitor_full")).toBe(true);
+    for (let i = 0; i < limits.globalPerDay - limits.perIpPerDay; i++) {
+      expect((await takeSlot(`other${i}`, c)).refusal).toBeNull();
+    }
+    expect((await takeSlot("late", c)).refusal?.code).toBe("day_full");
+  });
 });

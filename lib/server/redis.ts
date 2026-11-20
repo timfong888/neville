@@ -4,7 +4,7 @@
 // _TOKEN; both pairs are read. Without them the app counts in memory.
 import "server-only";
 import { createHash, createHmac } from "node:crypto";
-import { type Counter, MemoryCounter } from "@/lib/limits";
+import { type Counter, MemoryCounter, type SlotKeys } from "@/lib/limits";
 
 let warned = false;
 /** One log line per instance when the configuration is half there; never logs values. */
@@ -36,10 +36,29 @@ export function resetRedisWarning() {
 
 type Reply = { result?: unknown; error?: string };
 
-const DECR_FLOORED = `for i, k in ipairs(KEYS) do
-  local v = tonumber(redis.call('GET', k) or '0')
-  if v > 0 then redis.call('DECR', k) end
-  if redis.call('TTL', k) == -1 then redis.call('EXPIRE', k, ARGV[1]) end
+// KEYS: day, visitor, marker. ARGV: day limit, visitor limit, ttl seconds.
+// Checks both limits before changing anything; on success increments both,
+// sets their expiry once, and writes this request's marker.
+const RESERVE = `-- neville:reserve
+local mine = tonumber(redis.call('GET', KEYS[2]) or '0')
+if mine >= tonumber(ARGV[2]) then return 'visitor' end
+local day = tonumber(redis.call('GET', KEYS[1]) or '0')
+if day >= tonumber(ARGV[1]) then return 'day' end
+redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3], 'NX')
+redis.call('INCR', KEYS[2])
+redis.call('EXPIRE', KEYS[2], ARGV[3], 'NX')
+redis.call('SET', KEYS[3], '1', 'EX', ARGV[3])
+return 'ok'`;
+
+// KEYS: day, visitor, marker. Gives the slot back only if this request's
+// marker exists (deleting it), so it acts at most once and never for a
+// reservation that did not happen. Counts never go below zero.
+const RELEASE = `-- neville:release
+if redis.call('DEL', KEYS[3]) == 0 then return 0 end
+for i = 1, 2 do
+  local v = tonumber(redis.call('GET', KEYS[i]) or '0')
+  if v > 0 then redis.call('DECR', KEYS[i]) end
 end
 return 1`;
 
@@ -67,24 +86,16 @@ export class RedisCounter implements Counter {
     return replies.map((r) => r.result);
   }
 
-  async incr(keys: string[], ttlSec: number): Promise<number[]> {
-    // INCR then EXPIRE ... NX, so the expiry is set once, when the key is new.
-    const out = await this.pipeline(keys.flatMap((k) => [["INCR", k], ["EXPIRE", k, ttlSec, "NX"]]));
-    return keys.map((_, i) => {
-      const n = Number(out[i * 2]);
-      if (!Number.isFinite(n)) throw new Error("redis: INCR returned no number");
-      return n;
-    });
+  async reserve(keys: SlotKeys, limits: { day: number; visitor: number }, ttlSec: number): Promise<"ok" | "day" | "visitor"> {
+    const [out] = await this.pipeline([
+      ["EVAL", RESERVE, 3, keys.day, keys.visitor, keys.marker, limits.day, limits.visitor, ttlSec],
+    ]);
+    if (out === "ok" || out === "day" || out === "visitor") return out;
+    throw new Error("redis: reserve returned an unexpected value");
   }
 
-  /**
-   * Takes one off each key that is above zero, and gives it an expiry if it
-   * has none. Run as one Lua script so a compensating decrement (after an
-   * INCR whose reply was lost) can never push a count below zero.
-   */
-  async decr(keys: string[]): Promise<void> {
-    if (!keys.length) return;
-    await this.pipeline([["EVAL", DECR_FLOORED, keys.length, ...keys, 2 * 24 * 60 * 60]]);
+  async release(keys: SlotKeys): Promise<void> {
+    await this.pipeline([["EVAL", RELEASE, 3, keys.day, keys.visitor, keys.marker]]);
   }
 
   /** True when Redis answers PING. */
