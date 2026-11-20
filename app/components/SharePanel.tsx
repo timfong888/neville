@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Manifestation } from "@/lib/library/model";
+import { getDeviceStore } from "@/lib/library/useLibrary";
 import { type HeldShare, readHeld, writeHeld } from "@/lib/share";
 
 function storage(): Storage | null {
@@ -17,14 +18,14 @@ function storage(): Storage | null {
  * Called when the manifestation is deleted, so its page stops being public.
  * Returns false only if a link exists and could not be revoked.
  */
-export async function revokeShareFor(manifestationId: string): Promise<boolean> {
+export async function revokeShareFor(manifestationId: string, opts: { keepHeld?: boolean } = {}): Promise<boolean> {
   try {
     // Links the signed-in account made of it, from any device. Signed out or
     // with accounts off this revokes nothing and answers 200.
     const all = await fetch(`/api/share?manifestation=${encodeURIComponent(manifestationId)}`, { method: "DELETE" });
     if (!all.ok && all.status !== 400) return false;
     // The link this device made, by its owner token.
-    const held = readHeld(storage())[manifestationId];
+    const held = opts.keepHeld ? undefined : readHeld(storage())[manifestationId];
     if (held) {
       const res = await fetch(`/api/share/${held.shareId}`, {
         method: "DELETE",
@@ -47,7 +48,13 @@ export async function revokeShareFor(manifestationId: string): Promise<boolean> 
  * deleted then.
  */
 export async function revokeAllShares(manifestationIds: string[]): Promise<boolean> {
-  for (const id of new Set(manifestationIds)) if (!(await revokeShareFor(id))) return false;
+  // An id that moved into an account keeping its id can still be on the device
+  // (a playlist here holds it). Its held link may serve the account copy, so
+  // only the account-wide revoke applies to it, never the device's token.
+  const inAccount = await getDeviceStore().idsUsedByOtherAccounts("");
+  for (const id of new Set(manifestationIds)) {
+    if (!(await revokeShareFor(id, { keepHeld: inAccount.has(id) }))) return false;
+  }
   return true;
 }
 
