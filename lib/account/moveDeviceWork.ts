@@ -7,7 +7,10 @@
 // - one item the server rejects does not stop the others;
 // - items saved under an old non-UUID id get a fresh id, and playlists that
 //   reference them are updated to match;
-// - a playlist is removed from the device only when every item in it moved.
+// - a playlist is removed from the device only when every item in it moved,
+//   and until then every manifestation it lists stays on the device too, so a
+//   retry saves the whole playlist in its original order (saves are upserts
+//   by id, so saving an item again does not duplicate it).
 import { isUuid, type Library, type Manifestation, newId, type Playlist } from "@/lib/library/model";
 
 export type MoveSource = {
@@ -66,6 +69,9 @@ export async function moveDeviceWork(
   }
 
   for (const id of playlistsDone) await device.deletePlaylist(id);
-  for (const id of newIdFor.keys()) await device.deleteManifestation(id);
+  // Deleting a manifestation also strips it from device playlists, so keep any
+  // that a not-yet-finished playlist still lists.
+  const held = new Set(lib.playlists.filter((p) => !playlistsDone.includes(p.id)).flatMap((p) => p.itemIds));
+  for (const id of newIdFor.keys()) if (!held.has(id)) await device.deleteManifestation(id);
   return { moved: newIdFor.size, kept };
 }
