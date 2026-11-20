@@ -218,9 +218,11 @@ export default function PlaylistPlayer({
     usesElement.current = true;
     switching.current = true;
     a.src = gapUrl.current;
-    void a.play().catch(() => {
+    void a.play().catch((err: unknown) => {
       // A pause during the switch rejects play(); Resume plays the gap again.
-      if (token.current !== mine || paused.current) return;
+      if (started || token.current !== mine || paused.current) return;
+      // AbortError we did not cause (a call or Siri as the gap starts): pause instead of moving on.
+      if ((err as { name?: string })?.name === "AbortError") return pauseRef.current();
       later(go, live.current.gapMs);
     });
   };
@@ -304,7 +306,8 @@ export default function PlaylistPlayer({
     // The error event and the play() rejection can both report one failure: fall back once.
     let fellBack = false;
     const fallBack = (why?: string) => {
-      if (fellBack || token.current !== mine) return;
+      // While paused, leave it: Resume retries the element, and its error lands here then.
+      if (fellBack || token.current !== mine || paused.current) return;
       fellBack = true;
       a.onerror = a.onended = a.onplaying = a.ontimeupdate = null;
       usesElement.current = false;
