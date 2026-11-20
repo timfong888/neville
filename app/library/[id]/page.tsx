@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
 import SharePanel, { revokeShareFor } from "@/app/components/SharePanel";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
-import { useLibrary } from "@/lib/library/useLibrary";
+import { getDeviceStore, useLibrary } from "@/lib/library/useLibrary";
 import { type Manifestation } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
 
@@ -126,7 +126,7 @@ export default function ManifestationPage() {
     if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists. A public link made on this device or in your account stops working.`)) return;
     // Take the public page down first: once the manifestation is gone there
     // is no screen left to revoke it from.
-    if (!(await revokeShareFor(m.id))) {
+    if (!(await revokeShareFor(m.id, { fromDevice: store === getDeviceStore() }))) {
       setMsg("Its public link could not be revoked just now, so nothing was deleted. Try again.");
       return;
     }
