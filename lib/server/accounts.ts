@@ -32,10 +32,16 @@ export function accountsEnabled(): boolean {
 
 export { withTx };
 
+// The production site. The OAuth redirect URIs registered with Google (and
+// Apple) are built from it, so production always uses this one host rather
+// than whichever domain Vercel happens to report.
+export const PRIMARY_ORIGIN = "https://getneville.vercel.app";
+// The earlier production host; it now redirects to PRIMARY_ORIGIN but stays trusted.
+export const LEGACY_ORIGINS = ["https://neville-delta.vercel.app"];
+
 function baseURL(): string | undefined {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
-  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL)
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_ENV === "production") return PRIMARY_ORIGIN;
   if (process.env.VERCEL_BRANCH_URL) return `https://${process.env.VERCEL_BRANCH_URL}`;
   return undefined;
 }
@@ -111,7 +117,7 @@ function makeAuth() {
       ...apple,
     },
     // Apple returns to the callback with a form POST from its own origin.
-    trustedOrigins: "apple" in apple ? ["https://appleid.apple.com"] : [],
+    trustedOrigins: [PRIMARY_ORIGIN, ...LEGACY_ORIGINS, ...("apple" in apple ? ["https://appleid.apple.com"] : [])],
     plugins: [nextCookies()],
   });
 }
