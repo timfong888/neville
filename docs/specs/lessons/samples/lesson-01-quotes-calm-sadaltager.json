@@ -2,11 +2,11 @@
   "src": "docs/specs/lessons/lesson-01.md",
   "mode": "calm",
   "voice": {
-    "key": "george",
-    "label": "ElevenLabs George",
-    "model": "elevenlabs/eleven-v4-turbo",
-    "voice": "george",
-    "instructions": null
+    "key": "sadaltager",
+    "label": "Gemini Sadaltager",
+    "model": "google/gemini-3.8-flash-tts",
+    "voice": "Sadaltager",
+    "instructions": "Read as a warm, authoritative British lecturer with a light received-pronunciation accent. Measured and crisp, every consonant clear, never theatrical or sing-song. Do not sound excited. Let your pitch settle at the end of each sentence."
   },
   "quotes": [
     {
@@ -56,8 +56,8 @@
     }
   ],
   "chars": 1615,
-  "durationS": 142,
-  "estimateUsd": 0.0646,
-  "spentUsd": 0.04681400000000002,
-  "recorded": "2026-11-20T06:44:52.968Z"
+  "durationS": 153,
+  "estimateUsd": 0.008074999999999999,
+  "spentUsd": 0.015249999999999986,
+  "recorded": "2026-11-20T17:39:36.819Z"
 }

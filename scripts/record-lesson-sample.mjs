@@ -4,9 +4,9 @@
 // AI-written text. Not production content: it writes under docs/, which the
 // app does not serve.
 //
-//   OPENROUTER_API_KEY=... node scripts/record-lesson-sample.mjs [lesson.md] [--voice=george] [--count=9] [--clip=1] [--dry]
+//   OPENROUTER_API_KEY=... node scripts/record-lesson-sample.mjs [lesson.md] [--voice=sadaltager] [--count=9] [--clip=1] [--dry]
 //
-//   --voice  a key of VOICES below (default george)
+//   --voice  a key of VOICES below (default sadaltager, the quote voice Tim chose)
 //   --count  record the first N quotes (default: all)
 //   --clip=N record only quote N, as a short audition clip
 //
@@ -36,7 +36,7 @@ const LECTURER =
 const VOICES = {
   george: { label: "ElevenLabs George", model: "elevenlabs/eleven-v4-turbo", voice: "george", format: "mp3", usdPerChar: 40 / 1e6 },
   daniel: { label: "ElevenLabs Daniel", model: "elevenlabs/eleven-v4-turbo", voice: "daniel", format: "mp3", usdPerChar: 40 / 1e6 },
-  sadaltager: { label: "Gemini Sadaltager", model: "google/gemini-3.8-flash-tts", voice: "Sadaltager", format: "pcm", rate: 24000, instructions: LECTURER, usdPerChar: 0.3 / 1e3 / 60 },
+  sadaltager: { label: "Gemini Sadaltager", model: "google/gemini-3.8-flash-tts", voice: "Sadaltager", format: "pcm", rate: 24000, instructions: LECTURER, usdPerChar: 10 / 1e6 },
   vindemiatrix: {
     label: "Gemini Vindemiatrix",
     model: "google/gemini-3.8-flash-lite-tts",
@@ -50,7 +50,7 @@ const VOICES = {
     usdPerChar: 0.3 / 1e3 / 60,
   },
 };
-const V = VOICES[arg("voice") ?? "george"];
+const V = VOICES[arg("voice") ?? "sadaltager"];
 if (!V) throw new Error(`unknown --voice; one of ${Object.keys(VOICES).join(", ")}`);
 
 // Mirrors lib/modes.ts for Calm: morning-light at 0.6 with a 2 s fade-in.
@@ -145,7 +145,7 @@ for (const [i, q] of quotes.entries()) {
 const spent = (await usage()) - before;
 
 mkdirSync(OUT, { recursive: true });
-const voiceKey = arg("voice") ?? "george";
+const voiceKey = arg("voice") ?? "sadaltager";
 const name = `${basename(SRC, ".md")}-${clip ? `clip${clip}` : "quotes"}-calm-${voiceKey}`;
 const voiceFile = `${OUT}/${name}-voice.wav`;
 ffmpeg(["-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", "pipe:0", voiceFile], Buffer.concat(parts));
