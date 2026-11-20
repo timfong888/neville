@@ -68,10 +68,13 @@ export async function POST(req: Request) {
   // A blank line between lines is the pause we can ask of voices whose audio
   // cannot be stitched; the others get real silence between lines.
   const text = script.lines.join("\n\n");
+  // Characters actually spoken, for the ledger: the blank lines between lines
+  // are not sent when a voice is recorded line by line.
+  const spoken = script.lines.join(" ").length;
   if (script.source === "model") {
     // Text-model cost is not returned by the writer; at these prices it is a
     // few thousandths of a cent, so it is recorded as unpriced.
-    await record({ route: "manifest", kind: "script", model: script.model ?? null, chars: text.length, estUsd: null });
+    await record({ route: "manifest", kind: "script", model: script.model ?? null, chars: spoken, estUsd: null });
   }
   const speech = await synthesize({
     key,
@@ -88,7 +91,7 @@ export async function POST(req: Request) {
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
-    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: spoken, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
 
@@ -97,8 +100,8 @@ export async function POST(req: Request) {
     kind: "speech",
     model: voice.model,
     voiceId: voice.id,
-    chars: text.length,
-    estUsd: await estimateSpeech(voice.model, text.length),
+    chars: spoken,
+    estUsd: await estimateSpeech(voice.model, spoken),
   });
   return new NextResponse(speech.audio, {
     headers: {

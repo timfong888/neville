@@ -103,8 +103,8 @@ read by the device's own voice, which costs nothing.
   A script check that answers with nothing usable is recorded as well.
   Script-writing calls are recorded unpriced (fractions of a cent). Known gap:
   a script-writing reply that arrives but is unusable (the app then uses the
-  general script) is not recorded yet, because the writer does not report it;
-  that waits on the delivery work in #19. The ceiling and alerts are not
+  general script) is not recorded yet, because `writeScript` reports "template" the
+  same way whether or not a reply arrived. The ceiling and alerts are not
   affected: they use OpenRouter's own usage counter.
 - **Admin page.** Set `ADMIN_TOKEN` in Vercel, open `/admin/usage` and enter
   it once (a 12-hour httpOnly cookie holds a signed session whose expiry the
