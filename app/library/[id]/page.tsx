@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
+import SharePanel from "@/app/components/SharePanel";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
 import { type Manifestation } from "@/lib/library/model";
@@ -203,6 +204,7 @@ export default function ManifestationPage() {
           {msg}
         </p>
       )}
+      {!editing && <SharePanel m={m} />}
       {inPlaylists.length > 0 && (
         <p className="small muted">
           In:{" "}
