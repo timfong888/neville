@@ -89,6 +89,7 @@ for (const [i, l] of lines.entries()) {
   parts.push(pcm, silence(next ? gap : 0));
   process.stdout.write(`${l.who} ${i + 1}/${lines.length}\n`);
 }
+// OpenRouter updates usage a little after the call; read again later for the true figure.
 const spent = (await usage()) - before;
 
 mkdirSync(OUT, { recursive: true });
