@@ -3,7 +3,12 @@ import { ONBOARDED_KEY, STEPS, markSeen, shouldShow } from "@/lib/onboarding";
 
 function mem() {
   const m = new Map<string, string>();
-  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m };
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+    m,
+  };
 }
 
 describe("onboarding", () => {
@@ -21,8 +26,16 @@ describe("onboarding", () => {
 
   it("never opens when storage is missing or throws", () => {
     expect(shouldShow(null)).toBe(false);
-    const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    const fail = () => {
+      throw new Error("blocked");
+    };
+    const broken = { getItem: fail, setItem: fail, removeItem: fail };
     expect(shouldShow(broken)).toBe(false);
     expect(() => markSeen(broken, "done")).not.toThrow();
+  });
+
+  it("does not open when storage reads but cannot write, so it cannot nag on every visit", () => {
+    const readOnly = { ...mem(), setItem: () => { throw new Error("quota"); } };
+    expect(shouldShow(readOnly)).toBe(false);
   });
 });

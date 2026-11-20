@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { STEPS, markSeen, shouldShow } from "@/lib/onboarding";
 
 function storage(): Storage | null {
@@ -35,6 +36,11 @@ export default function Onboarding() {
 
   useEffect(() => {
     if (!open) return;
+    // Everything behind the dialog is inert while it is open, so Tab and
+    // Shift+Tab stay inside it and the form underneath cannot be used.
+    const host = dialog.current?.closest(".onb-backdrop");
+    const others = [...document.body.children].filter((el) => el !== host && !el.hasAttribute("inert"));
+    others.forEach((el) => el.setAttribute("inert", ""));
     dialog.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close("skipped");
@@ -42,7 +48,10 @@ export default function Onboarding() {
       if (e.key === "ArrowLeft") setI((n) => Math.max(0, n - 1));
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      others.forEach((el) => el.removeAttribute("inert"));
+    };
   }, [open, close]);
 
   if (!ready) return null;
@@ -56,7 +65,7 @@ export default function Onboarding() {
 
   const step = STEPS[i];
   const last = i === STEPS.length - 1;
-  return (
+  return createPortal(
     <div className="onb-backdrop">
       <div
         className="onb card"
@@ -94,6 +103,7 @@ export default function Onboarding() {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

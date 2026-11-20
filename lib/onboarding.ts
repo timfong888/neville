@@ -26,12 +26,21 @@ export const STEPS: readonly OnboardingStep[] = [
 
 export const ONBOARDED_KEY = "nv_onboarded_v1";
 
-type KV = Pick<Storage, "getItem" | "setItem">;
+type KV = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-/** True when the walkthrough should open. Unreadable storage counts as seen, so it never nags. */
+const PROBE = "nv_probe";
+
+/**
+ * True when the walkthrough should open. Storage that cannot be read, or can
+ * be read but not written (some private modes), counts as seen: we could not
+ * remember the answer, so it would open on every visit.
+ */
 export function shouldShow(store: KV | null | undefined): boolean {
   try {
-    return !!store && store.getItem(ONBOARDED_KEY) === null;
+    if (!store || store.getItem(ONBOARDED_KEY) !== null) return false;
+    store.setItem(PROBE, "1");
+    store.removeItem(PROBE);
+    return true;
   } catch {
     return false;
   }
