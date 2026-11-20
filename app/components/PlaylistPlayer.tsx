@@ -398,7 +398,9 @@ export default function PlaylistPlayer({
     if (fading.current) bed.current?.fadeIn(2);
     fading.current = null;
     if (el.current) el.current.volume = 1;
-    if (phase !== "idle") sleepEndsAt.current = min > 0 ? Date.now() + min * 60_000 : null;
+    // While paused, count from the moment of pausing: Resume adds the pause length back on.
+    const base = paused.current ? pausedAt.current : Date.now();
+    if (phase !== "idle") sleepEndsAt.current = min > 0 ? base + min * 60_000 : null;
   };
 
   // Must run inside the tap handler.
@@ -455,7 +457,11 @@ export default function PlaylistPlayer({
       return;
     }
     paused.current = false;
-    trackStart.current += Date.now() - pausedAt.current;
+    const pausedFor = Date.now() - pausedAt.current;
+    trackStart.current += pausedFor;
+    // The sleep timer stops while paused: move its deadline, and any fade under way, by the pause.
+    if (sleepEndsAt.current !== null) sleepEndsAt.current += pausedFor;
+    if (fading.current) fading.current.from += pausedFor;
     bed.current?.resume();
     if ("speechSynthesis" in window) window.speechSynthesis.resume();
     if (el.current?.src && el.current.paused && !el.current.ended) void el.current.play().catch(() => {});
