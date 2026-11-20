@@ -5,7 +5,7 @@ import "server-only";
 import { del, get, put } from "@vercel/blob";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import pg from "pg";
+import { getPool, withTx } from "@/lib/server/db";
 import { sniffAudio } from "@/lib/server/audioSniff";
 import { randomUUID } from "node:crypto";
 import { addTombstones, type Db, oldestTombstones } from "@/lib/server/libraryDb";
@@ -29,27 +29,7 @@ export function accountsEnabled(): boolean {
   return missingVars().length === 0;
 }
 
-let pool: pg.Pool | null = null;
-function getPool(): pg.Pool {
-  if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 10_000 });
-  return pool;
-}
-
-/** Runs `fn` in one transaction on one connection. */
-export async function withTx<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
-  try {
-    await client.query("begin");
-    const out = await fn(client as unknown as Db);
-    await client.query("commit");
-    return out;
-  } catch (e) {
-    await client.query("rollback").catch(() => undefined);
-    throw e;
-  } finally {
-    client.release();
-  }
-}
+export { withTx };
 
 function baseURL(): string | undefined {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
