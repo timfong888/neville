@@ -77,11 +77,18 @@ read by the device's own voice, which costs nothing.
   logs `[budget-alert]` and, if `ALERT_WEBHOOK_URL` is set, POSTs
   `{text, content, level, usage, ceiling}` there (a Slack or Discord incoming
   webhook works as is). No email service is connected. Each server instance
-  alerts a level once, so the same level can arrive more than once.
+  alerts a level once, so the same level can arrive more than once; a webhook
+  that fails is logged and not retried.
+- **Failed recordings** are recorded too (`ok: false`, unpriced), since a long
+  script can be billed in part before it fails. Script-writing calls are
+  recorded unpriced (fractions of a cent).
 - **Admin page.** Set `ADMIN_TOKEN` in Vercel, open `/admin/usage` and enter
   it once (a 12-hour httpOnly cookie holds a hash of it; the token never goes
   in a URL): a banner at 50/80/100%, kill-switch state and recent ledger rows.
-  Without `ADMIN_TOKEN` the page is a 404.
+  Without `ADMIN_TOKEN` the page is a 404. Use a long random token (32+
+  characters, e.g. `openssl rand -base64 32`); after 10 wrong tries a visitor
+  is refused for 15 minutes. The cookie stays valid until it expires or the
+  token is changed.
 - **Kill switch.** `SPEECH_ENABLED=false` (Vercel env, then redeploy: about a
   minute) or `generationEnabled: false` in `config/limits.json`. For an
   instant stop, disable the key at openrouter.ai: recording refuses whenever

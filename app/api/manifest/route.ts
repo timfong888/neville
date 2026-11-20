@@ -78,6 +78,9 @@ export async function POST(req: Request) {
     timeoutMs: 42_000,
   });
   if (!speech.ok) {
+    // A failed recording may still have been billed in part (several requests
+    // for a long script), so it is recorded, unpriced.
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
 

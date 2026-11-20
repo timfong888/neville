@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { sameSecret } from "@/lib/ledger";
-import { ADMIN_COOKIE, adminCookieValue, adminToken } from "@/lib/server/admin";
+import { ADMIN_COOKIE, adminCookieValue, adminToken, loginBlocked, noteFailedLogin, tokenMatches } from "@/lib/server/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +11,15 @@ export async function POST(req: Request) {
   const origin = req.headers.get("origin");
   if (origin && origin !== self.origin) return new NextResponse("Wrong origin", { status: 403 });
 
+  const ip = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (loginBlocked(ip)) return new NextResponse("Too many tries. Wait 15 minutes.", { status: 429 });
+
   const form = await req.formData().catch(() => null);
   const raw = form?.get("token");
   const given = typeof raw === "string" ? raw.trim() : "";
   const back = new URL("/admin/usage", self);
-  if (!sameSecret(given, want)) {
+  if (!tokenMatches(given)) {
+    noteFailedLogin(ip);
     back.searchParams.set("wrong", "1");
     return NextResponse.redirect(back, 303);
   }

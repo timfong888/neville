@@ -58,7 +58,10 @@ export async function POST(req: Request) {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }
   if (!vet.ok) {
-    returnSlot(ip);
+    // A rejection was a paid model call, so it keeps its slot: otherwise a
+    // caller could loop rejected scripts past the daily limits. Only a check
+    // that never answered gives the slot back.
+    if (vet.reason === "unavailable") returnSlot(ip);
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
@@ -83,6 +86,9 @@ export async function POST(req: Request) {
     timeoutMs: 42_000,
   });
   if (!speech.ok) {
+    // A failed recording may still have been billed in part (several requests
+    // for a long script), so it is recorded, unpriced.
+    await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
   await record({

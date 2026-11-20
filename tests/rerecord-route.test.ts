@@ -9,6 +9,7 @@ type Call = { path: string; body: unknown };
 let calls: Call[] = [];
 let usage = 0;
 let vetReply = "OK";
+let speechFails = false;
 let server: Server;
 let POST: (req: Request) => Promise<Response>;
 let L: typeof import("@/lib/server/ledger");
@@ -30,6 +31,10 @@ beforeAll(async () => {
       if (path.startsWith("/models")) return res.end(JSON.stringify({ data: [{ id: "google/gemini-2.5-flash-lite" }] }));
       if (path.startsWith("/chat/completions")) {
         return res.end(JSON.stringify({ choices: [{ message: { content: vetReply } }], usage: { cost: 0.00002 } }));
+      }
+      if (path.startsWith("/audio/speech") && speechFails) {
+        res.statusCode = 500;
+        return res.end("{}");
       }
       if (path.startsWith("/audio/speech")) {
         res.setHeader("Content-Type", "audio/pcm;rate=24000");
@@ -61,6 +66,7 @@ beforeEach(() => {
   usage = 0;
   vetReply = "OK";
   webhookHits = [];
+  speechFails = false;
   delete process.env.SPEECH_ENABLED;
   L.setLedger(new L.MemoryLedger());
   L.resetAlerts();
@@ -141,5 +147,26 @@ describe("POST /api/rerecord", () => {
     await vi.waitFor(() => expect(webhookHits).toHaveLength(3));
     expect(webhookHits.map((h) => (h as { level: number }).level).sort((a, b) => a - b)).toEqual([50, 80, 100]);
     expect(webhookHits.some((h) => (h as { text: string }).text.includes("Recording has stopped"))).toBe(true);
+  });
+
+  it("counts rejected scripts against the visitor's daily slots", async () => {
+    vetReply = "NO";
+    const from = (ip: string) =>
+      new Request("http://localhost/api/rerecord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-real-ip": ip },
+        body: JSON.stringify(script),
+      });
+    for (let i = 0; i < 6; i++) expect((await POST(from("10.9.9.9"))).status).toBe(422);
+    calls = [];
+    expect((await POST(from("10.9.9.9"))).status).toBe(429);
+    expect(paths()).not.toContain("/chat/completions");
+  });
+
+  it("records a failed recording as unpriced and not ok", async () => {
+    speechFails = true;
+    expect((await POST(req(script))).status).toBe(502);
+    const rows = await L.ledger().recent(10);
+    expect(rows[0]).toMatchObject({ kind: "speech", ok: false, estUsd: null });
   });
 });

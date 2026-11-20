@@ -15,6 +15,8 @@ export type LedgerEntry = {
   chars: number;
   /** Estimated cost in USD; null when the price is not per character or unknown. */
   estUsd: number | null;
+  /** False when the call failed; it may still have been billed in part. */
+  ok?: boolean;
 };
 
 /** Budget levels that raise an alert, in percent of the spend ceiling. */
