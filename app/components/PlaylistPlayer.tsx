@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { getStore } from "@/lib/library/useLibrary";
-import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
+import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
 import { applyMode, readMode } from "@/lib/modeStore";
@@ -383,11 +383,12 @@ export default function PlaylistPlayer({
     startAt(p, mine);
   };
 
-  const startMusic = (vol = volume, on = music) => {
+  /** Starts the music bed. A mode chosen on the player passes its own track and fade, so it does not depend on storage. */
+  const startMusic = (vol = volume, on = music, track?: MusicChoice, fadeInS?: number) => {
     if (!on) return;
-    const choice = readMusicChoice();
+    const choice = track ?? readMusicChoice();
     bed.current = new MusicBed();
-    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, resolveMode(readMode().id).fadeInS);
+    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? resolveMode(readMode().id).fadeInS);
   };
 
   /** Applies a mode. While playing, the music crossfades to the mode's track at once. */
@@ -401,7 +402,7 @@ export default function PlaylistPlayer({
     if (phase !== "idle") {
       bed.current?.stop();
       bed.current = null;
-      if (md.music !== "none") startMusic(md.volume, true);
+      if (md.music !== "none") startMusic(md.volume, true, md.music, md.fadeInS);
       if (phase === "paused") (bed.current as MusicBed | null)?.pause();
     }
     // Sleep turns the timer on (30 min unless one is set); the others turn it off. Either way
