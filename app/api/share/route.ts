@@ -87,7 +87,14 @@ export async function DELETE(req: Request) {
   const mid = new URL(req.url).searchParams.get("manifestation") ?? "";
   if (!MANIFESTATION_ID.test(mid)) return NextResponse.json({ error: "Which manifestation?" }, { status: 400 });
   if (!dbConfigured()) return NextResponse.json({ revoked: 0 });
-  const user = await currentUser(req).catch(() => null);
+  // A failed session lookup is not "signed out": answering 200 would let the
+  // manifestation be deleted while the account's links elsewhere stay public.
+  let user: Awaited<ReturnType<typeof currentUser>>;
+  try {
+    user = await currentUser(req);
+  } catch {
+    return NextResponse.json({ error: "Could not check your sign-in just now." }, { status: 503 });
+  }
   if (!user) return NextResponse.json({ revoked: 0 });
   try {
     return NextResponse.json({ revoked: await revokeSharesOf(getPool(), user.id, mid) });
