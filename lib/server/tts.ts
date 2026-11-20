@@ -2,6 +2,7 @@
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
 import { MAX_AUDIO_BYTES, fitPause, silenceBytes, startShares, stitchPcm } from "@/lib/delivery";
+import { normalizePcm16 } from "@/lib/loudness";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
 // Models that only return raw PCM; we wrap it in a WAV header so browsers can play it.
@@ -227,6 +228,9 @@ export async function synthesize(opts: {
   const ids = done.map((p) => p.id).filter((x): x is string => Boolean(x));
   const speedApplied = speedSent && !speedRefused;
   let chunks = done.map((p) => p.audio);
+  // MP3 voices (Kokoro, Fish) keep the provider's own level: there is no MP3
+  // decoder here. Normalising them is #40. The default voice and the voice mix
+  // are PCM voices, so they all arrive at the same loudness.
   if (!pcm) return { ok: true, audio: chunks[0], mime: "audio/mpeg", requests: parts.length, ids, speedApplied };
 
   let rate = pcmRate(model, done[0].contentType);
@@ -235,7 +239,9 @@ export async function synthesize(opts: {
     rate = rate / 2;
   }
   if (!stitch) {
-    return { ok: true, audio: wav(chunks.length === 1 ? chunks[0] : join(chunks), rate), mime: "audio/wav", requests: parts.length, ids, speedApplied };
+    // Every PCM voice (Gemini, HeyGen) is brought to the same speech loudness, so tracks match in a playlist.
+    const pcmAll = normalizePcm16(chunks.length === 1 ? chunks[0] : join(chunks), rate);
+    return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, ids, speedApplied };
   }
   const sizes = chunks.map((c) => c.byteLength);
   const pauseMs = fitPause({
@@ -245,7 +251,7 @@ export async function synthesize(opts: {
     rate,
   });
   const gap = silenceBytes(pauseMs, rate);
-  const audio = wav(stitchPcm(chunks, gap), rate);
+  const audio = wav(normalizePcm16(stitchPcm(chunks, gap), rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
     return { ok: false, status: 502, message: "The recording came out too long to send." };
