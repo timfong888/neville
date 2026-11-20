@@ -62,6 +62,30 @@ Beyond these, the key's own limit and the account balance at OpenRouter apply.
 When recording is refused or fails, the page falls back to a template script
 read by the device's own voice, which costs nothing.
 
+## Usage ledger, kill switch and budget alerts
+
+- **Ledger.** Every paid call (`/api/manifest` script and speech, `/api/rerecord`
+  vet and speech) is recorded: route, kind, model, characters, estimated cost.
+  Each entry is one `[ledger]` JSON line in the runtime log (Vercel, project,
+  Logs), which is the durable record. The last 500 are also kept in memory per
+  server instance for the admin page. `lib/server/ledger.ts` has a
+  `LedgerStore` interface so a database table can replace the memory store
+  later without touching the routes. Speech cost is an estimate from
+  OpenRouter's per-character price; voices priced by token show "—".
+- **Alerts.** Each time the server reads the key's usage (before every paid
+  request) it checks it against `spendCeilingUsd`. At 50%, 80% and 100% it
+  logs `[budget-alert]` and, if `ALERT_WEBHOOK_URL` is set, POSTs
+  `{text, content, level, usage, ceiling}` there (a Slack or Discord incoming
+  webhook works as is). No email service is connected. Each server instance
+  alerts a level once, so the same level can arrive more than once.
+- **Admin page.** Set `ADMIN_TOKEN` in Vercel, then open
+  `/admin/usage?token=<ADMIN_TOKEN>`: a banner at 50/80/100%, kill-switch
+  state and recent ledger rows. Without `ADMIN_TOKEN` the page is a 404.
+- **Kill switch.** `SPEECH_ENABLED=false` (Vercel env, then redeploy: about a
+  minute) or `generationEnabled: false` in `config/limits.json`. For an
+  instant stop, disable the key at openrouter.ai: recording refuses whenever
+  usage cannot be read.
+
 `POST /api/speak` (the bake-off) stays off in production. `GET /api/status`
 reports whether the key is present; on previews also its budget. It never
 returns the key.

@@ -5,7 +5,10 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { scriptModel } from "@/lib/server/writer";
 import { VET_SYSTEM, verdict } from "@/lib/rerecord";
 
-export type Vet = { ok: true; model: string } | { ok: false; reason: "rejected" | "unavailable" };
+export type Vet =
+  | { ok: true; model: string; costUsd: number | null }
+  | { ok: false; reason: "rejected"; model: string; costUsd: number | null }
+  | { ok: false; reason: "unavailable" };
 
 export async function vetScript(key: string, lines: string[]): Promise<Vet> {
   try {
@@ -17,6 +20,7 @@ export async function vetScript(key: string, lines: string[]): Promise<Vet> {
         model,
         max_tokens: 3,
         temperature: 0,
+        usage: { include: true },
         messages: [
           { role: "system", content: VET_SYSTEM },
           { role: "user", content: JSON.stringify({ lines }) },
@@ -25,10 +29,14 @@ export async function vetScript(key: string, lines: string[]): Promise<Vet> {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return { ok: false, reason: "unavailable" };
-    const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
+    const json = (await res.json()) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+      usage?: { cost?: unknown };
+    };
     const reply = json.choices?.[0]?.message?.content;
     if (typeof reply !== "string") return { ok: false, reason: "unavailable" };
-    return verdict(reply) ? { ok: true, model } : { ok: false, reason: "rejected" };
+    const costUsd = typeof json.usage?.cost === "number" ? json.usage.cost : null;
+    return verdict(reply) ? { ok: true, model, costUsd } : { ok: false, reason: "rejected", model, costUsd };
   } catch {
     return { ok: false, reason: "unavailable" };
   }

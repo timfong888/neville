@@ -11,6 +11,8 @@ let usage = 0;
 let vetReply = "OK";
 let server: Server;
 let POST: (req: Request) => Promise<Response>;
+let L: typeof import("@/lib/server/ledger");
+let webhookHits: unknown[] = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -18,12 +20,16 @@ beforeAll(async () => {
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const path = req.url ?? "";
+      if (path.startsWith("/hook")) {
+        webhookHits.push(JSON.parse(raw));
+        return res.end("{}");
+      }
       calls.push({ path, body: raw ? JSON.parse(raw) : null });
       res.setHeader("Content-Type", "application/json");
       if (path.startsWith("/key")) return res.end(JSON.stringify({ data: { usage, limit_remaining: null } }));
       if (path.startsWith("/models")) return res.end(JSON.stringify({ data: [{ id: "google/gemini-2.5-flash-lite" }] }));
       if (path.startsWith("/chat/completions")) {
-        return res.end(JSON.stringify({ choices: [{ message: { content: vetReply } }] }));
+        return res.end(JSON.stringify({ choices: [{ message: { content: vetReply } }], usage: { cost: 0.00002 } }));
       }
       if (path.startsWith("/audio/speech")) {
         res.setHeader("Content-Type", "audio/pcm;rate=24000");
@@ -38,20 +44,26 @@ beforeAll(async () => {
   if (!addr || typeof addr === "string") throw new Error("no port");
   process.env.OPENROUTER_BASE_URL = `http://127.0.0.1:${addr.port}`;
   process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.ALERT_WEBHOOK_URL = `http://127.0.0.1:${addr.port}/hook`;
   ({ POST } = await import("@/app/api/rerecord/route"));
+  L = await import("@/lib/server/ledger");
 });
 
 afterAll(() => {
   server.close();
   delete process.env.OPENROUTER_BASE_URL;
   delete process.env.OPENROUTER_API_KEY;
+  delete process.env.ALERT_WEBHOOK_URL;
 });
 
 beforeEach(() => {
   calls = [];
   usage = 0;
   vetReply = "OK";
+  webhookHits = [];
   delete process.env.SPEECH_ENABLED;
+  L.setLedger(new L.MemoryLedger());
+  L.resetAlerts();
 });
 
 let ipN = 0;
@@ -100,5 +112,32 @@ describe("POST /api/rerecord", () => {
     const res = await POST(req({ lines: ["a".repeat(800)] }));
     expect(res.status).toBe(400);
     expect(calls).toHaveLength(0);
+  });
+
+  it("records the vet and the speech call in the ledger", async () => {
+    await POST(req(script));
+    const rows = await L.ledger().recent(10);
+    expect(rows.map((r) => r.kind)).toEqual(["speech", "vet"]);
+    expect(rows[1]).toMatchObject({ route: "rerecord", model: "google/gemini-2.5-flash-lite", estUsd: 0.00002 });
+    expect(rows[0].chars).toBe("Take a slow breath. You are calm and steady.".length);
+  });
+
+  it("records a rejected vet (it was paid for) but no speech", async () => {
+    vetReply = "NO";
+    await POST(req(script));
+    expect((await L.ledger().recent(10)).map((r) => r.kind)).toEqual(["vet"]);
+  });
+
+  it("alerts once at 50%, again at 80%, and at 100% when recording stops", async () => {
+    usage = 1.1;
+    await POST(req(script));
+    await POST(req(script));
+    usage = 1.7;
+    await POST(req(script));
+    usage = 2.5;
+    const res = await POST(req(script));
+    expect(res.status).toBe(429);
+    expect(webhookHits.map((h) => (h as { level: number }).level)).toEqual([50, 80, 100]);
+    expect((webhookHits[2] as { text: string }).text).toContain("Recording has stopped");
   });
 });

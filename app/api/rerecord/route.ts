@@ -3,6 +3,7 @@ import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, returnSlot, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { vetScript } from "@/lib/server/vet";
+import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
 
@@ -53,6 +54,9 @@ export async function POST(req: Request) {
   }
 
   const vet = await vetScript(key, lines);
+  if (vet.ok || vet.reason === "rejected") {
+    await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
+  }
   if (!vet.ok) {
     returnSlot(ip);
     return vet.reason === "rejected"
@@ -81,6 +85,14 @@ export async function POST(req: Request) {
   if (!speech.ok) {
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
+  await record({
+    route: "rerecord",
+    kind: "speech",
+    model: voice.model,
+    voiceId: voice.id,
+    chars: text.length,
+    estUsd: await estimateSpeech(voice.model, text.length),
+  });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
