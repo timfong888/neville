@@ -61,8 +61,9 @@ export async function claimHeldShares(renamed: Record<string, string> = {}): Pro
         headers: { "Content-Type": "application/json", "X-Owner-Token": h.ownerToken },
         body: JSON.stringify({ manifestationId: to ?? h.manifestationId }),
       });
-      if (res.status === 404) removeHeld(storage(), h.shareId); // revoked elsewhere, or another account's
-      else if (res.ok && to) addHeld(storage(), { ...h, manifestationId: to, from: "account" });
+      // A 404 can mean another account on this browser owns the link, which
+      // is still live: keep the token so this device can still revoke it.
+      if (res.ok && to) addHeld(storage(), { ...h, manifestationId: to, from: "account" });
     } catch {
       /* kept for the next visit */
     }
