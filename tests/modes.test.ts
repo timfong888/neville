@@ -45,3 +45,18 @@ describe("sleepState", () => {
     expect(sleepState(now - 1, now).kind).toBe("over");
   });
 });
+
+describe("mode voices", () => {
+  it("Active records in Charon, a recordable voice that honours pace (#45)", async () => {
+    const { resolveVoice } = await import("@/lib/voices");
+    const { honoursPace } = await import("@/lib/voiceMix");
+    const active = MODES.find((m) => m.id === "active")!;
+    expect(active.voiceId).toBe("gemini-charon");
+    const v = resolveVoice(active.voiceId);
+    expect(v.id).toBe("gemini-charon");
+    expect(honoursPace(v)).toBe(true);
+  });
+  it("Calm and Sleep keep whatever voice was chosen", () => {
+    for (const m of MODES.filter((x) => x.id !== "active")) expect(m.voiceId).toBeUndefined();
+  });
+});

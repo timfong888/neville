@@ -22,6 +22,8 @@ export type Mode = {
   fadeInS: number;
   /** Offer the sleep timer on the player. */
   sleepTimer: boolean;
+  /** A voice this mode records in (turns Mix voices off). Omitted: keep the chosen voice. */
+  voiceId?: string;
 };
 
 export const MODES: readonly Mode[] = [
@@ -52,7 +54,7 @@ export const MODES: readonly Mode[] = [
   {
     id: "active",
     label: "Active",
-    note: "Brisk and energetic, short pauses, upbeat music. For mornings and walks.",
+    note: "Brisk, with Charon as a calm, confident coach, short pauses and upbeat music. For mornings and walks.",
     pace: "brisk",
     tone: "energetic",
     music: "rise",
@@ -60,6 +62,8 @@ export const MODES: readonly Mode[] = [
     gapMs: 1200,
     fadeInS: 1,
     sleepTimer: false,
+    // Tim picked Charon from the Active candidates (#45).
+    voiceId: "gemini-charon",
   },
 ];
 

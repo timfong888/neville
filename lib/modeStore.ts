@@ -2,6 +2,8 @@
 import { writePaceChoice, writeToneChoice } from "@/lib/deliveryStore";
 import { resolveMode, type Mode, type ModeId } from "@/lib/modes";
 import { writeMusicChoice, writeMusicVolume } from "@/lib/musicStore";
+import { writeMixOn } from "@/lib/voiceMixStore";
+import { writeVoiceChoice } from "@/lib/voiceStore";
 
 export const MODE_STORAGE_KEY = "nv_mode";
 /** Fired on window when a mode is applied, so open pickers re-read their settings. */
@@ -28,6 +30,10 @@ export function applyMode(id: ModeId): boolean {
   ok = writeToneChoice(m.tone) && ok;
   ok = writeMusicChoice(m.music) && ok;
   ok = writeMusicVolume(m.volume) && ok;
+  if (m.voiceId) {
+    ok = writeVoiceChoice(m.voiceId) && ok;
+    ok = writeMixOn(false) && ok;
+  }
   window.dispatchEvent(new Event(MODE_CHANGED));
   return ok;
 }
