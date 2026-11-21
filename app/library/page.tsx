@@ -36,7 +36,7 @@ export default function LibraryPage() {
         <>
           {playAll ? (
             <div className="card">
-              <PlaylistPlayer items={items} />
+              <PlaylistPlayer items={items} title="Library" />
               <p className="banner">
                 <button className="chip" onClick={() => setPlayAll(false)}>
                   Close player

@@ -1,0 +1,42 @@
+{
+  "src": "docs/specs/lessons/lesson-01.md",
+  "mode": "calm",
+  "model": "google/gemini-3.8-flash-lite-tts",
+  "voice": "Vindemiatrix",
+  "quotes": [
+    {
+      "n": 1,
+      "page": "9",
+      "idea": "Make elsewhere here, now"
+    },
+    {
+      "n": 2,
+      "page": "3",
+      "idea": "Assumptions harden into fact"
+    },
+    {
+      "n": 3,
+      "page": "9",
+      "idea": "Feel it, don't watch it"
+    },
+    {
+      "n": 4,
+      "page": "9",
+      "idea": "Imagine what follows fulfillment"
+    },
+    {
+      "n": 5,
+      "page": "9",
+      "idea": "One act, repeated until real"
+    },
+    {
+      "n": 6,
+      "page": "9–10",
+      "idea": "Drowsy \"thank you\" lullaby"
+    }
+  ],
+  "chars": 1187,
+  "durationS": 145,
+  "spentUsd": 0.013283569999999995,
+  "recorded": "2026-11-20T06:40:16.598Z"
+}

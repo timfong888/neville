@@ -1,0 +1,44 @@
+{
+  "recordedAt": "2026-11-20T06:42:09.478Z",
+  "issue": 45,
+  "text": "Breathe in, Tim. Feel your feet on the ground.\nYou are building work you love, one step at a time.\nYou know what to do next, and you do it.\nYour body is strong. Your mind is clear.\nEvery step today moves you forward.\nYou have done hard things before. You can do this.\nKeep going. And so it is.",
+  "style": "Speak like a steady, quietly confident coach walking beside one person: grounded, warm, low and even in pitch, at a natural conversational pace. No salesy lift, no announcer voice, no smile in the voice, and do not stress single words. Let each line settle, with a short pause after it.",
+  "musicDb": -12,
+  "ducking": "none",
+  "totalCostUsd": 0.027,
+  "candidates": [
+    {
+      "letter": "A",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Charon",
+      "note": "Gemini Charon, low male voice, coach prompt",
+      "file": "A.mp3",
+      "seconds": 30.9
+    },
+    {
+      "letter": "B",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Gacrux",
+      "note": "Gemini Gacrux, mature female voice, coach prompt",
+      "file": "B.mp3",
+      "seconds": 30.3
+    },
+    {
+      "letter": "C",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Sulafat",
+      "note": "Gemini Sulafat (already in the app), warm female voice, coach prompt",
+      "file": "C.mp3",
+      "seconds": 28.6
+    },
+    {
+      "letter": "D",
+      "model": "hexgrad/kokoro-82m",
+      "voice": "am_michael",
+      "note": "Kokoro Michael, plain male voice, no style prompt (model already wired in)",
+      "file": "D.mp3",
+      "seconds": 24
+    }
+  ],
+  "costNote": "Run total from OpenRouter key usage; per-candidate costs are not recorded because the usage counter updates late."
+}
