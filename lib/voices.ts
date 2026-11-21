@@ -19,6 +19,8 @@ export type Voice = {
   name: string;
   /** One or two words on how it sounds. May be empty. */
   label: string;
+  /** A short plain description for pickers, e.g. "Warm female voice". Optional. */
+  desc?: string;
   /** A pre-made clip under /public. Playing it costs nothing. */
   sample: string;
   /** Only enabled voices are offered or accepted. */
@@ -43,6 +45,9 @@ function load(): { all: Voice[]; defaultId: string } {
     }
     for (const k of ["enabled", "generate"] as const) {
       if (typeof v[k] !== "boolean") throw new Error(`config/voices.json: "${v.id}" needs "${k}": true or false.`);
+    }
+    if (v.desc !== undefined && (typeof v.desc !== "string" || !v.desc)) {
+      throw new Error(`config/voices.json: "${v.id}" has an empty or invalid "desc".`);
     }
     if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
@@ -83,3 +88,8 @@ export const TIER_LABEL: Record<Tier, string> = {
   mid: "Mid cost",
   premium: "Premium",
 };
+
+/** What a picker shows under a voice's name: its description, else its label. */
+export function voiceBlurb(v: Voice): string {
+  return v.desc ?? v.label;
+}

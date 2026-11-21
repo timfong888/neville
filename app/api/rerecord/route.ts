@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
-import { LIMITS, generationEnabled, returnSlot, takeSlot, underCeiling } from "@/lib/server/limits";
+import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { vetScript } from "@/lib/server/vet";
+import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
 
@@ -43,21 +44,24 @@ export async function POST(req: Request) {
   const voice = resolveVoice(parsed.value.voiceId);
 
   const ip = visitor(req);
-  const refused = takeSlot(ip);
-  if (refused) return NextResponse.json(refused, { status: refused.status });
+  const slot = await takeSlot(ip);
+  if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    returnSlot(ip);
+    await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
   const vet = await vetScript(key, lines);
+  if (vet.ok || vet.reason !== "unavailable") {
+    await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
+  }
   if (!vet.ok) {
     // A rejection was a paid model call, so it keeps its slot: otherwise a
     // caller could loop rejected scripts past the daily limits. Only a check
     // that never answered gives the slot back.
-    if (vet.reason === "unavailable") returnSlot(ip);
+    if (vet.reason === "unavailable") await slot.release();
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
@@ -67,7 +71,7 @@ export async function POST(req: Request) {
   }
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
-    returnSlot(ip);
+    await slot.release();
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
@@ -82,8 +86,19 @@ export async function POST(req: Request) {
     timeoutMs: 42_000,
   });
   if (!speech.ok) {
+    // A failed recording may still have been billed in part (several requests
+    // for a long script), so it is recorded, unpriced.
+    await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
+  await record({
+    route: "rerecord",
+    kind: "speech",
+    model: voice.model,
+    voiceId: voice.id,
+    chars: text.length,
+    estUsd: await estimateSpeech(voice.model, text.length),
+  });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,

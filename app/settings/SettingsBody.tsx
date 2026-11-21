@@ -1,0 +1,26 @@
+"use client";
+
+import { useState } from "react";
+import DeliveryPicker from "./DeliveryPicker";
+import MixPicker from "./MixPicker";
+import ModePicker from "./ModePicker";
+import MusicPicker from "./MusicPicker";
+import VoicePicker from "./VoicePicker";
+
+/** Applying a mode rewrites the settings below it; remounting them makes them show the new values. */
+export default function SettingsBody() {
+  const [rev, setRev] = useState(0);
+  return (
+    <>
+      <h2>Mode</h2>
+      <ModePicker onApplied={() => setRev((r) => r + 1)} />
+      <h2>Delivery</h2>
+      <DeliveryPicker key={`d${rev}`} />
+      <h2 id="voice">Voice</h2>
+      <VoicePicker key={`v${rev}`} />
+      <MixPicker key={`x${rev}`} />
+      <h2>Music</h2>
+      <MusicPicker key={`m${rev}`} />
+    </>
+  );
+}

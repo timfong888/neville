@@ -22,7 +22,7 @@ Paths are relative to the repository root.
 | 5 | Meditations in "You" statements | Built | `lib/prompt.ts`, `lib/script.ts` |
 | 6 | Uses my first name from time to time | Partial | First name used once, in the opening line (`lib/prompt.ts`). "From time to time" across a playlist: each saved manifestation uses it, so a playlist repeats it; within one script it is not repeated |
 | 7 | AI variations to keep it interesting | Built | "New variation" on the player, `app/page.tsx` |
-| 8 | Not repetitive; keeps me engaged instead of YouTube | Partial | Variations, music pad and read-along exist. Images and scrolling visual: #15. Calmer delivery: #10 |
+| 8 | Not repetitive; keeps me engaged instead of YouTube | Partial | Variations, background music and read-along exist. Images and scrolling visual: #15. Calmer delivery: #10 |
 | 9 | New programming that overcomes doubts with imagery and goals | Not yet | #15 |
 
 ## Technology
@@ -34,7 +34,7 @@ Paths are relative to the repository root.
 | Expo and EAS, App Store and Play Store after the MVP | Not yet | #3 (deferred); architecture spec "Later: Expo" |
 | Voice through a router, to compare cost and quality | Built | OpenRouter in `lib/server/tts.ts`; bake-off at `/voices` (#4) |
 | Image generation, many realistic images | Not yet | #15 |
-| Background music that keeps me listening | Partial | Ambient pad generated in the browser (`app/page.tsx`, `startPad`). Licensed loops not chosen |
+| Background music that keeps me listening | Built | Three bundled CC0 loops (Sleep, Calm, Active) in `public/music/`, volume slider, dips under the voice (#30) |
 
 ## GTM
 

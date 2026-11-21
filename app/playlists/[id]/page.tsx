@@ -95,7 +95,7 @@ export default function PlaylistPage() {
 
       {items.length > 0 ? (
         <div className="card">
-          <PlaylistPlayer items={items} />
+          <PlaylistPlayer items={items} title={p.name} />
         </div>
       ) : (
         <p className="lede">Empty. Add manifestations from your library below.</p>
