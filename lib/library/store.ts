@@ -27,7 +27,9 @@ export interface LibraryStore {
 const KEY = "nv_library_v1";
 // Device items already copied into an account, per account id (device id -> account id). Not
 // under the nv_library prefix, so writing it does not reload open views.
-const MOVED_KEY = "nv_moved_to_account_v2";
+const MOVED_KEY = "nv_moved_to_account_v3";
+// Earlier builds kept plaintext copies of scripts here; it is removed on sight.
+const OLD_MOVED_KEYS = ["nv_moved_to_account_v1", "nv_moved_to_account_v2"];
 const DB = "neville";
 const AUDIO = "audio";
 
@@ -115,6 +117,7 @@ export class DeviceStore implements LibraryStore {
   async deleteManifestation(id: string): Promise<void> {
     await audioOp("readwrite", (s) => s.delete(id)).catch(() => undefined);
     this.write(withoutManifestation(this.read(), id));
+    this.forgetMoved(id);
   }
 
   async getAudio(id: string): Promise<Blob | null> {
@@ -169,8 +172,36 @@ export class DeviceStore implements LibraryStore {
     return used;
   }
 
+  /** Drops a device item from every account's moved record. */
+  private forgetMoved(deviceId: string) {
+    try {
+      const all = this.readMoved();
+      let changed = false;
+      for (const rec of Object.values(all)) {
+        if (rec && typeof rec === "object" && deviceId in rec) {
+          delete (rec as Record<string, unknown>)[deviceId];
+          changed = true;
+        }
+      }
+      if (changed) window.localStorage.setItem(MOVED_KEY, JSON.stringify(all));
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  /** Forgets every moved record, for "delete everything on this device". */
+  clearMoved() {
+    try {
+      window.localStorage.removeItem(MOVED_KEY);
+      for (const k of OLD_MOVED_KEYS) window.localStorage.removeItem(k);
+    } catch {
+      /* storage blocked */
+    }
+  }
+
   private readMoved(): Record<string, unknown> {
     try {
+      for (const k of OLD_MOVED_KEYS) window.localStorage.removeItem(k);
       const raw = JSON.parse(window.localStorage.getItem(MOVED_KEY) ?? "{}");
       return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     } catch {

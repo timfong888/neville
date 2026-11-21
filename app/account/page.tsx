@@ -85,6 +85,7 @@ export default function AccountPage() {
     const d = getDeviceStore();
     for (const p of deviceLib.playlists) await d.deletePlaylist(p.id);
     for (const m of deviceLib.manifestations) await d.deleteManifestation(m.id);
+    d.clearMoved();
     try {
       window.localStorage.removeItem("nv_free");
       window.localStorage.removeItem("nv_voice");

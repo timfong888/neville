@@ -34,9 +34,16 @@ export type MoveSource = {
 /** Device id -> the account id it was saved under, and a fingerprint of the device copy at that time. */
 export type MovedIds = Record<string, { id: string; v: string }>;
 
-/** Changes whenever the device copy is edited or re-recorded. */
-export function fingerprint(m: Manifestation): string {
-  return JSON.stringify([m.updatedAt, m.title, m.want, m.firstName, m.lines, m.voiceId, m.voiceName, m.hasAudio]);
+/**
+ * Changes whenever the device copy is edited or re-recorded. A SHA-256 digest,
+ * so the record kept in browser storage holds no wish, name or script text.
+ */
+export async function fingerprint(m: Manifestation): Promise<string> {
+  const data = new TextEncoder().encode(
+    JSON.stringify([m.updatedAt, m.title, m.want, m.firstName, m.lines, m.voiceId, m.voiceName, m.hasAudio]),
+  );
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export type MoveTarget = {
@@ -65,7 +72,7 @@ export async function moveDeviceWork(
   for (const m of [...lib.manifestations].sort((a, b) => a.createdAt - b.createdAt)) {
     try {
       const prior = known[m.id];
-      if (prior && prior.v === fingerprint(m)) {
+      if (prior && prior.v === (await fingerprint(m))) {
         // Already in the account and unchanged here: never save it again over
         // whatever was done to it in the account since.
         newIdFor.set(m.id, prior.id);
@@ -80,7 +87,7 @@ export async function moveDeviceWork(
           const id = !prior && isUuid(m.id) && !taken.has(m.id) ? m.id : newId();
           await target.saveManifestation({ ...m, id }, audio);
           newIdFor.set(m.id, id);
-          known[m.id] = { id, v: fingerprint(m) };
+          known[m.id] = { id, v: await fingerprint(m) };
           moved++;
           await device.setMovedIds(accountId, known);
         }

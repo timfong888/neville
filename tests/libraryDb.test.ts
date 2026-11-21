@@ -4,6 +4,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { addItem, makePlaylist, type Manifestation } from "@/lib/library/model";
 import {
   addTombstones,
+  audioUsage,
+  MAX_ACCOUNT_AUDIO_BYTES,
+  MAX_PENDING_UPLOADS,
+  uploadRefusal,
   clearTombstones,
   oldestTombstones,
   cleanManifestation,
@@ -138,3 +142,32 @@ describe("input from the browser", () => {
     expect(c.createdAt).toBeLessThanOrEqual(Date.now());
   });
 });
+
+describe("recording storage quota", () => {
+  const D = "44444444-4444-4444-8444-444444444444";
+  it("counts stored bytes and keeps them through a title edit", async () => {
+    await db.query(`insert into "user" (id, name, email, "emailVerified") values ('u-q', 'q', 'q@x.test', true)`);
+    const q = await ensureProfile(db, "u-q");
+    await putManifestation(db, q, m(D, "Big"), { key: "audio/u-q/1.mp3", mime: "audio/mpeg", bytes: 5000 });
+    await putManifestation(db, q, m(D, "Big, renamed"), undefined);
+    expect(await audioUsage(db, q)).toEqual({ count: 1, bytes: 5000 });
+  });
+
+  it("refuses an upload that would pass the byte limit", async () => {
+    expect(await uploadRefusal(db, "u-q", 1000)).toBeNull();
+    expect(await uploadRefusal(db, "u-q", MAX_ACCOUNT_AUDIO_BYTES)).toMatch(/storage limit/);
+  });
+
+  it("refuses when too many uploads are in flight", async () => {
+    const keys = Array.from({ length: MAX_PENDING_UPLOADS }, (_, i) => `audio/u-q/pending-${i}.mp3`);
+    await addTombstones(db, keys);
+    expect(await uploadRefusal(db, "u-q", 10)).toMatch(/Too many uploads/);
+    await clearTombstones(db, keys);
+    expect(await uploadRefusal(db, "u-q", 10)).toBeNull();
+  });
+
+  it("a user with no profile yet has an empty quota", async () => {
+    expect(await uploadRefusal(db, "u-nobody", 10)).toBeNull();
+  });
+});
+

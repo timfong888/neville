@@ -108,7 +108,7 @@ export async function putManifestation(
   db: Db,
   profileId: string,
   m: Manifestation,
-  audio: { key: string; mime: string } | null | undefined,
+  audio: { key: string; mime: string; bytes?: number } | null | undefined,
 ): Promise<string[] | null> {
   const up = await db.query(
     `insert into manifestation (id, profile_id, title, description, first_name, created_at, updated_at)
@@ -121,17 +121,56 @@ export async function putManifestation(
     [m.id, profileId, m.title, m.want, m.firstName, m.createdAt],
   );
   if (!up.rows.length) return null;
-  const old = await db.query(`select id, audio_key, audio_mime from rendition where manifestation_id = $1`, [m.id]);
+  const old = await db.query(`select id, audio_key, audio_mime, audio_bytes from rendition where manifestation_id = $1`, [m.id]);
   const current = old.rows[0];
-  const keep = audio === undefined && current?.audio_key ? { key: String(current.audio_key), mime: String(current.audio_mime ?? "") } : null;
+  const keep =
+    audio === undefined && current?.audio_key
+      ? { key: String(current.audio_key), mime: String(current.audio_mime ?? ""), bytes: Number(current.audio_bytes ?? 0) }
+      : null;
   const next = audio ?? keep;
   await db.query(`delete from rendition where manifestation_id = $1`, [m.id]);
   await db.query(
-    `insert into rendition (manifestation_id, script, voice_id, voice_name, audio_key, audio_mime)
-     values ($1, $2::jsonb, $3, $4, $5, $6)`,
-    [m.id, JSON.stringify(m.lines), m.voiceId, m.voiceName, next?.key ?? null, next?.mime ?? null],
+    `insert into rendition (manifestation_id, script, voice_id, voice_name, audio_key, audio_mime, audio_bytes)
+     values ($1, $2::jsonb, $3, $4, $5, $6, $7)`,
+    [m.id, JSON.stringify(m.lines), m.voiceId, m.voiceName, next?.key ?? null, next?.mime ?? null, next ? (next.bytes ?? 0) : 0],
   );
   return old.rows.map((r) => r.audio_key).filter((k): k is string => typeof k === "string" && k !== next?.key);
+}
+
+// Per-account storage limits for recordings. Uploads are client-supplied and
+// separate from generation limits, so they need their own ceiling.
+export const MAX_ACCOUNT_AUDIO_BYTES = 200 * 1024 * 1024;
+export const MAX_ACCOUNT_RECORDINGS = 200;
+/** Uploads a user may have in flight at once (reserved but not yet saved). */
+export const MAX_PENDING_UPLOADS = 3;
+
+/** Recordings the profile holds now: count and total bytes. */
+export async function audioUsage(db: Db, profileId: string): Promise<{ count: number; bytes: number }> {
+  const { rows } = await db.query(
+    `select count(*)::int as n, coalesce(sum(r.audio_bytes), 0)::bigint as b
+       from rendition r join manifestation m on m.id = r.manifestation_id
+      where m.profile_id = $1 and r.audio_key is not null`,
+    [profileId],
+  );
+  return { count: Number(rows[0]?.n ?? 0), bytes: Number(rows[0]?.b ?? 0) };
+}
+
+/**
+ * Why a new upload of `size` bytes is refused, or null if it fits. Counts what
+ * is stored plus uploads still in flight (reserved keys not yet saved).
+ */
+export async function uploadRefusal(db: Db, userId: string, size: number): Promise<string | null> {
+  const p = await db.query(`select id from profile where user_id = $1`, [userId]);
+  const used = p.rows[0] ? await audioUsage(db, String(p.rows[0].id)) : { count: 0, bytes: 0 };
+  const pending = await db.query(
+    `select count(*)::int as n from blob_tombstone where key like $1 and created_at > now() - interval '10 minutes'`,
+    [`audio/${userId}/%`],
+  );
+  const inFlight = Number(pending.rows[0]?.n ?? 0);
+  if (inFlight >= MAX_PENDING_UPLOADS) return "Too many uploads at once. Try again in a minute.";
+  if (used.count + inFlight >= MAX_ACCOUNT_RECORDINGS) return "Your account has reached its limit of saved recordings.";
+  if (used.bytes + size > MAX_ACCOUNT_AUDIO_BYTES) return "Your account has reached its storage limit for recordings.";
+  return null;
 }
 
 /** Deletes one manifestation; returns its storage keys, or null when it is not the caller's. */
