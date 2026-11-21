@@ -160,10 +160,23 @@ describe("recording storage quota", () => {
 
   it("refuses when too many uploads are in flight", async () => {
     const keys = Array.from({ length: MAX_PENDING_UPLOADS }, (_, i) => `audio/u-q/pending-${i}.mp3`);
-    await addTombstones(db, keys);
+    await addTombstones(db, keys, "upload");
     expect(await uploadRefusal(db, "u-q", 10)).toMatch(/Too many uploads/);
     await clearTombstones(db, keys);
     expect(await uploadRefusal(db, "u-q", 10)).toBeNull();
+  });
+
+  it("does not count pending deletions as uploads in flight", async () => {
+    const keys = Array.from({ length: MAX_PENDING_UPLOADS + 2 }, (_, i) => `audio/u-q/deleted-${i}.mp3`);
+    await addTombstones(db, keys);
+    expect(await uploadRefusal(db, "u-q", 10)).toBeNull();
+    await clearTombstones(db, keys);
+  });
+
+  it("lets a re-recording replace a file at the byte limit", async () => {
+    const near = MAX_ACCOUNT_AUDIO_BYTES - 5000; // with the 5000 stored, the account is full
+    expect(await uploadRefusal(db, "u-q", near + 1)).toMatch(/storage limit/);
+    expect(await uploadRefusal(db, "u-q", 5000 + near, D)).toBeNull();
   });
 
   it("a user with no profile yet has an empty quota", async () => {

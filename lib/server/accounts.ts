@@ -161,7 +161,7 @@ export async function audioType(file: Blob): Promise<"audio/wav" | "audio/mpeg" 
 export async function reserveAudioKey(userId: string, mime: "audio/wav" | "audio/mpeg"): Promise<string> {
   // Ownership lives in the database row, not the path; the user id only groups files.
   const key = `audio/${userId}/${randomUUID()}.${mime === "audio/mpeg" ? "mp3" : "wav"}`;
-  await addTombstones(getPool() as unknown as Db, [key]);
+  await addTombstones(getPool() as unknown as Db, [key], "upload");
   return key;
 }
 

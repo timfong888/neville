@@ -39,10 +39,19 @@ export type MovedIds = Record<string, { id: string; v: string }>;
  * so the record kept in browser storage holds no wish, name or script text.
  */
 export async function fingerprint(m: Manifestation): Promise<string> {
-  const data = new TextEncoder().encode(
-    JSON.stringify([m.updatedAt, m.title, m.want, m.firstName, m.lines, m.voiceId, m.voiceName, m.hasAudio]),
-  );
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  return sha256(JSON.stringify([m.updatedAt, m.title, m.want, m.firstName, m.lines, m.voiceId, m.voiceName, m.hasAudio]));
+}
+
+/** The same, for a playlist: changes when it is renamed or its items change. */
+export async function playlistFingerprint(p: Playlist): Promise<string> {
+  return sha256(JSON.stringify([p.updatedAt, p.name, p.itemIds]));
+}
+
+/** Playlists share the moved record with manifestations under this prefix. */
+const PLAYLIST_KEY = (id: string) => `playlist:${id}`;
+
+async function sha256(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -101,11 +110,20 @@ export async function moveDeviceWork(
   const playlistsDone: string[] = [];
   for (const p of lib.playlists) {
     const ids = p.itemIds.map((x) => newIdFor.get(x)).filter((x): x is string => !!x);
+    const key = PLAYLIST_KEY(p.id);
+    const prior = known[key];
     if (ids.length < p.itemIds.length) {
       kept.push({ title: p.name, reason: "it moves once every manifestation in it has moved" });
+    } else if (prior && prior.v === (await playlistFingerprint(p))) {
+      // Saved by an earlier pass that stopped before removing it here: never save it over account edits again.
+      playlistsDone.push(p.id);
     } else {
       try {
-        await target.savePlaylist({ ...p, id: isUuid(p.id) ? p.id : newId(), itemIds: ids });
+        // As for manifestations: a changed copy goes in beside the saved one, and an id another account holds is not reused.
+        const id = !prior && isUuid(p.id) && !taken.has(p.id) ? p.id : newId();
+        await target.savePlaylist({ ...p, id, itemIds: ids });
+        known[key] = { id, v: await playlistFingerprint(p) };
+        await device.setMovedIds(accountId, known);
         playlistsDone.push(p.id);
       } catch (e) {
         kept.push({ title: p.name, reason: e instanceof Error ? e.message : "the account did not accept it" });
@@ -114,7 +132,10 @@ export async function moveDeviceWork(
     onStep(++done, total);
   }
 
-  for (const id of playlistsDone) await device.deletePlaylist(id);
+  for (const id of playlistsDone) {
+    await device.deletePlaylist(id);
+    delete known[PLAYLIST_KEY(id)];
+  }
   // Deleting a manifestation also strips it from device playlists, so keep any
   // that a playlist still on the device lists.
   const held = new Set(lib.playlists.filter((p) => !playlistsDone.includes(p.id)).flatMap((p) => p.itemIds));

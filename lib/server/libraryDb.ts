@@ -158,12 +158,25 @@ export async function audioUsage(db: Db, profileId: string): Promise<{ count: nu
 /**
  * Why a new upload of `size` bytes is refused, or null if it fits. Counts what
  * is stored plus uploads still in flight (reserved keys not yet saved).
+ * `replacing`: the manifestation whose current recording this upload replaces.
  */
-export async function uploadRefusal(db: Db, userId: string, size: number): Promise<string | null> {
+export async function uploadRefusal(db: Db, userId: string, size: number, replacing?: string): Promise<string | null> {
   const p = await db.query(`select id from profile where user_id = $1`, [userId]);
   const used = p.rows[0] ? await audioUsage(db, String(p.rows[0].id)) : { count: 0, bytes: 0 };
+  if (p.rows[0] && replacing) {
+    // Re-recording replaces the current file, so it does not count against the new one.
+    const cur = await db.query(
+      `select coalesce(sum(r.audio_bytes), 0)::bigint as b, count(*)::int as n
+         from rendition r join manifestation m on m.id = r.manifestation_id
+        where m.id = $1 and m.profile_id = $2 and r.audio_key is not null`,
+      [replacing, String(p.rows[0].id)],
+    );
+    used.bytes -= Number(cur.rows[0]?.b ?? 0);
+    used.count -= Number(cur.rows[0]?.n ?? 0);
+  }
   const pending = await db.query(
-    `select count(*)::int as n from blob_tombstone where key like $1 and created_at > now() - interval '10 minutes'`,
+    `select count(*)::int as n from blob_tombstone
+      where kind = 'upload' and key like $1 and created_at > now() - interval '10 minutes'`,
     [`audio/${userId}/%`],
   );
   const inFlight = Number(pending.rows[0]?.n ?? 0);
@@ -252,9 +265,14 @@ export async function deleteAccount(db: Db, userId: string): Promise<string[]> {
 }
 
 /** Records storage keys to delete, in the caller's transaction. */
-export async function addTombstones(db: Db, keys: string[]): Promise<void> {
+export async function addTombstones(db: Db, keys: string[], kind: "upload" | "delete" = "delete"): Promise<void> {
   if (!keys.length) return;
-  await db.query(`insert into blob_tombstone (key) select unnest($1::text[]) on conflict do nothing`, [keys]);
+  // A key reserved for an upload that later needs deleting becomes a deletion.
+  await db.query(
+    `insert into blob_tombstone (key, kind) select unnest($1::text[]), $2
+     on conflict (key) do update set kind = 'delete' where excluded.kind = 'delete'`,
+    [keys, kind],
+  );
 }
 
 /**

@@ -141,6 +141,7 @@ export class DeviceStore implements LibraryStore {
   async deletePlaylist(id: string): Promise<void> {
     const lib = this.read();
     this.write({ ...lib, playlists: lib.playlists.filter((x) => x.id !== id) });
+    this.forgetMoved(`playlist:${id}`);
   }
 
   /** Items already copied into this account (see MovedIds). */
