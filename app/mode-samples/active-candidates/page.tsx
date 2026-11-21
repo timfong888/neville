@@ -28,7 +28,7 @@ export default function ActiveCandidates() {
         </section>
       ))}
       <p className="small muted">
-        Other mode samples: <Link href="/mode-samples">Sleep, Calm and the first Active samples</Link>.
+        Also: <Link href="/mode-samples/prompted">prompted voices</Link> (Charon with different prompts, and a designed voice) and <Link href="/mode-samples">the other mode samples</Link>.
       </p>
     </>
   );
