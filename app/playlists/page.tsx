@@ -1,5 +1,6 @@
 "use client";
 
+import LibraryError from "@/app/components/LibraryError";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,7 +9,7 @@ import { useLibrary } from "@/lib/library/useLibrary";
 
 export default function PlaylistsPage() {
   const router = useRouter();
-  const { lib, ready, store } = useLibrary();
+  const { lib, ready, store, error, reload } = useLibrary();
   const [name, setName] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -49,7 +50,8 @@ export default function PlaylistsPage() {
         {msg && <p className="small muted">{msg}</p>}
       </div>
 
-      {ready && (
+      {ready && error && <LibraryError error={error} retry={reload} />}
+      {ready && !error && (
         <ul className="items">
           <li>
             <div className="grow">

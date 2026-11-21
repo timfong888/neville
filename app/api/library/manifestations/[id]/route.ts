@@ -57,7 +57,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const user = await currentUser(req);
     if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
     // Checked before anything is stored, and again inside the save under the profile lock.
-    const refusal = await uploadRefusal(getPool() as unknown as Db, user.id, file.size);
+    const refusal = await uploadRefusal(getPool() as unknown as Db, user.id, file.size, id);
     if (refusal) return NextResponse.json({ error: refusal }, { status: 413 });
     reserved = await reserveAudioKey(user.id, mime);
     try {

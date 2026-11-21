@@ -112,5 +112,6 @@ create table if not exists playlist_item (
 -- after Blob confirms the file is gone, and are retried on later deletions.
 create table if not exists blob_tombstone (
   key         text primary key,
+  kind        text not null default 'delete' check (kind in ('upload', 'delete')),  -- upload: reserved, not yet saved
   created_at  timestamptz not null default now()
 );

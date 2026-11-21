@@ -185,6 +185,22 @@ describe("moveDeviceWork", () => {
     expect(state.lib.manifestations).toEqual([]);
   });
 
+  it("does not save a playlist again after a pass that stopped before removing it", async () => {
+    const { device, state } = realDevice([m(U1, false, 1)], [addItem({ ...makePlaylist("P"), id: U3 }, U1)], () => true, new Blob(["x"]));
+    let saves = 0;
+    const realDelete = device.deletePlaylist;
+    device.deletePlaylist = async () => {
+      throw new Error("tab closed");
+    };
+    const target: MoveTarget = { saveManifestation: async () => {}, savePlaylist: async () => void saves++ };
+    await moveDeviceWork(device, target, ACC).catch(() => undefined);
+    expect(saves).toBe(1);
+    device.deletePlaylist = realDelete;
+    await moveDeviceWork(device, target, ACC);
+    expect(saves).toBe(1); // recognised from the record, not saved over account edits
+    expect(state.lib.playlists).toEqual([]);
+  });
+
   it("moves a held item to a second account under a fresh id", async () => {
     const { device, state } = realDevice(
       [m(U1, false, 1), m(U2, true, 2)],
