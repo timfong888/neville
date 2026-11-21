@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-11-21T20:20:08.023Z",
+  "issue": 45,
+  "text": "Breathe in, Tim. Feel your feet on the ground.\nYou are building work you love, one step at a time.\nYou know what to do next, and you do it.\nYour body is strong. Your mind is clear.\nEvery step today moves you forward.\nYou have done hard things before. You can do this.\nKeep going. And so it is.",
+  "musicDb": -12,
+  "ducking": "none",
+  "candidates": [
+    {
+      "letter": "P1",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Charon",
+      "prompt": "Speak slower, warmer and more intimate, as if sitting beside one person late in the evening: close to the microphone, soft and low, unhurried, a gentle smile in the voice. Let each line settle before the next.",
+      "note": "Charon, slower, warmer, intimate",
+      "file": "P1.mp3",
+      "seconds": 34.4
+    },
+    {
+      "letter": "P2",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Charon",
+      "prompt": "Speak like a confident running coach beside one person on a morning run: grounded and encouraging, steady breath, a little brisk, sure of every word, never salesy and never shouting.",
+      "note": "Charon, confident morning-run coach",
+      "file": "P2.mp3",
+      "seconds": 24.1
+    },
+    {
+      "letter": "P3",
+      "model": "google/gemini-3.8-flash-tts",
+      "voice": "Charon",
+      "prompt": "Speak slower, warmer and more intimate, as if sitting beside one person late in the evening: close to the microphone, soft and low, unhurried, a gentle smile in the voice. Let each line settle before the next.",
+      "note": "Charon on Gemini's higher 'creative' tier, intimate prompt",
+      "file": "P3.mp3",
+      "seconds": 39.6
+    },
+    {
+      "letter": "P4",
+      "model": "bytedance-seed/seed-audio-1-0",
+      "voice": "",
+      "prompt": "A warm, grounded man in his forties with a low, slightly husky voice. He speaks calmly and confidently, like a trusted coach, close to the microphone, in a quiet room. No music, no sound effects.",
+      "note": "A new voice designed from a description (ByteDance Seed Audio)",
+      "file": "P4.mp3",
+      "seconds": 36.8
+    }
+  ],
+  "costNote": "Estimated from audio length and OpenRouter list prices (the usage counter lags): P1+P2 about $0.011 (Gemini Flash Lite), P3 about $0.012 (Gemini Flash), P4 between $0.003 and $0.09 depending on whether Seed Audio bills its $0.0025 per request or per second."
+}
