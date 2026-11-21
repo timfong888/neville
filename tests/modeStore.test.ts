@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyMode } from "@/lib/modeStore";
+import { applyMode, ensureModeVoice, MODE_STORAGE_KEY } from "@/lib/modeStore";
 import { readMixOn, writeMixOn } from "@/lib/voiceMixStore";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 
@@ -47,5 +47,23 @@ describe("applyMode and the voice", () => {
     writeVoiceChoice("gemini-kore");
     applyMode("sleep");
     expect(readVoiceChoice()).toBe("gemini-kore");
+  });
+  it("moves a browser already in Active onto Charon once, then leaves the listener's choices alone", () => {
+    writeVoiceChoice("gemini-sulafat");
+    writeMixOn(true);
+    window.localStorage.setItem(MODE_STORAGE_KEY, "active");
+    ensureModeVoice();
+    expect(readVoiceChoice()).toBe("gemini-charon");
+    expect(readMixOn()).toBe(false);
+    writeVoiceChoice("gemini-kore");
+    ensureModeVoice();
+    expect(readVoiceChoice()).toBe("gemini-kore");
+    applyMode("calm");
+    expect(readMixOn()).toBe(true);
+  });
+  it("does nothing outside a mode with its own voice", () => {
+    writeVoiceChoice("gemini-sulafat");
+    ensureModeVoice();
+    expect(readVoiceChoice()).toBe("gemini-sulafat");
   });
 });

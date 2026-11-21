@@ -37,6 +37,15 @@ export function applyMode(id: ModeId): boolean {
   return ok;
 }
 
+/**
+ * For a browser that was already in a mode with its own voice before that voice
+ * existed (nothing saved yet): apply the voice once. Safe to call on every load.
+ */
+export function ensureModeVoice(): void {
+  const m = readMode();
+  if (m.voiceId && !readSaved()) applyModeVoice(m);
+}
+
 type Saved = { voice: string | null; mixOn: boolean; modeVoice: string };
 
 function readSaved(): Saved | null {
