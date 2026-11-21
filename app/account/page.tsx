@@ -37,8 +37,7 @@ export default function AccountPage() {
       const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), userId, (d, t) =>
         setBusy(`Moving your saved work into your account… ${d} of ${t}`),
       );
-      const renamed = (r as { renamed?: Record<string, string> }).renamed;
-      if (renamed) await claimHeldShares(renamed);
+      await claimHeldShares(r.renamed);
       const movedLine = `Moved ${r.moved} ${r.moved === 1 ? "manifestation" : "manifestations"} from this device into your account.`;
       setMsg(
         r.kept.length
