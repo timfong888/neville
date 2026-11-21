@@ -2,8 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { Manifestation } from "@/lib/library/model";
-import { getDeviceStore } from "@/lib/library/useLibrary";
-import { type HeldShare, readHeld, writeHeld } from "@/lib/share";
+import {
+  type HeldShare,
+  addHeld,
+  linksShown,
+  linksToRevoke,
+  markPending,
+  readHeld,
+  removeHeld,
+  revokeOutcome,
+} from "@/lib/share";
 
 function storage(): Storage | null {
   try {
@@ -13,10 +21,35 @@ function storage(): Storage | null {
   }
 }
 
+/** Revokes one held link by its owner token. */
+async function revokeOne(h: HeldShare): Promise<"gone" | "deferred" | "failed"> {
+  try {
+    const res = await fetch(`/api/share/${h.shareId}`, { method: "DELETE", headers: { "X-Owner-Token": h.ownerToken } });
+    const j = (await res.json().catch(() => null)) as { code?: string } | null;
+    return revokeOutcome(res.status, j?.code);
+  } catch {
+    return "failed";
+  }
+}
+
 /**
- * Revokes the public link this device made for a manifestation, if any.
- * Called when the manifestation is deleted, so its page stops being public.
- * Returns false only if a link exists and could not be revoked.
+ * Retries revokes that could not reach the server earlier (links were
+ * switched off when their manifestation was deleted). Called when a share
+ * panel or the library opens.
+ */
+export async function retryPendingRevokes(): Promise<void> {
+  for (const h of readHeld(storage()).filter((x) => x.pending)) {
+    if ((await revokeOne(h)) === "gone") removeHeld(storage(), h.shareId);
+  }
+}
+
+/**
+ * Revokes the public links to a manifestation that is being deleted.
+ * `fromDevice`: the device copy is being deleted, so links made from the
+ * account's copy of the same id stay. When links are switched off the token
+ * is kept and retried later, and the delete may go ahead: nothing can be
+ * served meanwhile. Returns false if a link could not be revoked; nothing
+ * should be deleted then.
  */
 export async function revokeShareFor(manifestationId: string, opts: { fromDevice?: boolean } = {}): Promise<boolean> {
   try {
@@ -24,19 +57,12 @@ export async function revokeShareFor(manifestationId: string, opts: { fromDevice
     // with accounts off this revokes nothing and answers 200.
     const all = await fetch(`/api/share?manifestation=${encodeURIComponent(manifestationId)}`, { method: "DELETE" });
     if (!all.ok && all.status !== 400) return false;
-    // The link this device made, by its owner token.
-    // Deleting a device copy whose id also lives in an account (moved keeping
-    // its id, held here by a playlist): the held link may be the account
-    // copy's, so it stays. Only the account-wide revoke above applies.
-    const keepHeld = opts.fromDevice && (await getDeviceStore().idsUsedByOtherAccounts("")).has(manifestationId);
-    const held = keepHeld ? undefined : readHeld(storage())[manifestationId];
-    if (held) {
-      const res = await fetch(`/api/share/${held.shareId}`, {
-        method: "DELETE",
-        headers: { "X-Owner-Token": held.ownerToken },
-      });
-      if (!res.ok && res.status !== 404) return false;
-      writeHeld(storage(), manifestationId, null);
+    // Every link this device made of it, by owner token.
+    for (const h of linksToRevoke(readHeld(storage()), manifestationId, !!opts.fromDevice)) {
+      const outcome = await revokeOne(h);
+      if (outcome === "failed") return false;
+      if (outcome === "gone") removeHeld(storage(), h.shareId);
+      else markPending(storage(), h.shareId);
     }
     return true;
   } catch {
@@ -45,11 +71,9 @@ export async function revokeShareFor(manifestationId: string, opts: { fromDevice
 }
 
 /**
- * Revokes the public links to the given manifestations (the ones about to be
- * wiped from this device). Only these: a held token can also belong to a
- * manifestation that moved into the account and still exists there, and its
- * link must stay. Returns false if any could not be revoked; nothing should be
- * deleted then.
+ * Revokes the public links to the given manifestations, the ones about to be
+ * wiped from this device. Returns false if any could not be revoked; nothing
+ * should be deleted then.
  */
 export async function revokeAllShares(manifestationIds: string[]): Promise<boolean> {
   for (const id of new Set(manifestationIds)) {
@@ -61,22 +85,30 @@ export async function revokeAllShares(manifestationIds: string[]): Promise<boole
 /**
  * Make a public link to one manifestation, copy it, and revoke it. The link
  * is a frozen copy of the title and script at the time it was made. The
- * owner token that allows revoking stays on this device.
+ * owner token that allows revoking stays on this device. `fromDevice` says
+ * whether `m` is a device copy or the account's copy.
  */
-export default function SharePanel({ m }: { m: Manifestation }) {
+export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDevice: boolean }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [held, setHeld] = useState<HeldShare | null>(null);
+  const [shown, setShown] = useState<HeldShare[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const refresh = () => setShown(linksShown(readHeld(storage()), m.id, fromDevice));
+
   useEffect(() => {
-    setHeld(readHeld(storage())[m.id] ?? null);
+    refresh();
+    void retryPendingRevokes();
+    const onStorage = () => refresh();
+    window.addEventListener("storage", onStorage); // another tab made or revoked a link
     fetch("/api/share")
       .then((r) => r.json())
       .then((j: { enabled?: boolean }) => setEnabled(!!j.enabled))
       .catch(() => setEnabled(false));
-  }, [m.id]);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [m.id, fromDevice]);
 
+  const held = shown[0] ?? null;
   const url = held ? `${window.location.origin}/s/${held.shareId}` : "";
 
   const make = async () => {
@@ -93,11 +125,19 @@ export default function SharePanel({ m }: { m: Manifestation }) {
         setMsg(j?.error ?? "The link could not be made just now.");
         return;
       }
-      const h = { shareId: j.id, ownerToken: j.ownerToken, createdAt: Date.now() };
-      if (!writeHeld(storage(), m.id, h)) {
+      const h: HeldShare = {
+        shareId: j.id,
+        ownerToken: j.ownerToken,
+        createdAt: Date.now(),
+        manifestationId: m.id,
+        from: fromDevice ? "device" : "account",
+      };
+      if (!addHeld(storage(), h)) {
         setMsg("Link made, but this browser would not remember it, so it can't be revoked from here.");
+        setShown([h]);
+        return;
       }
-      setHeld(h);
+      refresh();
     } catch {
       setMsg("The link could not be made just now.");
     } finally {
@@ -105,24 +145,25 @@ export default function SharePanel({ m }: { m: Manifestation }) {
     }
   };
 
+  // Stops every link this copy shows (a second tab may have made another).
   const revoke = async () => {
-    if (!held || !window.confirm("Stop sharing? The link will stop working for everyone.")) return;
+    if (!shown.length || !window.confirm("Stop sharing? The link will stop working for everyone.")) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/share/${held.shareId}`, {
-        method: "DELETE",
-        headers: { "X-Owner-Token": held.ownerToken },
-      });
-      // 404: already revoked. Either way it no longer works.
-      if (res.ok || res.status === 404) {
-        writeHeld(storage(), m.id, null);
-        setHeld(null);
-        setMsg("Link revoked.");
-      } else {
-        setMsg("Could not revoke just now. Try again.");
+      let left = 0;
+      let off = false;
+      for (const h of shown) {
+        const outcome = await revokeOne(h);
+        if (outcome === "gone") removeHeld(storage(), h.shareId);
+        else {
+          left++;
+          off ||= outcome === "deferred";
+        }
       }
-    } catch {
-      setMsg("Could not revoke just now. Try again.");
+      refresh();
+      if (!left) setMsg("Link revoked.");
+      else if (off) setMsg("Public links are switched off right now, so the link could not be revoked. Try again later.");
+      else setMsg("Could not revoke just now. Try again.");
     } finally {
       setBusy(false);
     }

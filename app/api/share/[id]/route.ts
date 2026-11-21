@@ -14,10 +14,12 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   if (origin && origin !== new URL(req.url).origin) {
     return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   }
-  // With links switched off no public page can be served, so there is nothing
-  // to revoke: answer as for a link that is already gone, so deleting the
-  // manifestation it came from is never blocked.
-  if (!dbConfigured()) return NextResponse.json({ error: "Public links are not switched on." }, { status: 404 });
+  // With links switched off nothing can be deleted, so this is not a revoke:
+  // the row may come back with the database. The client keeps the token and
+  // retries; meanwhile no public page can be served.
+  if (!dbConfigured()) {
+    return NextResponse.json({ code: "links_off", error: "Public links are not switched on." }, { status: 503 });
+  }
   const { id } = await ctx.params;
   const t = req.headers.get("x-owner-token")?.trim() ?? "";
   const token = OWNER_TOKEN.test(t) ? t : null;

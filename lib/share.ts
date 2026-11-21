@@ -7,8 +7,20 @@ export type ShareInput = { title: string; lines: string[]; voiceName: string; ma
 /** What the public page shows. No wish text, no first name, no ids of the owner. */
 export type PublicShare = { id: string; title: string; lines: string[]; voiceName: string; createdAt: number };
 
-/** What the owner's device keeps, per manifestation, to show and revoke the link. */
-export type HeldShare = { shareId: string; ownerToken: string; createdAt: number };
+/**
+ * What the owner's device keeps for each link it made, to show and revoke it.
+ * `from` is the copy it was made from: a device copy, or the account's copy.
+ * `pending` marks a revoke that could not reach the server (links switched
+ * off) and is retried later; its manifestation may already be deleted.
+ */
+export type HeldShare = {
+  shareId: string;
+  ownerToken: string;
+  createdAt: number;
+  manifestationId: string;
+  from: "device" | "account";
+  pending?: boolean;
+};
 
 export const SHARE_ID = /^[A-Za-z0-9_-]{22}$/;
 export const OWNER_TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -34,36 +46,103 @@ export function parseShare(body: unknown, maxChars: number): Parsed {
   return { ok: true, value: { title, lines, voiceName, manifestationId } };
 }
 
-const KEY = "nv_shares_v1";
+const KEY = "nv_shares_v2";
+const LEGACY_KEY = "nv_shares_v1";
 
-type KV = Pick<Storage, "getItem" | "setItem">;
+type KV = Pick<Storage, "getItem" | "setItem"> & Partial<Pick<Storage, "removeItem">>;
 
-/** Shares this device made, keyed by manifestation id. Malformed entries are dropped. */
-export function readHeld(store: KV | null | undefined): Record<string, HeldShare> {
-  try {
-    const raw = JSON.parse(store?.getItem(KEY) ?? "{}") as Record<string, unknown>;
-    const out: Record<string, HeldShare> = {};
-    for (const [k, v] of Object.entries(raw ?? {})) {
-      const h = v as Partial<HeldShare>;
-      if (h && typeof h.shareId === "string" && SHARE_ID.test(h.shareId) && typeof h.ownerToken === "string" && OWNER_TOKEN.test(h.ownerToken)) {
-        out[k] = { shareId: h.shareId, ownerToken: h.ownerToken, createdAt: Number(h.createdAt) || 0 };
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
+function valid(h: Partial<HeldShare> | null | undefined): h is HeldShare {
+  return !!h && typeof h.shareId === "string" && SHARE_ID.test(h.shareId) && typeof h.ownerToken === "string" && OWNER_TOKEN.test(h.ownerToken);
 }
 
-/** Stores or (with null) forgets the share for one manifestation. Returns false if storage refused. */
-export function writeHeld(store: KV | null | undefined, manifestationId: string, held: HeldShare | null): boolean {
+/**
+ * Every link this device made, keyed by share id, so two tabs sharing the
+ * same manifestation never overwrite each other's token. Entries from the
+ * older per-manifestation format are read as made from a device copy.
+ * Malformed entries are dropped.
+ */
+export function readHeld(store: KV | null | undefined): HeldShare[] {
+  const out = new Map<string, HeldShare>();
   try {
-    const all = readHeld(store);
-    if (held) all[manifestationId] = held;
-    else delete all[manifestationId];
-    store?.setItem(KEY, JSON.stringify(all));
-    return !!store;
+    const legacy = JSON.parse(store?.getItem(LEGACY_KEY) ?? "{}") as Record<string, Partial<HeldShare>>;
+    for (const [mid, h] of Object.entries(legacy ?? {})) {
+      if (valid(h) && MANIFESTATION_ID.test(mid)) {
+        out.set(h.shareId, { shareId: h.shareId, ownerToken: h.ownerToken, createdAt: Number(h.createdAt) || 0, manifestationId: mid, from: "device" });
+      }
+    }
+  } catch {
+    /* unreadable legacy entries are ignored */
+  }
+  try {
+    const raw = JSON.parse(store?.getItem(KEY) ?? "{}") as Record<string, Partial<HeldShare>>;
+    for (const h of Object.values(raw ?? {})) {
+      if (valid(h) && typeof h.manifestationId === "string" && MANIFESTATION_ID.test(h.manifestationId)) {
+        out.set(h.shareId, {
+          shareId: h.shareId,
+          ownerToken: h.ownerToken,
+          createdAt: Number(h.createdAt) || 0,
+          manifestationId: h.manifestationId,
+          from: h.from === "account" ? "account" : "device",
+          ...(h.pending ? { pending: true } : {}),
+        });
+      }
+    }
+  } catch {
+    /* unreadable entries are ignored */
+  }
+  return [...out.values()];
+}
+
+function save(store: KV | null | undefined, all: HeldShare[]): boolean {
+  try {
+    if (!store) return false;
+    store.setItem(KEY, JSON.stringify(Object.fromEntries(all.map((h) => [h.shareId, h]))));
+    store.removeItem?.(LEGACY_KEY);
+    return true;
   } catch {
     return false;
   }
+}
+
+/** Remembers one more link. Re-reads storage first, so other tabs' links stay. */
+export function addHeld(store: KV | null | undefined, held: HeldShare): boolean {
+  return save(store, [...readHeld(store).filter((h) => h.shareId !== held.shareId), held]);
+}
+
+/** Forgets a link once it is revoked (or already gone). */
+export function removeHeld(store: KV | null | undefined, shareId: string): boolean {
+  return save(store, readHeld(store).filter((h) => h.shareId !== shareId));
+}
+
+/** Keeps a link's token for a later retry, because revoking it could not reach the server. */
+export function markPending(store: KV | null | undefined, shareId: string): boolean {
+  return save(store, readHeld(store).map((h) => (h.shareId === shareId ? { ...h, pending: true } : h)));
+}
+
+/**
+ * The links to revoke when a manifestation is deleted. From a device copy,
+ * links made from the account's copy of the same id stay: that copy still
+ * exists. From the account, every link to it goes.
+ */
+export function linksToRevoke(all: HeldShare[], manifestationId: string, fromDevice: boolean): HeldShare[] {
+  return all.filter((h) => h.manifestationId === manifestationId && !(fromDevice && h.from === "account"));
+}
+
+/** The links a manifestation's panel shows: on a device copy, only those made from a device copy. */
+export function linksShown(all: HeldShare[], manifestationId: string, fromDevice: boolean): HeldShare[] {
+  return linksToRevoke(all, manifestationId, fromDevice)
+    .filter((h) => !h.pending)
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * What a revoke response means. "gone": the link no longer works (revoked,
+ * or already gone), so forget it. "deferred": public links are switched off,
+ * so nothing was deleted and nothing can be served; keep the token and retry.
+ * "failed": anything else; nothing should be deleted on top of it.
+ */
+export function revokeOutcome(status: number, code: string | undefined): "gone" | "deferred" | "failed" {
+  if (status === 200 || status === 404) return "gone";
+  if (status === 503 && code === "links_off") return "deferred";
+  return "failed";
 }

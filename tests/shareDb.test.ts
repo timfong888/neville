@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/lib/server/libraryDb";
-import { OWNER_TOKEN, SHARE_ID, parseShare, readHeld, writeHeld } from "@/lib/share";
+import { OWNER_TOKEN, SHARE_ID, addHeld, linksShown, linksToRevoke, markPending, parseShare, readHeld, removeHeld, revokeOutcome } from "@/lib/share";
 
 vi.mock("server-only", () => ({}));
 
@@ -86,15 +86,48 @@ describe("share requests and device memory", () => {
     expect(parseShare({ title: "t", lines: ["a".repeat(701)] }, 700).ok).toBe(false);
   });
 
-  it("remembers and forgets the owner token per manifestation, dropping junk", () => {
+  it("keeps every link by share id, so a second tab never overwrites the first", () => {
     const m = new Map<string, string>();
-    const kv = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
-    const h = { shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1 };
-    expect(writeHeld(kv, "m1", h)).toBe(true);
-    expect(readHeld(kv)).toEqual({ m1: h });
-    m.set("nv_shares_v1", JSON.stringify({ m1: h, m2: { shareId: "bad", ownerToken: "x" } }));
-    expect(Object.keys(readHeld(kv))).toEqual(["m1"]);
-    writeHeld(kv, "m1", null);
-    expect(readHeld(kv)).toEqual({});
+    const kv = {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    };
+    const a = { shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1, manifestationId: "m1", from: "device" as const };
+    const b = { ...a, shareId: "c".repeat(22), createdAt: 2 };
+    expect(addHeld(kv, a)).toBe(true);
+    expect(addHeld(kv, b)).toBe(true);
+    expect(readHeld(kv).map((h) => h.shareId).sort()).toEqual([a.shareId, b.shareId]);
+    expect(linksShown(readHeld(kv), "m1", true)[0].shareId).toBe(b.shareId); // newest first
+    removeHeld(kv, a.shareId);
+    expect(readHeld(kv)).toEqual([b]);
+  });
+
+  it("reads the old per-manifestation format as device links and drops junk", () => {
+    const m = new Map<string, string>();
+    const kv = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+    m.set("nv_shares_v1", JSON.stringify({ m1: { shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1 }, m2: { shareId: "bad", ownerToken: "x" } }));
+    expect(readHeld(kv)).toEqual([{ shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1, manifestationId: "m1", from: "device" }]);
+    markPending(kv, "a".repeat(22)); // first write moves to the new format
+    expect(m.has("nv_shares_v1")).toBe(false);
+    expect(readHeld(kv)[0].pending).toBe(true);
+    expect(linksShown(readHeld(kv), "m1", true)).toEqual([]); // pending links are not shown as live
+  });
+
+  it("deleting a device copy keeps links made from the account's copy; deleting from the account revokes all", () => {
+    const base = { ownerToken: "b".repeat(43), createdAt: 1, manifestationId: "X" };
+    const dev = { ...base, shareId: "d".repeat(22), from: "device" as const };
+    const acc = { ...base, shareId: "e".repeat(22), from: "account" as const };
+    const other = { ...dev, shareId: "f".repeat(22), manifestationId: "Y" };
+    expect(linksToRevoke([dev, acc, other], "X", true)).toEqual([dev]);
+    expect(linksToRevoke([dev, acc, other], "X", false)).toEqual([dev, acc]);
+  });
+
+  it("treats links switched off as a retry, never as revoked", () => {
+    expect(revokeOutcome(200, undefined)).toBe("gone");
+    expect(revokeOutcome(404, undefined)).toBe("gone");
+    expect(revokeOutcome(503, "links_off")).toBe("deferred");
+    expect(revokeOutcome(503, undefined)).toBe("failed");
+    expect(revokeOutcome(403, undefined)).toBe("failed");
   });
 });

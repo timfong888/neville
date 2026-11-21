@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
+import { retryPendingRevokes } from "@/app/components/SharePanel";
 import { newestFirst } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function LibraryPage() {
   const { lib, ready, store } = useLibrary();
   const [playAll, setPlayAll] = useState(false);
+  // Links whose revoke could not reach the server when their item was deleted.
+  useEffect(() => void retryPendingRevokes(), []);
   const items = newestFirst(lib.manifestations);
 
   return (
