@@ -5,6 +5,7 @@ import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
+import { ensureModeVoice } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
@@ -82,6 +83,7 @@ export default function DemoPage() {
   // The voice of the recording being made now, for the "making" steps.
   const [makingVoice, setMakingVoice] = useState(() => resolveVoice(DEFAULT_VOICE_ID));
   const refreshNextVoice = useCallback(() => {
+    ensureModeVoice();
     const chosen = resolveVoice(readVoiceChoice());
     const on = readMixOn();
     setStudioVoice(chosen);

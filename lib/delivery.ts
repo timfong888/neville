@@ -66,10 +66,12 @@ export const TONES: readonly Tone[] = [
   {
     id: "energetic",
     label: "Energetic",
-    note: "Bright and confident, like a coach beside you on a morning walk.",
+    note: "Grounded and quietly confident, like a calm coach walking beside you.",
     speedFactor: 1,
     pauseFactor: 0.8,
-    style: "in a bright, warm, confident and encouraging voice, like a coach walking beside you in the morning",
+    // Tim's pick (#45): the "bright, encouraging" style read as an ad; this is the coach prompt he approved.
+    style:
+      "like a steady, quietly confident coach walking beside one person: grounded, warm, low and even in pitch, at a natural conversational pace",
     scriptNote: "Upbeat, confident and forward-moving. Short, strong lines about action and momentum. Still calm words, no exclamation marks.",
     energy: "lifted",
   },
@@ -133,8 +135,8 @@ export function styleInstruction(pace: Pace, tone: Tone): string {
   if (tone.energy === "lifted") {
     return (
       `Speak ${pace.style}, ${tone.style}. ` +
-      "Use the present tense. Sound alive and sure, but never shout, never sell, and do not stress any single word. " +
-      "Let your pitch settle at the end of each line, and leave a short pause after every line."
+      "Use the present tense. Sound sure, but never shout and never sell: no salesy lift, no announcer voice, no smile in the voice, " +
+      "and do not stress single words. Let your pitch settle at the end of each line, and leave a short pause after every line."
     );
   }
   return (

@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { DEFAULT_MODE_ID, MODES, type ModeId } from "@/lib/modes";
-import { applyMode, readMode } from "@/lib/modeStore";
+import { applyMode, ensureModeVoice, readMode } from "@/lib/modeStore";
 
 /** Sleep, Calm or Active: one tap sets pace, tone, music and pauses. The pickers below can still change any of them. */
 export default function ModePicker({ onApplied }: { onApplied?: () => void }) {
   const [mode, setMode] = useState<ModeId>(DEFAULT_MODE_ID);
   const [note, setNote] = useState("");
-  useEffect(() => setMode(readMode().id), []);
+  // Runs before the voice and Mix pickers below read their settings.
+  useEffect(() => {
+    ensureModeVoice();
+    setMode(readMode().id);
+  }, []);
 
   return (
     <>

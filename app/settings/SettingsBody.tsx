@@ -17,8 +17,8 @@ export default function SettingsBody() {
       <h2>Delivery</h2>
       <DeliveryPicker key={`d${rev}`} />
       <h2 id="voice">Voice</h2>
-      <VoicePicker />
-      <MixPicker />
+      <VoicePicker key={`v${rev}`} />
+      <MixPicker key={`x${rev}`} />
       <h2>Music</h2>
       <MusicPicker key={`m${rev}`} />
     </>

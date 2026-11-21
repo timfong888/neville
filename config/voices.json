@@ -210,6 +210,19 @@
       "desc": "Firm female voice"
     },
     {
+      "id": "gemini-charon",
+      "provider": "Gemini 3.8 Flash Lite",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Charon",
+      "name": "Charon",
+      "label": "Steady",
+      "sample": "/voice-samples/pick/gemini-charon.mp3",
+      "enabled": true,
+      "tier": "mid",
+      "generate": true,
+      "desc": "Low, steady male voice"
+    },
+    {
       "id": "kokoro-af-heart",
       "provider": "Kokoro 82M",
       "model": "hexgrad/kokoro-82m",
@@ -269,7 +282,7 @@
       "enabled": true,
       "tier": "free",
       "generate": true,
-      "desc": "The model’s own voice, free to record"
+      "desc": "The model\u2019s own voice, free to record"
     },
     {
       "id": "fish-s2-1-pro",
