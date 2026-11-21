@@ -34,11 +34,22 @@ const DESIGNED =
   "A warm, grounded man in his forties with a low, slightly husky voice. He speaks calmly and confidently, " +
   "like a trusted coach, close to the microphone, in a quiet room. No music, no sound effects.";
 
+// Tim asked for husky, older and experienced (#45). Qualities only: no real person is named or imitated.
+const GRAVELLY =
+  "A deep, gravelly, raspy baritone. An older man in his early sixties with a worn, husky texture from decades " +
+  "of speaking to large crowds. Big chest resonance, slow and deliberate, with intense, warm conviction. Powerful " +
+  "but not shouting. Leans into key words, pauses with purpose, sounds like a seasoned coach who has seen it all.";
+const GRAVELLY_LOW = GRAVELLY + " Even more rasp and audible breath in the voice, and a lower pitch.";
+const GRAVELLY_DRIVE = GRAVELLY + " More energy and drive: a peak-moment pep talk, urgent and building, still never shouting.";
+
 const CANDIDATES = [
   { letter: "P1", model: "google/gemini-3.8-flash-lite-tts", voice: "Charon", prompt: INTIMATE, note: "Charon, slower, warmer, intimate" },
   { letter: "P2", model: "google/gemini-3.8-flash-lite-tts", voice: "Charon", prompt: MORNING_COACH, note: "Charon, confident morning-run coach" },
   { letter: "P3", model: "google/gemini-3.8-flash-tts", voice: "Charon", prompt: INTIMATE, note: "Charon on Gemini's higher 'creative' tier, intimate prompt" },
   { letter: "P4", model: "bytedance-seed/seed-audio-1-0", voice: "", prompt: DESIGNED, note: "A new voice designed from a description (ByteDance Seed Audio)" },
+  { letter: "P5", model: "bytedance-seed/seed-audio-1-0", voice: "", prompt: GRAVELLY, note: "Designed voice: gravelly, older, experienced coach" },
+  { letter: "P6", model: "bytedance-seed/seed-audio-1-0", voice: "", prompt: GRAVELLY_LOW, note: "Designed voice: as P5, more rasp and breath, lower" },
+  { letter: "P7", model: "bytedance-seed/seed-audio-1-0", voice: "", prompt: GRAVELLY_DRIVE, note: "Designed voice: as P5, more energy and drive" },
 ];
 
 // Rise sits about 13 dB under the voice the whole time: no dips, no pumping.
@@ -123,7 +134,7 @@ for (const c of CANDIDATES.filter((x) => !only || only.includes(x.letter))) {
   rows.push({ ...c, file: `${c.letter}.mp3`, seconds: +dur.toFixed(1) });
   console.log(`${c.letter} ${c.voice}: ${dur.toFixed(0)} s`);
 }
-const total = (await usage()) - start + (kept?.totalCostUsd ?? 0);
+const total = (await usage()) - start;
 rows.sort((a, b) => a.letter.localeCompare(b.letter));
 writeFileSync(
   `${OUT}/manifest.json`,

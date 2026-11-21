@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-21T20:20:08.023Z",
+  "recordedAt": "2026-11-21T20:41:45.205Z",
   "issue": 45,
   "text": "Breathe in, Tim. Feel your feet on the ground.\nYou are building work you love, one step at a time.\nYou know what to do next, and you do it.\nYour body is strong. Your mind is clear.\nEvery step today moves you forward.\nYou have done hard things before. You can do this.\nKeep going. And so it is.",
   "musicDb": -12,
@@ -40,7 +40,34 @@
       "note": "A new voice designed from a description (ByteDance Seed Audio)",
       "file": "P4.mp3",
       "seconds": 36.8
+    },
+    {
+      "letter": "P5",
+      "model": "bytedance-seed/seed-audio-1-0",
+      "voice": "",
+      "prompt": "A deep, gravelly, raspy baritone. An older man in his early sixties with a worn, husky texture from decades of speaking to large crowds. Big chest resonance, slow and deliberate, with intense, warm conviction. Powerful but not shouting. Leans into key words, pauses with purpose, sounds like a seasoned coach who has seen it all.",
+      "note": "Designed voice: gravelly, older, experienced coach",
+      "file": "P5.mp3",
+      "seconds": 26.3
+    },
+    {
+      "letter": "P6",
+      "model": "bytedance-seed/seed-audio-1-0",
+      "voice": "",
+      "prompt": "A deep, gravelly, raspy baritone. An older man in his early sixties with a worn, husky texture from decades of speaking to large crowds. Big chest resonance, slow and deliberate, with intense, warm conviction. Powerful but not shouting. Leans into key words, pauses with purpose, sounds like a seasoned coach who has seen it all. Even more rasp and audible breath in the voice, and a lower pitch.",
+      "note": "Designed voice: as P5, more rasp and breath, lower",
+      "file": "P6.mp3",
+      "seconds": 31.6
+    },
+    {
+      "letter": "P7",
+      "model": "bytedance-seed/seed-audio-1-0",
+      "voice": "",
+      "prompt": "A deep, gravelly, raspy baritone. An older man in his early sixties with a worn, husky texture from decades of speaking to large crowds. Big chest resonance, slow and deliberate, with intense, warm conviction. Powerful but not shouting. Leans into key words, pauses with purpose, sounds like a seasoned coach who has seen it all. More energy and drive: a peak-moment pep talk, urgent and building, still never shouting.",
+      "note": "Designed voice: as P5, more energy and drive",
+      "file": "P7.mp3",
+      "seconds": 32.5
     }
   ],
-  "costNote": "Estimated from audio length and OpenRouter list prices (the usage counter lags): P1+P2 about $0.011 (Gemini Flash Lite), P3 about $0.012 (Gemini Flash), P4 between $0.003 and $0.09 depending on whether Seed Audio bills its $0.0025 per request or per second."
+  "costNote": "Estimated from audio length and OpenRouter list prices (the usage counter lags): P1+P2 about $0.011 (Gemini Flash Lite), P3 about $0.012 (Gemini Flash), P4-P7 each between $0.003 and $0.09 depending on whether Seed Audio bills its $0.0025 per request or per second. The P5-P7 run moved the key's usage counter by about $0.06."
 }
