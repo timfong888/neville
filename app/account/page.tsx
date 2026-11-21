@@ -23,6 +23,8 @@ export default function AccountPage() {
 
   const signedIn = account.enabled && !!account.user;
   const deviceCount = deviceLib.manifestations.length;
+  // Anything on the device to move: manifestations or playlists (even empty ones).
+  const deviceItems = deviceCount + deviceLib.playlists.length;
 
   const userId = account.user?.id ?? "";
   const move = useCallback(async () => {
@@ -52,11 +54,11 @@ export default function AccountPage() {
 
   // First visit after signing in: bring device work across once.
   useEffect(() => {
-    if (signedIn && deviceCount > 0 && !moved.current) {
+    if (signedIn && deviceItems > 0 && !moved.current) {
       moved.current = true;
       void move();
     }
-  }, [signedIn, deviceCount, move]);
+  }, [signedIn, deviceItems, move]);
 
   const signIn = async () => {
     setBusy("Opening Google…");
@@ -131,9 +133,9 @@ export default function AccountPage() {
             Your <Link href="/library">manifestations</Link> and <Link href="/playlists">playlists</Link> are saved in
             your account and follow you to any device.
           </p>
-          {deviceCount > 0 && !busy && (
+          {deviceItems > 0 && !busy && (
             <button className="btn sm" onClick={move}>
-              Move {deviceCount} from this device into my account
+              Move {deviceItems} from this device into my account
             </button>
           )}
           <div className="controls">

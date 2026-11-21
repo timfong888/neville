@@ -34,6 +34,7 @@ export function useLibrary(): { lib: Library; ready: boolean; store: LibraryStor
         setLib(await s.load());
         setError("");
       } catch (e) {
+        setLib(EMPTY_LIBRARY);
         setError(e instanceof Error ? e.message : "Could not load your library.");
       }
       setReady(true);

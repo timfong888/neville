@@ -41,7 +41,7 @@ describe("moveDeviceWork", () => {
     const p = addItem(addItem({ ...makePlaylist("P"), id: U3 }, U1), U2);
     const f = fakes([m(U1, true, 1), m(U2, false, 2)], [p], { audio: { [U1]: blob } });
     const r = await moveDeviceWork(f.device, f.target, ACC);
-    expect(r).toEqual({ moved: 2, kept: [] });
+    expect(r).toEqual({ moved: 2, kept: [], renamed: { [U1]: U1, [U2]: U2 } });
     expect(f.saved.audio[0]).toBe(blob);
     expect(f.saved.p[0].itemIds).toEqual([U1, U2]);
     expect(f.deleted.m.sort()).toEqual([U1, U2].sort());
@@ -106,7 +106,7 @@ describe("moveDeviceWork", () => {
 
     readable = true;
     const second = await moveDeviceWork(device, target, ACC);
-    expect(second).toEqual({ moved: 1, kept: [] });
+    expect(second).toEqual({ moved: 1, kept: [], renamed: { [U1]: U1, [U2]: U2 } });
     expect(account.get(U3)?.itemIds).toEqual([U1, U2]);
     expect(savedM).toEqual([U1, U2]); // U1 was not saved a second time
     expect(state.lib).toEqual({ manifestations: [], playlists: [] });
@@ -185,6 +185,22 @@ describe("moveDeviceWork", () => {
     expect(state.lib.manifestations).toEqual([]);
   });
 
+  it("does not save a playlist again after a pass that stopped before removing it", async () => {
+    const { device, state } = realDevice([m(U1, false, 1)], [addItem({ ...makePlaylist("P"), id: U3 }, U1)], () => true, new Blob(["x"]));
+    let saves = 0;
+    const realDelete = device.deletePlaylist;
+    device.deletePlaylist = async () => {
+      throw new Error("tab closed");
+    };
+    const target: MoveTarget = { saveManifestation: async () => {}, savePlaylist: async () => void saves++ };
+    await moveDeviceWork(device, target, ACC).catch(() => undefined);
+    expect(saves).toBe(1);
+    device.deletePlaylist = realDelete;
+    await moveDeviceWork(device, target, ACC);
+    expect(saves).toBe(1); // recognised from the record, not saved over account edits
+    expect(state.lib.playlists).toEqual([]);
+  });
+
   it("moves a held item to a second account under a fresh id", async () => {
     const { device, state } = realDevice(
       [m(U1, false, 1), m(U2, true, 2)],
@@ -230,6 +246,7 @@ describe("moveDeviceWork", () => {
     expect(isUuid(newMid)).toBe(true);
     expect(isUuid(f.saved.p[0].id)).toBe(true);
     expect(f.saved.p[0].itemIds).toEqual([newMid]);
+    expect(r.renamed).toEqual({ "lx3k-abc": newMid });
     expect(f.deleted.m).toEqual(["lx3k-abc"]);
     expect(f.deleted.p).toEqual(["old-playlist"]);
   });

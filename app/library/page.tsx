@@ -1,5 +1,6 @@
 "use client";
 
+import LibraryError from "@/app/components/LibraryError";
 import Link from "next/link";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
 import { retryPendingRevokes } from "@/app/components/SharePanel";
@@ -8,7 +9,7 @@ import { useLibrary } from "@/lib/library/useLibrary";
 import { useEffect, useState } from "react";
 
 export default function LibraryPage() {
-  const { lib, ready, store } = useLibrary();
+  const { lib, ready, store, error, reload } = useLibrary();
   const [playAll, setPlayAll] = useState(false);
   // Links whose revoke could not reach the server when their item was deleted.
   useEffect(() => void retryPendingRevokes(), []);
@@ -25,7 +26,9 @@ export default function LibraryPage() {
         <p className="small muted">Saved on this device only. <Link href="/account">An account</Link> keeps them on every device.</p>
       )}
 
-      {!ready ? null : items.length === 0 ? (
+      {!ready ? null : error ? (
+        <LibraryError error={error} retry={reload} />
+      ) : items.length === 0 ? (
         <div className="card">
           <p>Nothing saved yet.</p>
           <p className="muted">

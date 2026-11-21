@@ -1,5 +1,6 @@
 "use client";
 
+import LibraryError from "@/app/components/LibraryError";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,7 +14,7 @@ import { resolveVoice } from "@/lib/voices";
 export default function ManifestationPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { lib, ready, store } = useLibrary();
+  const { lib, ready, store, error, reload } = useLibrary();
   const m = lib.manifestations.find((x) => x.id === id);
 
   const [editing, setEditing] = useState(false);
@@ -31,6 +32,7 @@ export default function ManifestationPage() {
   }, [m, editing]);
 
   if (!ready) return null;
+  if (error) return <LibraryError error={error} retry={reload} />;
   if (!m) {
     return (
       <>
