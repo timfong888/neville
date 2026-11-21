@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sameSiteRequest } from "@/lib/server/origin";
 import { accountsEnabled, currentUser, missingVars, purgeAudio, withTx } from "@/lib/server/accounts";
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
@@ -19,8 +20,7 @@ export async function GET(req: Request) {
  * then removed from Blob, and any that fail are retried on later deletions.
  */
 export async function DELETE(req: Request) {
-  const origin = req.headers.get("origin");
-  if (origin && origin !== new URL(req.url).origin) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
+  if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const user = await currentUser(req);
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const keys = await withTx(async (db) => {
