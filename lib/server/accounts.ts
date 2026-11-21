@@ -52,6 +52,11 @@ const AUTH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const APPLE_VARS = ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"] as const;
 
+/** An Apple variable with surrounding whitespace removed (pasted values often end in a newline). */
+function appleVar(k: (typeof APPLE_VARS)[number]): string {
+  return process.env[k]?.trim() ?? "";
+}
+
 /**
  * The Apple client secret, or null when Apple is not configured or its key
  * does not parse. Computed per auth build. A bad key only switches Apple off,
@@ -64,12 +69,12 @@ function appleSecret(): string | null {
   // requests do not parse the key and sign a JWT each time.
   if (appleCache && Date.now() - appleCache.at <= AUTH_MAX_AGE_MS) return appleCache.secret;
   let secret: string | null = null;
-  if (APPLE_VARS.every((k) => process.env[k]?.trim())) {
+  if (APPLE_VARS.every((k) => appleVar(k))) {
     secret = tryAppleClientSecret({
-      teamId: process.env.APPLE_TEAM_ID as string,
-      keyId: process.env.APPLE_KEY_ID as string,
-      clientId: process.env.APPLE_CLIENT_ID as string,
-      privateKey: process.env.APPLE_PRIVATE_KEY as string,
+      teamId: appleVar("APPLE_TEAM_ID"),
+      keyId: appleVar("APPLE_KEY_ID"),
+      clientId: appleVar("APPLE_CLIENT_ID"),
+      privateKey: appleVar("APPLE_PRIVATE_KEY"),
     });
     if (!secret && !appleKeyWarned) {
       appleKeyWarned = true;
@@ -93,7 +98,7 @@ export function signInProviders(): ("google" | "apple")[] {
 function appleProvider() {
   const clientSecret = appleSecret();
   if (!clientSecret) return {};
-  const clientId = process.env.APPLE_CLIENT_ID as string;
+  const clientId = appleVar("APPLE_CLIENT_ID");
   const bundleId = process.env.APPLE_APP_BUNDLE_ID?.trim();
   return {
     apple: {
