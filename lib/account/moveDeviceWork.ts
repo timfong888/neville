@@ -60,7 +60,12 @@ export type MoveTarget = {
   savePlaylist(p: Playlist): Promise<void>;
 };
 
-export type MoveResult = { moved: number; kept: { title: string; reason: string }[] };
+export type MoveResult = {
+  moved: number;
+  kept: { title: string; reason: string }[];
+  /** Device id -> account id for every manifestation now in the account (this pass or an earlier one). */
+  renamed: Record<string, string>;
+};
 
 export async function moveDeviceWork(
   device: MoveSource,
@@ -145,5 +150,5 @@ export async function moveDeviceWork(
     delete known[id];
   }
   await device.setMovedIds(accountId, known);
-  return { moved, kept };
+  return { moved, kept, renamed: Object.fromEntries(newIdFor) };
 }
