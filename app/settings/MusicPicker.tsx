@@ -78,7 +78,7 @@ export default function MusicPicker() {
         />
       </label>
       <p className="small muted">
-        The music dips while the voice speaks. All tracks are original to Neville and in the public domain (
+        The music dips while the voice speaks, except in Active mode, where it stays at one steady level. All tracks are original to Neville and in the public domain (
         <a href={MUSIC_LICENSE.url}>CC0</a>).
       </p>
     </>

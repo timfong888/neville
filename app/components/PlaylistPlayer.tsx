@@ -391,12 +391,13 @@ export default function PlaylistPlayer({
     startAt(p, mine);
   };
 
-  /** Starts the music bed. A mode chosen on the player passes its own track and fade, so it does not depend on storage. */
-  const startMusic = (vol = volume, on = music, track?: MusicChoice, fadeInS?: number) => {
+  /** Starts the music bed. A mode chosen on the player passes its own track, fade and ducking, so it does not depend on storage. */
+  const startMusic = (vol = volume, on = music, track?: MusicChoice, fadeInS?: number, duck?: boolean) => {
     if (!on) return;
     const choice = track ?? readMusicChoice();
     bed.current = new MusicBed();
-    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? resolveMode(readMode().id).fadeInS);
+    const md = resolveMode(readMode().id);
+    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? md.fadeInS, duck ?? md.duck);
   };
 
   /** Applies a mode. While playing, the music crossfades to the mode's track at once. */
@@ -410,7 +411,7 @@ export default function PlaylistPlayer({
     if (phase !== "idle") {
       bed.current?.stop();
       bed.current = null;
-      if (md.music !== "none") startMusic(md.volume, true, md.music, md.fadeInS);
+      if (md.music !== "none") startMusic(md.volume, true, md.music, md.fadeInS, md.duck);
       if (phase === "paused") (bed.current as MusicBed | null)?.pause();
     }
     // Sleep turns the timer on (30 min unless one is set); the others turn it off. Either way
