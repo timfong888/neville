@@ -87,6 +87,8 @@ export class MusicBed {
   private duck: GainNode | null = null;
   private fade: GainNode | null = null;
   private stopped = false;
+  /** No ducking: the music stays at its under-the-voice level the whole time. */
+  private steady = false;
 
   /** Call inside the tap that starts playback. */
   constructor() {
@@ -94,13 +96,15 @@ export class MusicBed {
     if (this.ctx?.state !== "running") void this.ctx?.resume().catch(() => {});
   }
 
-  /** Starts `id` looping at `volume` (0 to 1), fading in over `fadeInS` seconds. */
-  async start(id: MusicChoice, volume: number, fadeInS = 2): Promise<void> {
+  /** Starts `id` looping at `volume` (0 to 1), fading in over `fadeInS` seconds. `duck` false keeps it steady. */
+  async start(id: MusicChoice, volume: number, fadeInS = 2, duck = true): Promise<void> {
+    this.steady = !duck;
     const ctx = this.ctx;
     const t = musicTrack(id);
     if (!ctx || !t) return;
     this.volume = new GainNode(ctx, { gain: musicGain(volume) });
-    this.duck = new GainNode(ctx, { gain: 1 });
+    // Steady: held at the level the music would dip to, so it never pumps.
+    this.duck = new GainNode(ctx, { gain: this.steady ? DUCK_GAIN : 1 });
     this.fade = new GainNode(ctx, { gain: 0 });
     this.volume.connect(this.duck).connect(this.fade).connect(ctx.destination);
     const buf = await decoded(ctx, id);
@@ -121,7 +125,7 @@ export class MusicBed {
   duckFor(segments: Segment[], voiceAt: number): void {
     const ctx = this.ctx;
     const g = this.duck?.gain;
-    if (!ctx || !g) return;
+    if (!ctx || !g || this.steady) return;
     const now = ctx.currentTime;
     const offset = now - voiceAt;
     g.cancelScheduledValues(now);
@@ -139,7 +143,7 @@ export class MusicBed {
   holdDuck(on: boolean): void {
     const ctx = this.ctx;
     const g = this.duck?.gain;
-    if (!ctx || !g) return;
+    if (!ctx || !g || this.steady) return;
     g.cancelScheduledValues(ctx.currentTime);
     g.setTargetAtTime(on ? DUCK_GAIN : 1, ctx.currentTime, on ? 0.08 : 0.35);
   }

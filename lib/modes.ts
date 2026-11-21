@@ -22,6 +22,8 @@ export type Mode = {
   fadeInS: number;
   /** Offer the sleep timer on the player. */
   sleepTimer: boolean;
+  /** Dip the music while the voice speaks. Off: the music stays at one steady level. */
+  duck: boolean;
   /** A voice this mode records in (turns Mix voices off). Omitted: keep the chosen voice. */
   voiceId?: string;
 };
@@ -38,6 +40,7 @@ export const MODES: readonly Mode[] = [
     gapMs: 2500,
     fadeInS: 2,
     sleepTimer: false,
+    duck: true,
   },
   {
     id: "sleep",
@@ -50,18 +53,22 @@ export const MODES: readonly Mode[] = [
     gapMs: 6000,
     fadeInS: 8,
     sleepTimer: true,
+    duck: true,
   },
   {
     id: "active",
     label: "Active",
-    note: "Brisk, with Charon as a calm, confident coach, short pauses and upbeat music. For mornings and walks.",
+    note: "Brisk, with Charon as a calm, confident coach, short pauses and steady upbeat music. For mornings and walks.",
     pace: "brisk",
     tone: "energetic",
     music: "rise",
-    volume: 0.8,
+    // Steady and undipped, as in the samples Tim approved (#45): held at the dipped level,
+    // about 14 dB down, so Rise sits roughly 13 dB under the voice the whole time.
+    volume: 0.7,
     gapMs: 1200,
     fadeInS: 1,
     sleepTimer: false,
+    duck: false,
     // Tim picked Charon from the Active candidates (#45).
     voiceId: "gemini-charon",
   },
