@@ -46,6 +46,10 @@ function baseURL(): string | undefined {
   return undefined;
 }
 
+// The Apple client secret is a JWT that expires (150 days); the auth instance
+// and the secret are rebuilt weekly so a long-lived server never holds an expired one.
+const AUTH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 const APPLE_VARS = ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY"] as const;
 
 /**
@@ -54,18 +58,25 @@ const APPLE_VARS = ["APPLE_CLIENT_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_P
  * with one log line naming the variable; Google sign-in keeps working.
  */
 let appleKeyWarned = false;
+let appleCache: { secret: string | null; at: number } | null = null;
 function appleSecret(): string | null {
-  if (!APPLE_VARS.every((k) => process.env[k]?.trim())) return null;
-  const secret = tryAppleClientSecret({
-    teamId: process.env.APPLE_TEAM_ID as string,
-    keyId: process.env.APPLE_KEY_ID as string,
-    clientId: process.env.APPLE_CLIENT_ID as string,
-    privateKey: process.env.APPLE_PRIVATE_KEY as string,
-  });
-  if (!secret && !appleKeyWarned) {
-    appleKeyWarned = true;
-    console.error("Sign in with Apple is off: APPLE_PRIVATE_KEY could not be read as a .p8 private key.");
+  // Signed once and reused until the auth instance is rebuilt, so status
+  // requests do not parse the key and sign a JWT each time.
+  if (appleCache && Date.now() - appleCache.at <= AUTH_MAX_AGE_MS) return appleCache.secret;
+  let secret: string | null = null;
+  if (APPLE_VARS.every((k) => process.env[k]?.trim())) {
+    secret = tryAppleClientSecret({
+      teamId: process.env.APPLE_TEAM_ID as string,
+      keyId: process.env.APPLE_KEY_ID as string,
+      clientId: process.env.APPLE_CLIENT_ID as string,
+      privateKey: process.env.APPLE_PRIVATE_KEY as string,
+    });
+    if (!secret && !appleKeyWarned) {
+      appleKeyWarned = true;
+      console.error("Sign in with Apple is off: APPLE_PRIVATE_KEY could not be read as a .p8 private key.");
+    }
   }
+  appleCache = { secret, at: Date.now() };
   return secret;
 }
 
@@ -96,9 +107,6 @@ function appleProvider() {
   };
 }
 
-// The Apple client secret is a JWT that expires (150 days); rebuild the
-// instance weekly so a long-lived server never holds an expired one.
-const AUTH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 let authBuiltAt = 0;
 let auth: ReturnType<typeof makeAuth> | null = null;
 function makeAuth() {
@@ -126,6 +134,7 @@ function makeAuth() {
 export function getAuth() {
   if (!accountsEnabled()) throw new Error("Accounts are not enabled.");
   if (!auth || Date.now() - authBuiltAt > AUTH_MAX_AGE_MS) {
+    appleCache = null; // sign a fresh Apple secret for the new instance
     auth = makeAuth();
     authBuiltAt = Date.now();
   }
