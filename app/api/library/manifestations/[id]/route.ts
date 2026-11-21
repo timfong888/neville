@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { audioType, currentUser, MAX_AUDIO_BYTES, purgeAudio, reserveAudioKey, storeAudio } from "@/lib/server/accounts";
-import { addTombstones, clearTombstones, cleanManifestation, deleteManifestation, isId, putManifestation } from "@/lib/server/libraryDb";
+import { getPool } from "@/lib/server/db";
+import {
+  addTombstones,
+  audioUsage,
+  clearTombstones,
+  cleanManifestation,
+  type Db,
+  deleteManifestation,
+  isId,
+  MAX_ACCOUNT_AUDIO_BYTES,
+  MAX_ACCOUNT_RECORDINGS,
+  putManifestation,
+  uploadRefusal,
+} from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
 
 export const dynamic = "force-dynamic";
@@ -38,14 +51,17 @@ export async function PUT(req: Request, { params }: Ctx) {
   // Upload first, outside any transaction, under a key already on record in
   // blob_tombstone; the save transaction then only writes rows. Uploading
   // needs a signed-in caller, so nobody else can fill storage or the record.
-  let audio: { key: string; mime: string } | null | undefined = form.get("removeAudio") === "1" ? null : undefined;
+  let audio: { key: string; mime: string; bytes?: number } | null | undefined = form.get("removeAudio") === "1" ? null : undefined;
   let reserved: string | null = null;
   if (file && mime) {
     const user = await currentUser(req);
     if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+    // Checked before anything is stored, and again inside the save under the profile lock.
+    const refusal = await uploadRefusal(getPool() as unknown as Db, user.id, file.size);
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 413 });
     reserved = await reserveAudioKey(user.id, mime);
     try {
-      audio = await storeAudio(reserved, file, mime);
+      audio = { ...(await storeAudio(reserved, file, mime)), bytes: file.size };
     } catch (e) {
       await purgeAudio([reserved]).catch(() => undefined);
       throw e;
@@ -61,6 +77,11 @@ export async function PUT(req: Request, { params }: Ctx) {
         if (reserved) purge = [reserved];
         return NextResponse.json({ error: "Not found." }, { status: 404 });
       }
+      if (reserved) {
+        // ensureProfile locked the profile row, so concurrent saves are serialized here.
+        const used = await audioUsage(db, profileId);
+        if (used.bytes > MAX_ACCOUNT_AUDIO_BYTES || used.count > MAX_ACCOUNT_RECORDINGS) throw new QuotaExceeded();
+      }
       // The new file is now referenced by a row; the replaced ones are not.
       if (reserved) await clearTombstones(db, [reserved]);
       purge = stale;
@@ -73,9 +94,14 @@ export async function PUT(req: Request, { params }: Ctx) {
   } catch (e) {
     // Rolled back: the reserved key is still on record, so this or a later sweep removes it.
     if (reserved) await purgeAudio([reserved]).catch(() => undefined);
+    if (e instanceof QuotaExceeded) {
+      return NextResponse.json({ error: "Your account has reached its storage limit for recordings." }, { status: 413 });
+    }
     throw e;
   }
 }
+
+class QuotaExceeded extends Error {}
 
 export async function DELETE(req: Request, { params }: Ctx) {
   const { id } = await params;

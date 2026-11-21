@@ -85,6 +85,7 @@ create table if not exists rendition (
   voice_name        text not null default '',
   audio_key         text,            -- storage URL; null = device voice reads it
   audio_mime        text,
+  audio_bytes       bigint not null default 0,  -- counts toward the account's storage quota
   created_at        timestamptz not null default now()
 );
 create index if not exists rendition_manifestation_idx on rendition(manifestation_id, created_at desc);
