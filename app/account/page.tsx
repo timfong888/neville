@@ -51,6 +51,16 @@ export default function AccountPage() {
     refreshDevice();
   }, [refreshDevice, userId]);
 
+  // Signed in: re-send claims for this device's links (one that failed earlier
+  // heals here), so the account can revoke them from any device.
+  const claimed = useRef(false);
+  useEffect(() => {
+    if (signedIn && !claimed.current) {
+      claimed.current = true;
+      void claimHeldShares();
+    }
+  }, [signedIn]);
+
   // First visit after signing in: bring device work across once.
   useEffect(() => {
     if (signedIn && deviceItems > 0 && !moved.current) {

@@ -38,22 +38,28 @@ async function revokeOne(h: HeldShare): Promise<"gone" | "off" | "failed"> {
  * them. With `renamed` (device id -> account id, for items that moved) it
  * also re-points each link at the item's account id and files it as the
  * account copy's, so the account copy's panel shows it and deleting that
- * copy revokes it. Best effort: a link it cannot claim keeps its token here.
+ * copy revokes it. The local re-point happens first and does not depend on
+ * the server: the owner token revokes the link whoever owns the row, and the
+ * next call (next visit to the account page) re-sends the claim with the new
+ * id, so a failed claim heals itself. A link it cannot claim keeps its token.
  */
 export async function claimHeldShares(renamed: Record<string, string> = {}): Promise<void> {
-  for (const h of readHeld(storage())) {
-    const to = renamed[h.manifestationId];
+  for (const held of readHeld(storage())) {
+    const to = renamed[held.manifestationId];
+    // The item now lives in the account under `to`: file the link there now,
+    // so its panel shows it and deleting it revokes it, whatever happens next.
+    const h = to ? { ...held, manifestationId: to, from: "account" as const } : held;
+    if (to) addHeld(storage(), h);
     try {
-      const res = await fetch(`/api/share/${h.shareId}`, {
+      // A 404 can mean another account on this browser owns the link, which
+      // is still live: the token stays either way.
+      await fetch(`/api/share/${h.shareId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Owner-Token": h.ownerToken },
-        body: JSON.stringify({ manifestationId: to ?? h.manifestationId }),
+        body: JSON.stringify({ manifestationId: h.manifestationId }),
       });
-      // A 404 can mean another account on this browser owns the link, which
-      // is still live: keep the token so this device can still revoke it.
-      if (res.ok && to) addHeld(storage(), { ...h, manifestationId: to, from: "account" });
     } catch {
-      /* kept for the next visit */
+      /* the claim is re-sent on the next visit */
     }
   }
 }
