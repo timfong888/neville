@@ -33,11 +33,11 @@ export default function AccountPage() {
     try {
       // Links made signed out go under the account first, so they stay
       // revocable from it whatever the move does to their items' ids.
-      await claimHeldShares();
+      await claimHeldShares(userId);
       const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), userId, (d, t) =>
         setBusy(`Moving your saved work into your account… ${d} of ${t}`),
       );
-      await claimHeldShares(r.renamed);
+      await claimHeldShares(userId, r.renamed);
       const movedLine = `Moved ${r.moved} ${r.moved === 1 ? "manifestation" : "manifestations"} from this device into your account.`;
       setMsg(
         r.kept.length
@@ -55,11 +55,11 @@ export default function AccountPage() {
   // heals here), so the account can revoke them from any device.
   const claimed = useRef(false);
   useEffect(() => {
-    if (signedIn && !claimed.current) {
+    if (signedIn && userId && !claimed.current) {
       claimed.current = true;
-      void claimHeldShares();
+      void claimHeldShares(userId); // queued behind any move's claims, never alongside
     }
-  }, [signedIn]);
+  }, [signedIn, userId]);
 
   // First visit after signing in: bring device work across once.
   useEffect(() => {

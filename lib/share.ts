@@ -17,6 +17,13 @@ export type HeldShare = {
   createdAt: number;
   manifestationId: string;
   from: "device" | "account";
+  /**
+   * A move into an account gave the item a new id there, and claiming the
+   * link for that account has not been confirmed yet. Until it is, the link
+   * keeps its original id and also answers to this one; only that account
+   * retries the claim. Dropped if the account cannot claim the link.
+   */
+  renameTo?: { userId: string; manifestationId: string };
 };
 
 export const SHARE_ID = /^[A-Za-z0-9_-]{22}$/;
@@ -80,6 +87,12 @@ export function readHeld(store: KV | null | undefined): HeldShare[] {
           createdAt: Number(h.createdAt) || 0,
           manifestationId: h.manifestationId,
           from: h.from === "account" ? "account" : "device",
+          ...(h.renameTo &&
+          typeof h.renameTo.userId === "string" &&
+          typeof h.renameTo.manifestationId === "string" &&
+          MANIFESTATION_ID.test(h.renameTo.manifestationId)
+            ? { renameTo: { userId: h.renameTo.userId, manifestationId: h.renameTo.manifestationId } }
+            : {}),
         });
       }
     }
@@ -116,7 +129,21 @@ export function removeHeld(store: KV | null | undefined, shareId: string): boole
  * exists. From the account, every link to it goes.
  */
 export function linksToRevoke(all: HeldShare[], manifestationId: string, fromDevice: boolean): HeldShare[] {
-  return all.filter((h) => h.manifestationId === manifestationId && !(fromDevice && h.from === "account"));
+  return all.filter(
+    (h) =>
+      (h.manifestationId === manifestationId && !(fromDevice && h.from === "account")) ||
+      // The account copy an unconfirmed move renamed it to.
+      (!fromDevice && h.renameTo?.manifestationId === manifestationId),
+  );
+}
+
+/**
+ * The id to claim a link under for `userId`: the item's new id when this
+ * move (`renamed`) or an earlier unconfirmed one for the same account gave
+ * it one, else none (claim under its current id).
+ */
+export function claimTarget(h: HeldShare, userId: string, renamed: Record<string, string>): string | undefined {
+  return renamed[h.manifestationId] ?? (h.renameTo?.userId === userId ? h.renameTo.manifestationId : undefined);
 }
 
 /** The links a manifestation's panel shows: on a device copy, only those made from a device copy. */

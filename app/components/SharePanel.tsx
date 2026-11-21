@@ -5,6 +5,7 @@ import type { Manifestation } from "@/lib/library/model";
 import {
   type HeldShare,
   addHeld,
+  claimTarget,
   linksShown,
   linksToRevoke,
   readHeld,
@@ -32,35 +33,48 @@ async function revokeOne(h: HeldShare): Promise<"gone" | "off" | "failed"> {
 }
 
 /**
- * Puts this device's links under the signed-in account, called around moving
- * device work into it. Without `renamed` it only claims them on the server,
- * so the account can revoke them anywhere and deleting the account removes
- * them. With `renamed` (device id -> account id, for items that moved) it
- * also re-points each link at the item's account id and files it as the
- * account copy's, so the account copy's panel shows it and deleting that
- * copy revokes it. The local re-point happens first and does not depend on
- * the server: the owner token revokes the link whoever owns the row, and the
- * next call (next visit to the account page) re-sends the claim with the new
- * id, so a failed claim heals itself. A link it cannot claim keeps its token.
+ * Puts this device's links under the signed-in account (`userId`), around
+ * moving device work into it and on each signed-in visit. The server claim
+ * lets the account revoke them from any device and removes them with the
+ * account. `renamed` (device id -> account id) re-points links whose item got
+ * a new id. The re-point is recorded as pending for this account first, so
+ * deleting the account copy revokes the link even before the claim lands, and
+ * it only replaces the original id once the claim succeeds: a link this
+ * account cannot claim (another account's) keeps its original id. Calls run
+ * one at a time and each re-reads storage, so a slow sweep never overwrites
+ * a newer one. A link it cannot claim keeps its token.
  */
-export async function claimHeldShares(renamed: Record<string, string> = {}): Promise<void> {
+let claiming: Promise<void> = Promise.resolve();
+export function claimHeldShares(userId: string, renamed: Record<string, string> = {}): Promise<void> {
+  claiming = claiming.then(() => claimOnce(userId, renamed)).catch(() => undefined);
+  return claiming;
+}
+
+async function claimOnce(userId: string, renamed: Record<string, string>): Promise<void> {
   for (const held of readHeld(storage())) {
-    const to = renamed[held.manifestationId];
-    // The item now lives in the account under `to`: file the link there now,
-    // so its panel shows it and deleting it revokes it, whatever happens next.
-    const h = to ? { ...held, manifestationId: to, from: "account" as const } : held;
-    if (to) addHeld(storage(), h);
+    const to = claimTarget(held, userId, renamed);
+    if (to && renamed[held.manifestationId]) addHeld(storage(), { ...held, renameTo: { userId, manifestationId: to } });
+    let status = 0;
     try {
-      // A 404 can mean another account on this browser owns the link, which
-      // is still live: the token stays either way.
-      await fetch(`/api/share/${h.shareId}`, {
+      const res = await fetch(`/api/share/${held.shareId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "X-Owner-Token": h.ownerToken },
-        body: JSON.stringify({ manifestationId: h.manifestationId }),
+        headers: { "Content-Type": "application/json", "X-Owner-Token": held.ownerToken },
+        body: JSON.stringify({ manifestationId: to ?? held.manifestationId }),
       });
+      status = res.status;
     } catch {
-      /* the claim is re-sent on the next visit */
+      /* retried on the next sweep */
     }
+    if (!to) continue;
+    const current = readHeld(storage()).find((x) => x.shareId === held.shareId);
+    if (!current) continue;
+    const { renameTo: _pending, ...rest } = current;
+    void _pending;
+    // Claimed: the link now belongs to the account copy under its new id.
+    if (status >= 200 && status < 300) addHeld(storage(), { ...rest, manifestationId: to, from: "account" });
+    // Not this account's (or gone): keep its original id; drop the re-point.
+    else if (status === 404) addHeld(storage(), rest);
+    // Otherwise the pending re-point stays for this account's next sweep.
   }
 }
 

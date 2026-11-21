@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/lib/server/libraryDb";
-import { OWNER_TOKEN, SHARE_ID, addHeld, linksShown, linksToRevoke, parseShare, readHeld, removeHeld, revokeOutcome } from "@/lib/share";
+import { OWNER_TOKEN, SHARE_ID, addHeld, claimTarget, linksShown, linksToRevoke, parseShare, readHeld, removeHeld, revokeOutcome } from "@/lib/share";
 
 vi.mock("server-only", () => ({}));
 
@@ -144,6 +144,23 @@ describe("share requests and device memory", () => {
     const other = { ...dev, shareId: "f".repeat(22), manifestationId: "Y" };
     expect(linksToRevoke([dev, acc, other], "X", true)).toEqual([dev]);
     expect(linksToRevoke([dev, acc, other], "X", false)).toEqual([dev, acc]);
+  });
+
+  it("an unconfirmed re-point answers to both ids on the account side, and only for its own account", () => {
+    const h = {
+      shareId: "g".repeat(22),
+      ownerToken: "b".repeat(43),
+      createdAt: 1,
+      manifestationId: "legacy-1",
+      from: "device" as const,
+      renameTo: { userId: "u-a", manifestationId: "Y" },
+    };
+    expect(linksToRevoke([h], "Y", false)).toEqual([h]); // deleting the account copy revokes it
+    expect(linksToRevoke([h], "Y", true)).toEqual([]); // a device copy named Y is not it
+    expect(linksToRevoke([h], "legacy-1", true)).toEqual([h]); // the original still matches
+    expect(claimTarget(h, "u-a", {})).toBe("Y"); // retried for its own account
+    expect(claimTarget(h, "u-b", {})).toBeUndefined(); // another account never re-points it
+    expect(claimTarget({ ...h, renameTo: undefined }, "u-b", { "legacy-1": "Z" })).toBe("Z"); // this move's rename
   });
 
   it("never treats links switched off as revoked", () => {
