@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveDeviceWork, type MovedIds, type MoveSource, type MoveTarget } from "@/lib/account/moveDeviceWork";
+import { fingerprint, moveDeviceWork, type MovedIds, type MoveSource, type MoveTarget } from "@/lib/account/moveDeviceWork";
 import { addItem, isUuid, makePlaylist, type Manifestation, newId, type Playlist } from "@/lib/library/model";
 
 const U1 = "11111111-1111-4111-8111-111111111111";
@@ -232,6 +232,16 @@ describe("moveDeviceWork", () => {
     expect(f.saved.p[0].itemIds).toEqual([newMid]);
     expect(f.deleted.m).toEqual(["lx3k-abc"]);
     expect(f.deleted.p).toEqual(["old-playlist"]);
+  });
+});
+
+describe("fingerprint", () => {
+  it("is a SHA-256 hex digest that holds no script text", async () => {
+    const x = { ...m(U1, false, 1), title: "Secret wish", lines: ["private line"] };
+    const f = await fingerprint(x);
+    expect(f).toMatch(/^[0-9a-f]{64}$/);
+    expect(f).not.toContain("Secret");
+    expect(await fingerprint({ ...x, title: "Changed" })).not.toBe(f);
   });
 });
 
