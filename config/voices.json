@@ -11,7 +11,8 @@
       "sample": "/voice-samples/pick/heygen-nadine.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Calm female voice, lower pitch"
     },
     {
       "id": "heygen-tabitha",
@@ -23,7 +24,8 @@
       "sample": "/voice-samples/pick/heygen-tabitha.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Bright female voice, higher pitch"
     },
     {
       "id": "heygen-noelle",
@@ -35,7 +37,8 @@
       "sample": "/voice-samples/pick/heygen-noelle.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Female voice, mid pitch"
     },
     {
       "id": "heygen-meredith",
@@ -47,7 +50,8 @@
       "sample": "/voice-samples/pick/heygen-meredith.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Female voice, lower pitch"
     },
     {
       "id": "heygen-sabrina",
@@ -59,7 +63,8 @@
       "sample": "/voice-samples/pick/heygen-sabrina.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Light female voice, higher pitch"
     },
     {
       "id": "heygen-bram",
@@ -71,7 +76,8 @@
       "sample": "/voice-samples/pick/heygen-bram.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Deep male voice"
     },
     {
       "id": "heygen-gareth",
@@ -83,7 +89,8 @@
       "sample": "/voice-samples/pick/heygen-gareth.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Male voice, mid-low pitch"
     },
     {
       "id": "heygen-lucian",
@@ -95,7 +102,8 @@
       "sample": "/voice-samples/pick/heygen-lucian.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Male voice, mid-low pitch"
     },
     {
       "id": "heygen-weston",
@@ -107,7 +115,8 @@
       "sample": "/voice-samples/pick/heygen-weston.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Lighter male voice"
     },
     {
       "id": "heygen-vincent",
@@ -119,7 +128,8 @@
       "sample": "/voice-samples/pick/heygen-vincent.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Deepest male voice"
     },
     {
       "id": "gemini-achernar",
@@ -131,7 +141,8 @@
       "sample": "/voice-samples/pick/gemini-achernar.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Soft female voice"
     },
     {
       "id": "gemini-vindemiatrix",
@@ -143,7 +154,8 @@
       "sample": "/voice-samples/pick/gemini-vindemiatrix.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Gentle female voice"
     },
     {
       "id": "gemini-sulafat",
@@ -155,7 +167,8 @@
       "sample": "/voice-samples/pick/gemini-sulafat.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Warm female voice"
     },
     {
       "id": "gemini-enceladus",
@@ -167,7 +180,8 @@
       "sample": "/voice-samples/pick/gemini-enceladus.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Breathy male voice"
     },
     {
       "id": "gemini-algieba",
@@ -179,7 +193,8 @@
       "sample": "/voice-samples/pick/gemini-algieba.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Smooth male voice"
     },
     {
       "id": "gemini-kore",
@@ -191,7 +206,21 @@
       "sample": "/voice-samples/pick/gemini-kore.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": true
+      "generate": true,
+      "desc": "Firm female voice"
+    },
+    {
+      "id": "gemini-charon",
+      "provider": "Gemini 3.8 Flash Lite",
+      "model": "google/gemini-3.8-flash-lite-tts",
+      "voice": "Charon",
+      "name": "Charon",
+      "label": "Steady",
+      "sample": "/voice-samples/pick/gemini-charon.mp3",
+      "enabled": true,
+      "tier": "mid",
+      "generate": true,
+      "desc": "Low, steady male voice"
     },
     {
       "id": "kokoro-af-heart",
@@ -203,7 +232,8 @@
       "sample": "/voice-samples/pick/kokoro-af-heart.mp3",
       "enabled": true,
       "tier": "cheap",
-      "generate": true
+      "generate": true,
+      "desc": "Bright American female voice"
     },
     {
       "id": "orpheus-tara",
@@ -251,7 +281,8 @@
       "sample": "/voice-samples/pick/fish-s2-1-pro-free.mp3",
       "enabled": true,
       "tier": "free",
-      "generate": true
+      "generate": true,
+      "desc": "The model\u2019s own voice, free to record"
     },
     {
       "id": "fish-s2-1-pro",

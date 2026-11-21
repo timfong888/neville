@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
-import { LIMITS, generationEnabled, returnSlot, takeSlot, underCeiling } from "@/lib/server/limits";
+import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { writeScript } from "@/lib/server/writer";
+import { estimateSpeech, record } from "@/lib/server/ledger";
+import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// A style instruction for models that take one apart from the script. It is
+// Only these models take a style instruction apart from the script. It is
 // never part of the spoken text, so it cannot be read aloud.
-const STYLE = "Speak slowly, calmly and warmly, like a meditation guide. Leave a short pause after each sentence.";
 const TAKES_STYLE = /^google\/gemini/;
 
 function visitor(req: Request): string {
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
-  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown };
+  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown };
   try {
     body = await req.json();
     if (!body || typeof body !== "object") throw new Error("not an object");
@@ -49,32 +50,59 @@ export async function POST(req: Request) {
   }
   // The browser sends only an id. The model and voice come from the config.
   const voice = resolveVoice(typeof body.voiceId === "string" ? body.voiceId : null);
+  // Pace and tone are preset ids too. Speed, pause and instruction come from lib/delivery.ts.
+  const pace = resolvePace(body.pace);
+  const tone = resolveTone(body.tone);
 
   const ip = visitor(req);
-  const refused = takeSlot(ip);
-  if (refused) return NextResponse.json(refused, { status: refused.status });
+  const slot = await takeSlot(ip);
+  if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    returnSlot(ip);
+    await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
-  const script = await writeScript({ key, want, name, variant });
-  const text = script.lines.join(" ");
+  const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+  // A blank line between lines is the pause we can ask of voices whose audio
+  // cannot be stitched; the others get real silence between lines.
+  const text = script.lines.join("\n\n");
+  // Characters actually spoken, for the ledger: the blank lines between lines
+  // are not sent when a voice is recorded line by line.
+  const spoken = script.lines.join(" ").length;
+  if (script.source === "model") {
+    // Text-model cost is not returned by the writer; at these prices it is a
+    // few thousandths of a cent, so it is recorded as unpriced.
+    await record({ route: "manifest", kind: "script", model: script.model ?? null, chars: spoken, estUsd: null });
+  }
   const speech = await synthesize({
     key,
     model: voice.model,
     voice: voice.voice,
     text,
-    instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
+    lines: script.lines,
+    pauseMs: pauseFor(pace, tone),
+    speed: speedFor(pace, tone),
+    instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     timeoutMs: 42_000,
   });
   if (!speech.ok) {
+    // A failed recording may still have been billed in part (several requests
+    // for a long script), so it is recorded, unpriced.
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: spoken, estUsd: null, ok: false });
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
 
+  await record({
+    route: "manifest",
+    kind: "speech",
+    model: voice.model,
+    voiceId: voice.id,
+    chars: spoken,
+    estUsd: await estimateSpeech(voice.model, spoken),
+  });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
@@ -83,6 +111,12 @@ export async function POST(req: Request) {
       "X-Script-Source": script.source,
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
+      "X-Pace": pace.id,
+      "X-Tone": tone.id,
+      // Whether the model took the speed we sent, and the pause used between lines.
+      "X-Speed-Applied": speech.speedApplied ? "1" : "0",
+      ...(speech.pauseMs ? { "X-Pause-Ms": String(speech.pauseMs) } : {}),
+      ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
     },
   });
 }

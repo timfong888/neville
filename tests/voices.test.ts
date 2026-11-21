@@ -26,3 +26,12 @@ describe("config/voices.json", () => {
     expect(ENABLED_VOICES.some((v) => v.model.startsWith("elevenlabs/"))).toBe(false);
   });
 });
+
+describe("voice descriptions", () => {
+  it("gives every recordable voice a short description for the create-page picker", () => {
+    for (const v of ENABLED_VOICES.filter((x) => x.generate)) {
+      expect(v.desc, v.id).toBeTruthy();
+      expect(v.desc!.length, v.id).toBeLessThan(50);
+    }
+  });
+});

@@ -1,0 +1,63 @@
+{
+  "src": "docs/specs/lessons/lesson-01.md",
+  "mode": "calm",
+  "voice": {
+    "key": "george",
+    "label": "ElevenLabs George",
+    "model": "elevenlabs/eleven-v4-turbo",
+    "voice": "george",
+    "instructions": null
+  },
+  "quotes": [
+    {
+      "n": 1,
+      "page": "9",
+      "idea": "Make elsewhere here, now"
+    },
+    {
+      "n": 2,
+      "page": "3",
+      "idea": "Assumptions harden into fact"
+    },
+    {
+      "n": 3,
+      "page": "9",
+      "idea": "Feel it, don't watch it"
+    },
+    {
+      "n": 4,
+      "page": "9",
+      "idea": "Imagine what follows fulfillment"
+    },
+    {
+      "n": 5,
+      "page": "9",
+      "idea": "One act, repeated until real"
+    },
+    {
+      "n": 6,
+      "page": "9–10",
+      "idea": "Drowsy \"thank you\" lullaby"
+    },
+    {
+      "n": 7,
+      "page": "3",
+      "idea": "Self-concept is the cornerstone"
+    },
+    {
+      "n": 8,
+      "page": "6",
+      "idea": "Don't fight what is"
+    },
+    {
+      "n": 9,
+      "page": "5",
+      "idea": "The whole method, in three"
+    }
+  ],
+  "chars": 1615,
+  "durationS": 142,
+  "estimateUsd": 0.0646,
+  "spentUsd": 0.04681400000000002,
+  "recorded": "2026-11-20T06:44:52.968Z"
+}
