@@ -372,3 +372,5 @@ label.volume.small { margin: 8px 0; }
 .onb-actions .ghost { margin-right: auto; }
 .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text); }
 .volume select { width: auto; }
+.sample { margin-bottom: 14px; }
+.sample h2 { margin: 0 0 4px; }
