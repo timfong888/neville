@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/lib/server/libraryDb";
-import { OWNER_TOKEN, SHARE_ID, addHeld, linksShown, linksToRevoke, markPending, parseShare, readHeld, removeHeld, revokeOutcome } from "@/lib/share";
+import { OWNER_TOKEN, SHARE_ID, addHeld, linksShown, linksToRevoke, parseShare, readHeld, removeHeld, revokeOutcome } from "@/lib/share";
 
 vi.mock("server-only", () => ({}));
 
@@ -132,10 +132,9 @@ describe("share requests and device memory", () => {
     const kv = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
     m.set("nv_shares_v1", JSON.stringify({ m1: { shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1 }, m2: { shareId: "bad", ownerToken: "x" } }));
     expect(readHeld(kv)).toEqual([{ shareId: "a".repeat(22), ownerToken: "b".repeat(43), createdAt: 1, manifestationId: "m1", from: "device" }]);
-    markPending(kv, "a".repeat(22)); // first write moves to the new format
+    removeHeld(kv, "x".repeat(22)); // first write moves to the new format
     expect(m.has("nv_shares_v1")).toBe(false);
-    expect(readHeld(kv)[0].pending).toBe(true);
-    expect(linksShown(readHeld(kv), "m1", true)).toEqual([]); // pending links are not shown as live
+    expect(readHeld(kv)).toHaveLength(1);
   });
 
   it("deleting a device copy keeps links made from the account's copy; deleting from the account revokes all", () => {
@@ -147,10 +146,10 @@ describe("share requests and device memory", () => {
     expect(linksToRevoke([dev, acc, other], "X", false)).toEqual([dev, acc]);
   });
 
-  it("treats links switched off as a retry, never as revoked", () => {
+  it("never treats links switched off as revoked", () => {
     expect(revokeOutcome(200, undefined)).toBe("gone");
     expect(revokeOutcome(404, undefined)).toBe("gone");
-    expect(revokeOutcome(503, "links_off")).toBe("deferred");
+    expect(revokeOutcome(503, "links_off")).toBe("off");
     expect(revokeOutcome(503, undefined)).toBe("failed");
     expect(revokeOutcome(403, undefined)).toBe("failed");
   });

@@ -10,8 +10,6 @@ export type PublicShare = { id: string; title: string; lines: string[]; voiceNam
 /**
  * What the owner's device keeps for each link it made, to show and revoke it.
  * `from` is the copy it was made from: a device copy, or the account's copy.
- * `pending` marks a revoke that could not reach the server (links switched
- * off) and is retried later; its manifestation may already be deleted.
  */
 export type HeldShare = {
   shareId: string;
@@ -19,7 +17,6 @@ export type HeldShare = {
   createdAt: number;
   manifestationId: string;
   from: "device" | "account";
-  pending?: boolean;
 };
 
 export const SHARE_ID = /^[A-Za-z0-9_-]{22}$/;
@@ -83,7 +80,6 @@ export function readHeld(store: KV | null | undefined): HeldShare[] {
           createdAt: Number(h.createdAt) || 0,
           manifestationId: h.manifestationId,
           from: h.from === "account" ? "account" : "device",
-          ...(h.pending ? { pending: true } : {}),
         });
       }
     }
@@ -114,11 +110,6 @@ export function removeHeld(store: KV | null | undefined, shareId: string): boole
   return save(store, readHeld(store).filter((h) => h.shareId !== shareId));
 }
 
-/** Keeps a link's token for a later retry, because revoking it could not reach the server. */
-export function markPending(store: KV | null | undefined, shareId: string): boolean {
-  return save(store, readHeld(store).map((h) => (h.shareId === shareId ? { ...h, pending: true } : h)));
-}
-
 /**
  * The links to revoke when a manifestation is deleted. From a device copy,
  * links made from the account's copy of the same id stay: that copy still
@@ -130,19 +121,18 @@ export function linksToRevoke(all: HeldShare[], manifestationId: string, fromDev
 
 /** The links a manifestation's panel shows: on a device copy, only those made from a device copy. */
 export function linksShown(all: HeldShare[], manifestationId: string, fromDevice: boolean): HeldShare[] {
-  return linksToRevoke(all, manifestationId, fromDevice)
-    .filter((h) => !h.pending)
-    .sort((a, b) => b.createdAt - a.createdAt);
+  return linksToRevoke(all, manifestationId, fromDevice).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /**
  * What a revoke response means. "gone": the link no longer works (revoked,
- * or already gone), so forget it. "deferred": public links are switched off,
- * so nothing was deleted and nothing can be served; keep the token and retry.
- * "failed": anything else; nothing should be deleted on top of it.
+ * or already gone), so forget it. "off": public links are switched off, so
+ * nothing was deleted and the row would come back with the database; keep
+ * the token, and do not delete the manifestation on top of it. "failed":
+ * anything else; likewise keep everything.
  */
-export function revokeOutcome(status: number, code: string | undefined): "gone" | "deferred" | "failed" {
+export function revokeOutcome(status: number, code: string | undefined): "gone" | "off" | "failed" {
   if (status === 200 || status === 404) return "gone";
-  if (status === 503 && code === "links_off") return "deferred";
+  if (status === 503 && code === "links_off") return "off";
   return "failed";
 }

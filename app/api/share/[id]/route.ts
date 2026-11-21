@@ -15,8 +15,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   }
   // With links switched off nothing can be deleted, so this is not a revoke:
-  // the row may come back with the database. The client keeps the token and
-  // retries; meanwhile no public page can be served.
+  // the row would come back with the database. The client keeps the token and
+  // does not delete the manifestation.
   if (!dbConfigured()) {
     return NextResponse.json({ code: "links_off", error: "Public links are not switched on." }, { status: 503 });
   }

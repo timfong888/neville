@@ -7,7 +7,6 @@ import {
   addHeld,
   linksShown,
   linksToRevoke,
-  markPending,
   readHeld,
   removeHeld,
   revokeOutcome,
@@ -22,24 +21,13 @@ function storage(): Storage | null {
 }
 
 /** Revokes one held link by its owner token. */
-async function revokeOne(h: HeldShare): Promise<"gone" | "deferred" | "failed"> {
+async function revokeOne(h: HeldShare): Promise<"gone" | "off" | "failed"> {
   try {
     const res = await fetch(`/api/share/${h.shareId}`, { method: "DELETE", headers: { "X-Owner-Token": h.ownerToken } });
     const j = (await res.json().catch(() => null)) as { code?: string } | null;
     return revokeOutcome(res.status, j?.code);
   } catch {
     return "failed";
-  }
-}
-
-/**
- * Retries revokes that could not reach the server earlier (links were
- * switched off when their manifestation was deleted). Called when a share
- * panel or the library opens.
- */
-export async function retryPendingRevokes(): Promise<void> {
-  for (const h of readHeld(storage()).filter((x) => x.pending)) {
-    if ((await revokeOne(h)) === "gone") removeHeld(storage(), h.shareId);
   }
 }
 
@@ -53,7 +41,7 @@ export async function retryPendingRevokes(): Promise<void> {
  * copy revokes it. Best effort: a link it cannot claim keeps its token here.
  */
 export async function claimHeldShares(renamed: Record<string, string> = {}): Promise<void> {
-  for (const h of readHeld(storage()).filter((x) => !x.pending)) {
+  for (const h of readHeld(storage())) {
     const to = renamed[h.manifestationId];
     try {
       const res = await fetch(`/api/share/${h.shareId}`, {
@@ -73,10 +61,9 @@ export async function claimHeldShares(renamed: Record<string, string> = {}): Pro
 /**
  * Revokes the public links to a manifestation that is being deleted.
  * `fromDevice`: the device copy is being deleted, so links made from the
- * account's copy of the same id stay. When links are switched off the token
- * is kept and retried later, and the delete may go ahead: nothing can be
- * served meanwhile. Returns false if a link could not be revoked; nothing
- * should be deleted then.
+ * account's copy of the same id stay. Returns false if any link could not be
+ * revoked, including while public links are switched off (the row would come
+ * back with the database); nothing should be deleted then.
  */
 export async function revokeShareFor(manifestationId: string, opts: { fromDevice?: boolean } = {}): Promise<boolean> {
   try {
@@ -86,10 +73,8 @@ export async function revokeShareFor(manifestationId: string, opts: { fromDevice
     if (!all.ok && all.status !== 400) return false;
     // Every link this device made of it, by owner token.
     for (const h of linksToRevoke(readHeld(storage()), manifestationId, !!opts.fromDevice)) {
-      const outcome = await revokeOne(h);
-      if (outcome === "failed") return false;
-      if (outcome === "gone") removeHeld(storage(), h.shareId);
-      else markPending(storage(), h.shareId);
+      if ((await revokeOne(h)) !== "gone") return false;
+      removeHeld(storage(), h.shareId);
     }
     return true;
   } catch {
@@ -125,7 +110,6 @@ export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDe
 
   useEffect(() => {
     refresh();
-    void retryPendingRevokes();
     const onStorage = () => refresh();
     window.addEventListener("storage", onStorage); // another tab made or revoked a link
     fetch("/api/share")
@@ -184,7 +168,7 @@ export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDe
         if (outcome === "gone") removeHeld(storage(), h.shareId);
         else {
           left++;
-          off ||= outcome === "deferred";
+          off ||= outcome === "off";
         }
       }
       refresh();
