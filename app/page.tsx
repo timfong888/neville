@@ -5,7 +5,7 @@ import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
-import { ensureModeVoice } from "@/lib/modeStore";
+import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
@@ -197,7 +197,8 @@ export default function DemoPage() {
       // Music on with "No music" chosen in Settings plays the default track.
       const choice = readMusicChoice();
       bed.current = new MusicBed();
-      void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume);
+      const md = readMode();
+      void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, volume, md.fadeInS, md.duck);
     }
 
     // A server recording: play the file and move the read-along by its clock.

@@ -396,7 +396,8 @@ export default function PlaylistPlayer({
     if (!on) return;
     const choice = track ?? readMusicChoice();
     bed.current = new MusicBed();
-    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? resolveMode(readMode().id).fadeInS);
+    const md = resolveMode(readMode().id);
+    void bed.current.start(choice === "none" ? DEFAULT_MUSIC : choice, vol, fadeInS ?? md.fadeInS, md.duck);
   };
 
   /** Applies a mode. While playing, the music crossfades to the mode's track at once. */

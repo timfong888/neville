@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pauseFor, resolvePace, resolveTone, speedFor } from "@/lib/delivery";
 import { MODES, resolveMode, SLEEP_FADE_S, sleepState } from "@/lib/modes";
-import { musicTrack } from "@/lib/music";
+import { DUCK_GAIN, musicGain, musicTrack } from "@/lib/music";
 
 describe("modes", () => {
   it("every mode points at real presets and a bundled track", () => {
@@ -58,5 +58,15 @@ describe("mode voices", () => {
   });
   it("Calm and Sleep keep whatever voice was chosen", () => {
     for (const m of MODES.filter((x) => x.id !== "active")) expect(m.voiceId).toBeUndefined();
+  });
+});
+
+describe("Active's steady music", () => {
+  it("only Active keeps the music undipped, about 14 dB down to sit ~13 dB under speech", () => {
+    expect(MODES.filter((m) => !m.duck).map((m) => m.id)).toEqual(["active"]);
+    // A steady bed is held at the dipped level.
+    const db = 20 * Math.log10(musicGain(resolveMode("active").volume) * DUCK_GAIN);
+    expect(db).toBeGreaterThan(-15);
+    expect(db).toBeLessThan(-13);
   });
 });
