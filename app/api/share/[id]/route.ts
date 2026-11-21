@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/server/accounts";
 import { dbConfigured, getPool } from "@/lib/server/db";
-import { revokeShare } from "@/lib/server/shareDb";
-import { OWNER_TOKEN } from "@/lib/share";
+import { claimShare, revokeShare } from "@/lib/server/shareDb";
+import { MANIFESTATION_ID, OWNER_TOKEN } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +33,38 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
       : NextResponse.json({ error: "No such link, or not yours." }, { status: 404 });
   } catch {
     return NextResponse.json({ error: "Could not revoke just now." }, { status: 503 });
+  }
+}
+
+// Claims a link made signed out for the signed-in account (owner token as
+// proof), optionally re-pointing it at the item's id in the account. Called
+// when device work moves into the account, so deleting it there, or deleting
+// the account, also takes the link down.
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) {
+    return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
+  }
+  if (!dbConfigured()) {
+    return NextResponse.json({ code: "links_off", error: "Public links are not switched on." }, { status: 503 });
+  }
+  const { id } = await ctx.params;
+  const t = req.headers.get("x-owner-token")?.trim() ?? "";
+  if (!OWNER_TOKEN.test(t)) return NextResponse.json({ error: "Not yours." }, { status: 403 });
+  const body = (await req.json().catch(() => null)) as { manifestationId?: unknown } | null;
+  const mid = typeof body?.manifestationId === "string" && MANIFESTATION_ID.test(body.manifestationId) ? body.manifestationId : null;
+  let user: Awaited<ReturnType<typeof currentUser>>;
+  try {
+    user = await currentUser(req);
+  } catch {
+    return NextResponse.json({ error: "Could not check your sign-in just now." }, { status: 503 });
+  }
+  if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  try {
+    return (await claimShare(getPool(), id, t, user.id, mid))
+      ? NextResponse.json({ claimed: true })
+      : NextResponse.json({ error: "No such link, or not yours." }, { status: 404 });
+  } catch {
+    return NextResponse.json({ error: "Could not update the link just now." }, { status: 503 });
   }
 }

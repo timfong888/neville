@@ -44,6 +44,32 @@ export async function retryPendingRevokes(): Promise<void> {
 }
 
 /**
+ * Puts this device's links under the signed-in account, called around moving
+ * device work into it. Without `renamed` it only claims them on the server,
+ * so the account can revoke them anywhere and deleting the account removes
+ * them. With `renamed` (device id -> account id, for items that moved) it
+ * also re-points each link at the item's account id and files it as the
+ * account copy's, so the account copy's panel shows it and deleting that
+ * copy revokes it. Best effort: a link it cannot claim keeps its token here.
+ */
+export async function claimHeldShares(renamed: Record<string, string> = {}): Promise<void> {
+  for (const h of readHeld(storage()).filter((x) => !x.pending)) {
+    const to = renamed[h.manifestationId];
+    try {
+      const res = await fetch(`/api/share/${h.shareId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-Owner-Token": h.ownerToken },
+        body: JSON.stringify({ manifestationId: to ?? h.manifestationId }),
+      });
+      if (res.status === 404) removeHeld(storage(), h.shareId); // revoked elsewhere, or another account's
+      else if (res.ok && to) addHeld(storage(), { ...h, manifestationId: to, from: "account" });
+    } catch {
+      /* kept for the next visit */
+    }
+  }
+}
+
+/**
  * Revokes the public links to a manifestation that is being deleted.
  * `fromDevice`: the device copy is being deleted, so links made from the
  * account's copy of the same id stay. When links are switched off the token

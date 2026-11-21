@@ -58,6 +58,14 @@ export async function POST(req: Request) {
   if (!allow(visitor(req))) {
     return NextResponse.json({ code: "visitor_full", error: "You have made today's public links." }, { status: 429 });
   }
+  // A failed session lookup is not "signed out": a signed-in person's link
+  // made anonymously would escape their account's revoke and its deletion.
+  let user: Awaited<ReturnType<typeof currentUser>>;
+  try {
+    user = await currentUser(req);
+  } catch {
+    return NextResponse.json({ code: "session_unavailable", error: "Could not check your sign-in just now." }, { status: 503 });
+  }
   const budget = await underCeiling(key);
   if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
 
@@ -68,7 +76,6 @@ export async function POST(req: Request) {
       : NextResponse.json({ code: "vet_unavailable", error: "Sharing is paused for a moment." }, { status: 503 });
   }
 
-  const user = await currentUser(req).catch(() => null);
   try {
     const out = await createShare(getPool(), parsed.value, user?.id ?? null);
     return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });

@@ -57,3 +57,25 @@ export async function revokeSharesOf(db: Db, userId: string, manifestationId: st
   );
   return rows.length;
 }
+
+/**
+ * Puts a link made signed out under the signed-in account, with the owner
+ * token as proof: from then on the account can revoke it from any device and
+ * deleting the account deletes it. `manifestationId` re-points it when the
+ * item got a new id on moving into the account. A link another account owns
+ * is left alone. Returns false when nothing matched.
+ */
+export async function claimShare(
+  db: Db,
+  id: string,
+  ownerToken: string,
+  userId: string,
+  manifestationId: string | null,
+): Promise<boolean> {
+  if (!SHARE_ID.test(id)) return false;
+  const { rows } = await db.query(
+    "update share_link set user_id = $3, manifestation_id = coalesce($4, manifestation_id) where id = $1 and owner_token_hash = $2 and (user_id is null or user_id = $3) returning id",
+    [id, hashToken(ownerToken), userId, manifestationId],
+  );
+  return rows.length > 0;
+}

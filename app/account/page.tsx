@@ -8,7 +8,7 @@ import { AccountStore } from "@/lib/library/accountStore";
 import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { getDeviceStore } from "@/lib/library/useLibrary";
 import { moveDeviceWork } from "@/lib/account/moveDeviceWork";
-import { revokeAllShares } from "@/app/components/SharePanel";
+import { claimHeldShares, revokeAllShares } from "@/app/components/SharePanel";
 
 export default function AccountPage() {
   const { account, ready } = useAccount();
@@ -29,9 +29,14 @@ export default function AccountPage() {
     if (!userId) return;
     setBusy("Moving your saved work into your account…");
     try {
+      // Links made signed out go under the account first, so they stay
+      // revocable from it whatever the move does to their items' ids.
+      await claimHeldShares();
       const r = await moveDeviceWork(getDeviceStore(), new AccountStore(), userId, (d, t) =>
         setBusy(`Moving your saved work into your account… ${d} of ${t}`),
       );
+      const renamed = (r as { renamed?: Record<string, string> }).renamed;
+      if (renamed) await claimHeldShares(renamed);
       const movedLine = `Moved ${r.moved} ${r.moved === 1 ? "manifestation" : "manifestations"} from this device into your account.`;
       setMsg(
         r.kept.length

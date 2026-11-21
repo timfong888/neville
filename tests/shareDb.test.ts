@@ -69,6 +69,30 @@ describe("share links in Postgres", () => {
     expect(await S.getShare(db, anon.id)).not.toBeNull();
   });
 
+  it("claims a signed-out link for an account with its token, re-pointing it; never takes another account's", async () => {
+    await db.query(`insert into "user" (id, name, email, "emailVerified") values ('u-d', 'D', 'd@x.test', true), ('u-e', 'E', 'e@x.test', true)`);
+    const { id, ownerToken } = await S.createShare(db, { ...input, manifestationId: "legacy-1" }, null);
+    const other = await S.createShare(db, input, null);
+    expect(await S.claimShare(db, id, other.ownerToken, "u-d", null)).toBe(false); // wrong token
+    expect(await S.claimShare(db, id, ownerToken, "u-d", "11111111-1111-4111-8111-111111111111")).toBe(true);
+    // Now the account's revoke by the new id reaches it.
+    expect(await S.revokeSharesOf(db, "u-d", "11111111-1111-4111-8111-111111111111")).toBe(1);
+    expect(await S.getShare(db, id)).toBeNull();
+
+    const mine = await S.createShare(db, input, "u-e");
+    const token = (await S.createShare(db, input, null)).ownerToken; // unrelated
+    expect(await S.claimShare(db, mine.id, mine.ownerToken, "u-d", null)).toBe(false); // u-e's link stays u-e's
+    expect(token).toMatch(OWNER_TOKEN);
+  });
+
+  it("a claimed link goes when its account is deleted", async () => {
+    await db.query(`insert into "user" (id, name, email, "emailVerified") values ('u-c', 'C', 'c@x.test', true)`);
+    const { id, ownerToken } = await S.createShare(db, input, null);
+    expect(await S.claimShare(db, id, ownerToken, "u-c", null)).toBe(true);
+    await db.query(`delete from "user" where id = 'u-c'`);
+    expect(await S.getShare(db, id)).toBeNull();
+  });
+
   it("ignores malformed ids without querying", async () => {
     expect(await S.getShare(db, "../etc")).toBeNull();
     expect(await S.revokeShare(db, "x", "y", null)).toBe(false);
