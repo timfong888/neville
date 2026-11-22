@@ -6,31 +6,49 @@ import { randomBytes } from "node:crypto";
 import type { Db } from "@/lib/server/libraryDb";
 import { type OwnLink, type PublicShare, SHARE_ID, type ShareInput, UUID } from "@/lib/share";
 
-/** Links one account may make in 24 hours. */
+/** Share attempts one account may make in 24 hours. */
 export const MAX_LINKS_PER_DAY = 20;
 
-export type CreateResult = { ok: true; id: string } | { ok: false; reason: "not_found" | "daily_limit" };
-
-/**
- * Makes a link to one of `userId`'s saved manifestations, freezing the title
- * and script given. Refuses a manifestation the account does not own, and a
- * 21st link in 24 hours. The count and the insert run under a lock on the
- * account's profile row, so parallel requests cannot pass the cap together.
- * Run inside a transaction.
- */
-export async function createShare(db: Db, userId: string, input: ShareInput): Promise<CreateResult> {
-  if (!UUID.test(input.manifestationId)) return { ok: false, reason: "not_found" };
+/** Locks the account's profile row if it owns the manifestation; false otherwise. */
+async function ownsAndLock(db: Db, userId: string, manifestationId: string): Promise<boolean> {
+  if (!UUID.test(manifestationId)) return false;
   const owns = await db.query(
     `select 1 from manifestation m join profile p on p.id = m.profile_id
       where p.user_id = $1 and m.id = $2::uuid for update of p`,
-    [userId, input.manifestationId],
+    [userId, manifestationId],
   );
-  if (!owns.rows.length) return { ok: false, reason: "not_found" };
-  const made = await db.query(
-    `select count(*)::int as n from share_link where user_id = $1 and created_at > now() - interval '24 hours'`,
-    [userId],
-  );
+  return owns.rows.length > 0;
+}
+
+export type ReserveResult = { ok: true } | { ok: false; reason: "not_found" | "daily_limit" };
+
+/**
+ * Records one attempt to share, before the paid content check runs. Refuses a
+ * manifestation the account does not own, and a 21st attempt in 24 hours.
+ * Attempts count whatever happens next (rejected, failed, later revoked), so
+ * an over-quota caller cannot keep spending on moderation. Runs under a lock
+ * on the account's profile row, so parallel requests cannot pass the cap
+ * together. Run inside a transaction.
+ */
+export async function reserveShareAttempt(db: Db, userId: string, manifestationId: string): Promise<ReserveResult> {
+  if (!(await ownsAndLock(db, userId, manifestationId))) return { ok: false, reason: "not_found" };
+  await db.query(`delete from share_attempt where user_id = $1 and created_at <= now() - interval '24 hours'`, [userId]);
+  const made = await db.query(`select count(*)::int as n from share_attempt where user_id = $1`, [userId]);
   if (Number(made.rows[0]?.n ?? 0) >= MAX_LINKS_PER_DAY) return { ok: false, reason: "daily_limit" };
+  await db.query(`insert into share_attempt (user_id) values ($1)`, [userId]);
+  return { ok: true };
+}
+
+export type CreateResult = { ok: true; id: string } | { ok: false; reason: "not_found" };
+
+/**
+ * Makes a link to one of `userId`'s saved manifestations, freezing the title
+ * and script given. Call after reserveShareAttempt and the content check.
+ * Re-checks ownership: the manifestation may have been deleted meanwhile.
+ * Run inside a transaction.
+ */
+export async function createShare(db: Db, userId: string, input: ShareInput): Promise<CreateResult> {
+  if (!(await ownsAndLock(db, userId, input.manifestationId))) return { ok: false, reason: "not_found" };
   const id = randomBytes(16).toString("base64url"); // 22 characters
   await db.query(
     `insert into share_link (id, user_id, manifestation_id, title, lines, voice_name)

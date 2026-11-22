@@ -3,7 +3,7 @@ import { LIMITS, underCeiling } from "@/lib/server/limits";
 import { apiKey } from "@/lib/server/openrouter";
 import { accountsEnabled, currentUser, type SignedIn } from "@/lib/server/accounts";
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
-import { createShare, listShares, MAX_LINKS_PER_DAY } from "@/lib/server/shareDb";
+import { createShare, listShares, MAX_LINKS_PER_DAY, reserveShareAttempt } from "@/lib/server/shareDb";
 import { vetScript } from "@/lib/server/vet";
 import { parseShare, UUID } from "@/lib/share";
 
@@ -69,6 +69,19 @@ export async function POST(req: Request) {
   const parsed = parseShare(body, LIMITS.maxScriptChars);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
 
+  // Ownership and the daily cap are checked, and the attempt recorded,
+  // before anything is spent on the content check.
+  try {
+    const slot = await withTx((db) => reserveShareAttempt(db, user.id, parsed.value.manifestationId));
+    if (!slot.ok) {
+      return slot.reason === "daily_limit"
+        ? NextResponse.json({ code: "daily_limit", error: `You can make ${MAX_LINKS_PER_DAY} public links a day.` }, { status: 429 })
+        : NextResponse.json({ code: "not_found", error: "Save it in your account first." }, { status: 404 });
+    }
+  } catch {
+    return NextResponse.json({ code: "db_failed", error: "The link could not be made just now." }, { status: 503 });
+  }
+
   const budget = await underCeiling(key);
   if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
 
@@ -81,10 +94,9 @@ export async function POST(req: Request) {
 
   try {
     const out = await withTx((db) => createShare(db, user.id, parsed.value));
-    if (out.ok) return NextResponse.json({ id: out.id }, { headers: { "Cache-Control": "no-store" } });
-    return out.reason === "daily_limit"
-      ? NextResponse.json({ code: "daily_limit", error: `You can make ${MAX_LINKS_PER_DAY} public links a day.` }, { status: 429 })
-      : NextResponse.json({ code: "not_found", error: "Save it in your account first." }, { status: 404 });
+    return out.ok
+      ? NextResponse.json({ id: out.id }, { headers: { "Cache-Control": "no-store" } })
+      : NextResponse.json({ code: "not_found", error: "It was deleted before the link was made." }, { status: 404 });
   } catch {
     return NextResponse.json({ code: "db_failed", error: "The link could not be made just now." }, { status: 503 });
   }

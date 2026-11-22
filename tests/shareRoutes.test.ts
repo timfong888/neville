@@ -5,14 +5,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const user = vi.fn();
 const create = vi.fn();
+const reserve = vi.fn();
+const vet = vi.fn();
 vi.mock("@/lib/server/accounts", () => ({ accountsEnabled: () => true, currentUser: () => user() }));
 vi.mock("@/lib/server/db", () => ({ dbConfigured: () => true, getPool: () => ({}), withTx: (fn: (db: object) => unknown) => fn({}) }));
 vi.mock("@/lib/server/openrouter", () => ({ apiKey: () => "k" }));
 vi.mock("@/lib/server/limits", () => ({ LIMITS: { maxScriptChars: 1000 }, underCeiling: async () => ({ ok: true, usage: 0 }) }));
-vi.mock("@/lib/server/vet", () => ({ vetScript: async () => ({ ok: true }) }));
+vi.mock("@/lib/server/vet", () => ({ vetScript: (...a: unknown[]) => vet(...a) }));
 vi.mock("@/lib/server/shareDb", () => ({
   MAX_LINKS_PER_DAY: 20,
   createShare: (...a: unknown[]) => create(...a),
+  reserveShareAttempt: (...a: unknown[]) => reserve(...a),
   listShares: async () => [],
   revokeShare: async () => true,
 }));
@@ -28,6 +31,8 @@ const post = () =>
 beforeEach(() => {
   user.mockReset();
   create.mockReset();
+  reserve.mockReset().mockResolvedValue({ ok: true });
+  vet.mockReset().mockResolvedValue({ ok: true });
 });
 
 describe("POST /api/share", () => {
@@ -38,6 +43,7 @@ describe("POST /api/share", () => {
     expect(res.status).toBe(401);
     expect((await res.json()).code).toBe("sign_in");
     expect(create).not.toHaveBeenCalled();
+    expect(vet).not.toHaveBeenCalled();
   });
 
   it("a failed sign-in check is 503, not treated as signed out", async () => {
@@ -57,11 +63,21 @@ describe("POST /api/share", () => {
     expect(create.mock.calls[0][1]).toBe("u-a");
   });
 
-  it("over the daily cap: 429", async () => {
+  it("over the daily cap: 429, before any paid content check", async () => {
     user.mockResolvedValue({ id: "u-a" });
-    create.mockResolvedValue({ ok: false, reason: "daily_limit" });
+    reserve.mockResolvedValue({ ok: false, reason: "daily_limit" });
     const { POST } = await import("@/app/api/share/route");
     expect((await POST(post())).status).toBe(429);
+    expect(vet).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("not the account's manifestation: 404, before any paid content check", async () => {
+    user.mockResolvedValue({ id: "u-a" });
+    reserve.mockResolvedValue({ ok: false, reason: "not_found" });
+    const { POST } = await import("@/app/api/share/route");
+    expect((await POST(post())).status).toBe(404);
+    expect(vet).not.toHaveBeenCalled();
   });
 
   it("refuses another site's origin", async () => {

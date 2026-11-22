@@ -62,9 +62,10 @@ describe("share links in Postgres", () => {
   });
 
   it("refuses a manifestation the account does not own, or that does not exist", async () => {
-    expect(await S.createShare(db, "u-a", input(MB))).toEqual({ ok: false, reason: "not_found" });
-    expect(await S.createShare(db, "u-a", input(NONE))).toEqual({ ok: false, reason: "not_found" });
-    expect(await S.createShare(db, "u-nobody", input(MA))).toEqual({ ok: false, reason: "not_found" });
+    for (const [u, mid] of [["u-a", MB], ["u-a", NONE], ["u-nobody", MA]]) {
+      expect(await S.reserveShareAttempt(db, u, mid)).toEqual({ ok: false, reason: "not_found" });
+      expect(await S.createShare(db, u, input(mid))).toEqual({ ok: false, reason: "not_found" });
+    }
   });
 
   it("every link has an owner: the table refuses a row without one", async () => {
@@ -97,12 +98,17 @@ describe("share links in Postgres", () => {
     expect(await S.getShare(db, id)).toBeNull();
   });
 
-  it("caps an account at 20 links in 24 hours; older ones do not count", async () => {
-    for (let i = 0; i < S.MAX_LINKS_PER_DAY; i++) await make("u-c", MC);
-    expect(await S.createShare(db, "u-c", input(MC))).toEqual({ ok: false, reason: "daily_limit" });
-    expect((await S.createShare(db, "u-a", input(MA))).ok).toBe(true); // another account is unaffected
-    await db.query(`update share_link set created_at = now() - interval '25 hours' where user_id = 'u-c'`);
-    expect((await S.createShare(db, "u-c", input(MC))).ok).toBe(true);
+  it("caps an account at 20 attempts in 24 hours, counted before the content check; revoking does not free one", async () => {
+    for (let i = 0; i < S.MAX_LINKS_PER_DAY; i++) expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: true });
+    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: false, reason: "daily_limit" });
+    const id = await make("u-c", MC);
+    await S.revokeShare(db, "u-c", id);
+    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: false, reason: "daily_limit" });
+    expect(await S.reserveShareAttempt(db, "u-a", MA)).toEqual({ ok: true }); // another account is unaffected
+    await db.query(`update share_attempt set created_at = now() - interval '25 hours' where user_id = 'u-c'`);
+    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: true });
+    const { rows } = await db.query(`select count(*)::int as n from share_attempt where user_id = 'u-c'`);
+    expect(rows[0].n).toBe(1); // older attempts pruned
   });
 
   it("deleting the account deletes its links and leaves others'", async () => {
@@ -118,6 +124,7 @@ describe("share links in Postgres", () => {
     expect(await S.revokeShare(db, "u-a", "short")).toBe(false);
     expect(await S.listShares(db, "u-a", "not-a-uuid")).toEqual([]);
     expect(await S.createShare(db, "u-a", input("not-a-uuid"))).toEqual({ ok: false, reason: "not_found" });
+    expect(await S.reserveShareAttempt(db, "u-a", "not-a-uuid")).toEqual({ ok: false, reason: "not_found" });
   });
 });
 

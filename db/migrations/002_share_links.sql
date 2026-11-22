@@ -7,6 +7,11 @@
 -- revoke it from any device; deleting the manifestation or the account
 -- deletes its links.
 --
+-- share_attempt records each request to make a link, before the paid content
+-- check runs, so the daily cap counts attempts (including rejected ones and
+-- links since revoked) and an over-quota caller cannot keep spending on
+-- moderation. Rows older than a day are pruned as new ones are made.
+--
 -- Additive only.
 
 create table if not exists share_link (
@@ -19,4 +24,10 @@ create table if not exists share_link (
   created_at       timestamptz not null default now()
 );
 create index if not exists share_link_owner_idx on share_link(user_id, manifestation_id);
-create index if not exists share_link_made_idx on share_link(user_id, created_at desc);
+
+create table if not exists share_attempt (
+  id         bigint generated always as identity primary key,
+  user_id    text not null references "user"("id") on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists share_attempt_user_idx on share_attempt(user_id, created_at desc);
