@@ -9,6 +9,7 @@ import {
   parseLibrary,
   withoutManifestation,
 } from "@/lib/library/model";
+import type { MovedIds } from "@/lib/account/moveDeviceWork";
 
 export interface LibraryStore {
   /** Where the data lives, for the copy shown to people. */
@@ -24,6 +25,11 @@ export interface LibraryStore {
 }
 
 const KEY = "nv_library_v1";
+// Device items already copied into an account, per account id (device id -> account id). Not
+// under the nv_library prefix, so writing it does not reload open views.
+const MOVED_KEY = "nv_moved_to_account_v3";
+// Earlier builds kept plaintext copies of scripts here; it is removed on sight.
+const OLD_MOVED_KEYS = ["nv_moved_to_account_v1", "nv_moved_to_account_v2"];
 const DB = "neville";
 const AUDIO = "audio";
 
@@ -111,6 +117,7 @@ export class DeviceStore implements LibraryStore {
   async deleteManifestation(id: string): Promise<void> {
     await audioOp("readwrite", (s) => s.delete(id)).catch(() => undefined);
     this.write(withoutManifestation(this.read(), id));
+    this.forgetMoved(id);
   }
 
   async getAudio(id: string): Promise<Blob | null> {
@@ -134,5 +141,72 @@ export class DeviceStore implements LibraryStore {
   async deletePlaylist(id: string): Promise<void> {
     const lib = this.read();
     this.write({ ...lib, playlists: lib.playlists.filter((x) => x.id !== id) });
+    this.forgetMoved(`playlist:${id}`);
+  }
+
+  /** Items already copied into this account (see MovedIds). */
+  async movedIds(accountId: string): Promise<MovedIds> {
+    const raw = this.readMoved()[accountId];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: MovedIds = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const e = v as { id?: unknown; v?: unknown } | null;
+      if (e && typeof e.id === "string" && typeof e.v === "string") out[k] = { id: e.id, v: e.v };
+    }
+    return out;
+  }
+
+  async setMovedIds(accountId: string, ids: MovedIds): Promise<void> {
+    const all = this.readMoved();
+    if (Object.keys(ids).length) all[accountId] = ids;
+    else delete all[accountId];
+    if (Object.keys(all).length) window.localStorage.setItem(MOVED_KEY, JSON.stringify(all));
+    else window.localStorage.removeItem(MOVED_KEY);
+  }
+
+  async idsUsedByOtherAccounts(accountId: string): Promise<Set<string>> {
+    const used = new Set<string>();
+    for (const acc of Object.keys(this.readMoved())) {
+      if (acc === accountId) continue;
+      for (const e of Object.values(await this.movedIds(acc))) used.add(e.id);
+    }
+    return used;
+  }
+
+  /** Drops a device item from every account's moved record. */
+  private forgetMoved(deviceId: string) {
+    try {
+      const all = this.readMoved();
+      let changed = false;
+      for (const rec of Object.values(all)) {
+        if (rec && typeof rec === "object" && deviceId in rec) {
+          delete (rec as Record<string, unknown>)[deviceId];
+          changed = true;
+        }
+      }
+      if (changed) window.localStorage.setItem(MOVED_KEY, JSON.stringify(all));
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  /** Forgets every moved record, for "delete everything on this device". */
+  clearMoved() {
+    try {
+      window.localStorage.removeItem(MOVED_KEY);
+      for (const k of OLD_MOVED_KEYS) window.localStorage.removeItem(k);
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  private readMoved(): Record<string, unknown> {
+    try {
+      for (const k of OLD_MOVED_KEYS) window.localStorage.removeItem(k);
+      const raw = JSON.parse(window.localStorage.getItem(MOVED_KEY) ?? "{}");
+      return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    } catch {
+      return {};
+    }
   }
 }

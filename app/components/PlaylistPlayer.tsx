@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
 import type { Manifestation } from "@/lib/library/model";
-import { getStore } from "@/lib/library/useLibrary";
+import { resolveStore } from "@/lib/library/useLibrary";
 import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
@@ -130,7 +130,7 @@ export default function PlaylistPlayer({
     void Promise.all(
       items.map(async (m) => {
         if (!m.hasAudio) return null;
-        const b = await getStore().getAudio(m.id);
+        const b = await (await resolveStore()).getAudio(m.id);
         if (!b) return null;
         const u = URL.createObjectURL(b);
         made.push(u);

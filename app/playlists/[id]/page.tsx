@@ -1,5 +1,6 @@
 "use client";
 
+import LibraryError from "@/app/components/LibraryError";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,13 +20,14 @@ import { useLibrary } from "@/lib/library/useLibrary";
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { lib, ready, store } = useLibrary();
+  const { lib, ready, store, error, reload } = useLibrary();
   const [naming, setNaming] = useState<string | null>(null);
   const [adding, setAdding] = useState("");
   const [msg, setMsg] = useState("");
   const p = lib.playlists.find((x) => x.id === id);
 
   if (!ready) return null;
+  if (error) return <LibraryError error={error} retry={reload} />;
   if (!p) {
     return (
       <>

@@ -1,28 +1,45 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fetchAccount } from "@/lib/account/useAccount";
+import { AccountStore } from "@/lib/library/accountStore";
 import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { CHANGED, DeviceStore, type LibraryStore } from "@/lib/library/store";
 
-let store: LibraryStore | null = null;
+const device = new DeviceStore();
+let account: AccountStore | null = null;
 
-/** The store this browser uses. Accounts (#13) swap in the server store here. */
-export function getStore(): LibraryStore {
-  if (!store) store = new DeviceStore();
-  return store;
+/** The device store, whatever the sign-in state. Used to move device work into an account. */
+export function getDeviceStore(): DeviceStore {
+  return device;
+}
+
+/** The store this browser uses: the account when signed in, else the device. */
+export async function resolveStore(): Promise<LibraryStore> {
+  const a = await fetchAccount();
+  if (a.enabled && a.user) return (account ??= new AccountStore());
+  return device;
 }
 
 /** The saved library, kept current as it changes in this tab or another. */
-export function useLibrary(): { lib: Library; ready: boolean; store: LibraryStore; reload: () => void } {
+export function useLibrary(): { lib: Library; ready: boolean; store: LibraryStore; reload: () => void; error: string } {
   const [lib, setLib] = useState<Library>(EMPTY_LIBRARY);
   const [ready, setReady] = useState(false);
-  const s = getStore();
+  const [store, setStore] = useState<LibraryStore>(device);
+  const [error, setError] = useState("");
   const reload = useCallback(() => {
-    void s.load().then((l) => {
-      setLib(l);
+    void resolveStore().then(async (s) => {
+      setStore(s);
+      try {
+        setLib(await s.load());
+        setError("");
+      } catch (e) {
+        setLib(EMPTY_LIBRARY);
+        setError(e instanceof Error ? e.message : "Could not load your library.");
+      }
       setReady(true);
     });
-  }, [s]);
+  }, []);
   useEffect(() => {
     reload();
     const onStorage = (e: StorageEvent) => e.key?.startsWith("nv_library") && reload();
@@ -33,5 +50,5 @@ export function useLibrary(): { lib: Library; ready: boolean; store: LibraryStor
       window.removeEventListener("storage", onStorage);
     };
   }, [reload]);
-  return { lib, ready, store: s, reload };
+  return { lib, ready, store, reload, error };
 }
