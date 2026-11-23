@@ -5,7 +5,6 @@ import { WebView } from "react-native-webview";
 
 // The Neville app is the hosted web app. This shell only gives it a native iOS home.
 const APP_URL = "https://getneville.vercel.app";
-const APP_HOST = "getneville.vercel.app";
 const BG = "#151820";
 
 export default function App() {
@@ -13,16 +12,15 @@ export default function App() {
   const [failed, setFailed] = useState(false);
 
   // Keep the app's own pages inside the shell; send everything else to the system browser.
+  // Strict prefix test on the raw string: React Native's URL polyfill can report the wrong
+  // hostname for URLs like https://evil.example/x?r=@getneville.vercel.app.
   const allow = (req) => {
-    try {
-      const u = new URL(req.url);
-      if (u.protocol === "about:" || u.protocol === "blob:" || u.protocol === "data:") return true;
-      if (u.hostname === APP_HOST) return true;
-      if (req.isTopFrame === false) return true; // iframes / subresources
-    } catch {
-      return false;
-    }
-    Linking.openURL(req.url).catch(() => {});
+    const url = req.url || "";
+    if (/^(about:|blob:|data:)/i.test(url)) return true;
+    if (req.isTopFrame === false) return true; // iframes / subresources
+    const lower = url.toLowerCase();
+    if (lower === APP_URL || ["/", "?", "#"].some((c) => lower.startsWith(APP_URL + c))) return true;
+    Linking.openURL(url).catch(() => {});
     return false;
   };
 
