@@ -48,11 +48,10 @@ export default function App() {
           mediaPlaybackRequiresUserAction={false}
           sharedCookiesEnabled
           allowsBackForwardNavigationGestures
-          pullToRefreshEnabled
           setSupportMultipleWindows={false}
           onShouldStartLoadWithRequest={allow}
           onError={() => setFailed(true)}
-          onHttpError={() => {}}
+          onContentProcessDidTerminate={() => ref.current?.reload()}
         />
       )}
     </SafeAreaView>
