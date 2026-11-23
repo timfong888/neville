@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { LIMITS, underCeiling } from "@/lib/server/limits";
+import { LIMITS, generationEnabled, underCeiling } from "@/lib/server/limits";
 import { apiKey } from "@/lib/server/openrouter";
 import { accountsEnabled, currentUser, type SignedIn } from "@/lib/server/accounts";
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
@@ -15,8 +15,12 @@ const wrongOrigin = (req: Request) => {
   return !!origin && origin !== new URL(req.url).origin;
 };
 
-/** Sharing needs the database, the text model (content check) and sign-in. */
-const sharingOn = () => dbConfigured() && !!apiKey() && accountsEnabled();
+/**
+ * Sharing needs the database, the text model (content check) and sign-in, and
+ * stops with the generation kill switch (SPEECH_ENABLED=false), which halts
+ * every paid model call. Opening and revoking existing links still work.
+ */
+const sharingOn = () => generationEnabled() && dbConfigured() && !!apiKey() && accountsEnabled();
 
 /** The signed-in user, null when signed out, or "unavailable" when the lookup failed. */
 async function who(req: Request): Promise<SignedIn | null | "unavailable"> {

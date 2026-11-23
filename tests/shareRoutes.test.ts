@@ -8,10 +8,15 @@ const create = vi.fn();
 const reserve = vi.fn();
 const vet = vi.fn();
 const recorded = vi.fn();
+let generation = true;
 vi.mock("@/lib/server/accounts", () => ({ accountsEnabled: () => true, currentUser: () => user() }));
 vi.mock("@/lib/server/db", () => ({ dbConfigured: () => true, getPool: () => ({}), withTx: (fn: (db: object) => unknown) => fn({}) }));
 vi.mock("@/lib/server/openrouter", () => ({ apiKey: () => "k" }));
-vi.mock("@/lib/server/limits", () => ({ LIMITS: { maxScriptChars: 1000 }, underCeiling: async () => ({ ok: true, usage: 0 }) }));
+vi.mock("@/lib/server/limits", () => ({
+  LIMITS: { maxScriptChars: 1000 },
+  generationEnabled: () => generation,
+  underCeiling: async () => ({ ok: true, usage: 0 }),
+}));
 vi.mock("@/lib/server/ledger", () => ({ record: async (e: unknown) => recorded(e) }));
 vi.mock("@/lib/server/vet", () => ({ vetScript: (...a: unknown[]) => vet(...a) }));
 vi.mock("@/lib/server/shareDb", () => ({
@@ -36,6 +41,7 @@ beforeEach(() => {
   reserve.mockReset().mockResolvedValue({ ok: true });
   vet.mockReset().mockResolvedValue({ ok: true, model: "m", costUsd: 0.0001 });
   recorded.mockReset();
+  generation = true;
 });
 
 describe("POST /api/share", () => {
@@ -99,6 +105,18 @@ describe("POST /api/share", () => {
     const { POST } = await import("@/app/api/share/route");
     expect((await POST(post())).status).toBe(404);
     expect(vet).not.toHaveBeenCalled();
+  });
+
+  it("kill switch off: 503 before sign-in, quota or any paid check", async () => {
+    generation = false;
+    user.mockResolvedValue({ id: "u-a" });
+    const { POST, GET } = await import("@/app/api/share/route");
+    const res = await POST(post());
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("off");
+    expect(reserve).not.toHaveBeenCalled();
+    expect(vet).not.toHaveBeenCalled();
+    expect(await (await GET(new Request("https://neville.test/api/share"))).json()).toMatchObject({ enabled: false });
   });
 
   it("refuses another site's origin", async () => {
