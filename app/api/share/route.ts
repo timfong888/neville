@@ -6,7 +6,7 @@ import { dbConfigured, getPool, withTx } from "@/lib/server/db";
 import { createShare, listShares, MAX_LINKS_PER_DAY, reserveShareAttempt } from "@/lib/server/shareDb";
 import { vetScript } from "@/lib/server/vet";
 import { record } from "@/lib/server/ledger";
-import { parseShare, UUID } from "@/lib/share";
+import { parseShare, type ShareInput, UUID } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
 }
 
 // Makes a public, read-only copy of one of the signed-in account's saved
-// manifestations. The text model checks it first (the same check as
+// manifestations, frozen from the copy saved in the account. The text model checks it first (the same check as
 // re-recording): a public page on this domain must not carry text the model
 // has not seen.
 export async function POST(req: Request) {
@@ -77,18 +77,24 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ code: "bad_request", error: "Send JSON." }, { status: 400 });
   }
-  const parsed = parseShare(body, LIMITS.maxScriptChars);
+  const parsed = parseShare(body);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
 
-  // Ownership and the daily cap are checked, and the attempt recorded,
-  // before anything is spent on the content check.
+  // Ownership and the daily cap are checked, and the attempt recorded, before
+  // anything is spent on the content check. The copy shared is the one saved
+  // in the account, never text from this request.
+  let copy: ShareInput;
   try {
-    const slot = await withTx((db) => reserveShareAttempt(db, user.id, parsed.value.manifestationId));
+    const slot = await withTx((db) => reserveShareAttempt(db, user.id, parsed.manifestationId, LIMITS.maxScriptChars));
     if (!slot.ok) {
-      return slot.reason === "daily_limit"
-        ? NextResponse.json({ code: "daily_limit", error: `You can make ${MAX_LINKS_PER_DAY} public links a day.` }, { status: 429 })
+      if (slot.reason === "daily_limit") {
+        return NextResponse.json({ code: "daily_limit", error: `You can make ${MAX_LINKS_PER_DAY} public links a day.` }, { status: 429 });
+      }
+      return slot.reason === "not_shareable"
+        ? NextResponse.json({ code: "bad_request", error: slot.error }, { status: 400 })
         : NextResponse.json({ code: "not_found", error: "Save it in your account first." }, { status: 404 });
     }
+    copy = slot.copy;
   } catch {
     return NextResponse.json({ code: "db_failed", error: "The link could not be made just now." }, { status: 503 });
   }
@@ -96,7 +102,7 @@ export async function POST(req: Request) {
   const budget = await underCeiling(key);
   if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
 
-  const vetted = [parsed.value.title, ...parsed.value.lines];
+  const vetted = [copy.title, ...copy.lines];
   const vet = await vetScript(key, vetted);
   // Every paid check goes in the spend ledger, as for re-recording; only a
   // check that never reached the model is left out.
@@ -110,7 +116,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const out = await withTx((db) => createShare(db, user.id, parsed.value));
+    const out = await withTx((db) => createShare(db, user.id, copy));
     return out.ok
       ? NextResponse.json({ id: out.id }, { headers: { "Cache-Control": "no-store" } })
       : NextResponse.json({ code: "not_found", error: "It was deleted before the link was made." }, { status: 404 });

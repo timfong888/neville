@@ -29,6 +29,7 @@ vi.mock("@/lib/server/shareDb", () => ({
 }));
 
 const MID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const SAVED = { manifestationId: MID, title: "Saved", lines: ["Saved line."], voiceName: "" };
 const post = () =>
   new Request("https://neville.test/api/share", {
     method: "POST",
@@ -39,7 +40,7 @@ const post = () =>
 beforeEach(() => {
   user.mockReset();
   create.mockReset();
-  reserve.mockReset().mockResolvedValue({ ok: true });
+  reserve.mockReset().mockResolvedValue({ ok: true, copy: SAVED });
   vet.mockReset().mockResolvedValue({ ok: true, model: "m", costUsd: 0.0001 });
   recorded.mockReset();
   generation = true;
@@ -72,6 +73,9 @@ describe("POST /api/share", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: "s".repeat(22) });
     expect(create.mock.calls[0][1]).toBe("u-a");
+    // The request's own title and lines are ignored: the saved copy is vetted and stored.
+    expect(vet.mock.calls[0][1]).toEqual(["Saved", "Saved line."]);
+    expect(create.mock.calls[0][2]).toEqual(SAVED);
     expect(recorded).toHaveBeenCalledWith(expect.objectContaining({ route: "share", kind: "vet", model: "m", estUsd: 0.0001 }));
   });
 

@@ -54,7 +54,7 @@ export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDe
       const res = await fetch("/api/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: m.title, lines: m.lines, voiceName: m.hasAudio ? m.voiceName : "", manifestationId: m.id }),
+        body: JSON.stringify({ manifestationId: m.id }), // the server shares the copy saved in the account
       });
       const j = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !j?.id) {

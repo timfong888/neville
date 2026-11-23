@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ensureProfile, putManifestation, deleteManifestation, type Db } from "@/lib/server/libraryDb";
-import { SHARE_ID, parseShare } from "@/lib/share";
+import { SHARE_ID, frozenCopy, parseShare } from "@/lib/share";
 
 vi.mock("server-only", () => ({}));
 
@@ -63,7 +63,7 @@ describe("share links in Postgres", () => {
 
   it("refuses a manifestation the account does not own, or that does not exist", async () => {
     for (const [u, mid] of [["u-a", MB], ["u-a", NONE], ["u-nobody", MA]]) {
-      expect(await S.reserveShareAttempt(db, u, mid)).toEqual({ ok: false, reason: "not_found" });
+      expect(await S.reserveShareAttempt(db, u, mid, 1000)).toEqual({ ok: false, reason: "not_found" });
       expect(await S.createShare(db, u, input(mid))).toEqual({ ok: false, reason: "not_found" });
     }
   });
@@ -99,14 +99,14 @@ describe("share links in Postgres", () => {
   });
 
   it("caps an account at 20 attempts in 24 hours, counted before the content check; revoking does not free one", async () => {
-    for (let i = 0; i < S.MAX_LINKS_PER_DAY; i++) expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: true });
-    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: false, reason: "daily_limit" });
+    for (let i = 0; i < S.MAX_LINKS_PER_DAY; i++) expect((await S.reserveShareAttempt(db, "u-c", MC, 1000)).ok).toBe(true);
+    expect(await S.reserveShareAttempt(db, "u-c", MC, 1000)).toEqual({ ok: false, reason: "daily_limit" });
     const id = await make("u-c", MC);
     await S.revokeShare(db, "u-c", id);
-    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: false, reason: "daily_limit" });
-    expect(await S.reserveShareAttempt(db, "u-a", MA)).toEqual({ ok: true }); // another account is unaffected
+    expect(await S.reserveShareAttempt(db, "u-c", MC, 1000)).toEqual({ ok: false, reason: "daily_limit" });
+    expect((await S.reserveShareAttempt(db, "u-a", MA, 1000)).ok).toBe(true); // another account is unaffected
     await db.query(`update share_attempt set created_at = now() - interval '25 hours' where user_id = 'u-c'`);
-    expect(await S.reserveShareAttempt(db, "u-c", MC)).toEqual({ ok: true });
+    expect((await S.reserveShareAttempt(db, "u-c", MC, 1000)).ok).toBe(true);
     const { rows } = await db.query(`select count(*)::int as n from share_attempt where user_id = 'u-c'`);
     expect(rows[0].n).toBe(1); // older attempts pruned
   });
@@ -124,18 +124,46 @@ describe("share links in Postgres", () => {
     expect(await S.revokeShare(db, "u-a", "short")).toBe(false);
     expect(await S.listShares(db, "u-a", "not-a-uuid")).toEqual([]);
     expect(await S.createShare(db, "u-a", input("not-a-uuid"))).toEqual({ ok: false, reason: "not_found" });
-    expect(await S.reserveShareAttempt(db, "u-a", "not-a-uuid")).toEqual({ ok: false, reason: "not_found" });
+    expect(await S.reserveShareAttempt(db, "u-a", "not-a-uuid", 1000)).toEqual({ ok: false, reason: "not_found" });
   });
 });
 
 describe("share requests", () => {
-  it("needs an account manifestation id, a title and 1 to 40 lines within the length cap", () => {
-    expect(parseShare({ title: "t", lines: ["a"] }, 100)).toMatchObject({ ok: false });
-    expect(parseShare({ title: "t", lines: ["a"], manifestationId: "device-123" }, 100)).toMatchObject({ ok: false });
-    expect(parseShare({ title: " ", lines: ["a"], manifestationId: MA }, 100)).toMatchObject({ ok: false });
-    expect(parseShare({ title: "t", lines: [], manifestationId: MA }, 100)).toMatchObject({ ok: false });
-    expect(parseShare({ title: "t", lines: ["x".repeat(101)], manifestationId: MA }, 100)).toMatchObject({ ok: false });
-    const ok = parseShare({ title: "t", lines: ["  a  b ", ""], voiceName: "N<script>", manifestationId: MA }, 100);
-    expect(ok).toEqual({ ok: true, value: { title: "t", lines: ["a b"], voiceName: "Nscript", manifestationId: MA } });
+  it("name only an account manifestation id", () => {
+    expect(parseShare({ title: "t", lines: ["a"] })).toMatchObject({ ok: false });
+    expect(parseShare({ manifestationId: "device-123" })).toMatchObject({ ok: false });
+    expect(parseShare({ manifestationId: MA, title: "ignored" })).toEqual({ ok: true, manifestationId: MA });
+  });
+
+  it("freeze a normalised, capped copy of the saved text", () => {
+    expect(frozenCopy({ title: " ", lines: ["a"], voiceName: "" }, 100)).toMatchObject({ ok: false });
+    expect(frozenCopy({ title: "t", lines: [], voiceName: "" }, 100)).toMatchObject({ ok: false });
+    expect(frozenCopy({ title: "t", lines: null, voiceName: "" }, 100)).toMatchObject({ ok: false });
+    expect(frozenCopy({ title: "t", lines: ["x".repeat(101)], voiceName: "" }, 100)).toMatchObject({ ok: false });
+    expect(frozenCopy({ title: "t", lines: ["  a  b ", "", 5], voiceName: "N<script>" }, 100)).toEqual({ ok: true, title: "t", lines: ["a b"], voiceName: "Nscript" });
+  });
+});
+
+describe("the frozen copy comes from the account, not the request", () => {
+  it("is the saved title and newest script; the voice is named only with a recording", async () => {
+    await db.query(`insert into "user" (id, name, email, "emailVerified") values ('u-d', 'd', 'd@x.test', true)`);
+    const pd = await ensureProfile(db, "u-d");
+    const MD = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    await putManifestation(db, pd, { ...m(MD), title: "Saved", lines: ["Saved line."], voiceName: "Nadine" }, null);
+    const r = await S.reserveShareAttempt(db, "u-d", MD, 1000);
+    expect(r).toEqual({ ok: true, copy: { manifestationId: MD, title: "Saved", lines: ["Saved line."], voiceName: "" } });
+    await putManifestation(db, pd, { ...m(MD), title: "Edited", lines: ["New line."], voiceName: "Nadine" }, { key: "audio/u-d/1.mp3", mime: "audio/mpeg", bytes: 10 });
+    const r2 = await S.reserveShareAttempt(db, "u-d", MD, 1000);
+    expect(r2).toMatchObject({ ok: true, copy: { title: "Edited", lines: ["New line."], voiceName: "Nadine" } });
+  });
+
+  it("a saved copy that cannot be shared is refused without using an attempt", async () => {
+    await db.query(`insert into "user" (id, name, email, "emailVerified") values ('u-e', 'e', 'e@x.test', true)`);
+    const pe = await ensureProfile(db, "u-e");
+    const ME = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    await putManifestation(db, pe, { ...m(ME), lines: ["x".repeat(50)] }, null);
+    expect(await S.reserveShareAttempt(db, "u-e", ME, 10)).toMatchObject({ ok: false, reason: "not_shareable" });
+    const { rows } = await db.query(`select count(*)::int as n from share_attempt where user_id = 'u-e'`);
+    expect(rows[0].n).toBe(0);
   });
 });
