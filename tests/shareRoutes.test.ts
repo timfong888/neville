@@ -9,6 +9,7 @@ const reserve = vi.fn();
 const vet = vi.fn();
 const recorded = vi.fn();
 let generation = true;
+const listed = vi.fn();
 vi.mock("@/lib/server/accounts", () => ({ accountsEnabled: () => true, currentUser: () => user() }));
 vi.mock("@/lib/server/db", () => ({ dbConfigured: () => true, getPool: () => ({}), withTx: (fn: (db: object) => unknown) => fn({}) }));
 vi.mock("@/lib/server/openrouter", () => ({ apiKey: () => "k" }));
@@ -23,7 +24,7 @@ vi.mock("@/lib/server/shareDb", () => ({
   MAX_LINKS_PER_DAY: 20,
   createShare: (...a: unknown[]) => create(...a),
   reserveShareAttempt: (...a: unknown[]) => reserve(...a),
-  listShares: async () => [],
+  listShares: (...a: unknown[]) => listed(...a),
   revokeShare: async () => true,
 }));
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   vet.mockReset().mockResolvedValue({ ok: true, model: "m", costUsd: 0.0001 });
   recorded.mockReset();
   generation = true;
+  listed.mockReset().mockResolvedValue([]);
 });
 
 describe("POST /api/share", () => {
@@ -116,7 +118,16 @@ describe("POST /api/share", () => {
     expect((await res.json()).code).toBe("off");
     expect(reserve).not.toHaveBeenCalled();
     expect(vet).not.toHaveBeenCalled();
-    expect(await (await GET(new Request("https://neville.test/api/share"))).json()).toMatchObject({ enabled: false });
+    expect(await (await GET(new Request("https://neville.test/api/share"))).json()).toMatchObject({ enabled: true, canCreate: false });
+  });
+
+  it("kill switch off: the maker still sees their existing links, so they can revoke them", async () => {
+    generation = false;
+    user.mockResolvedValue({ id: "u-a" });
+    listed.mockResolvedValue([{ id: "s".repeat(22), createdAt: 1 }]);
+    const { GET } = await import("@/app/api/share/route");
+    const res = await GET(new Request(`https://neville.test/api/share?manifestation=${MID}`));
+    expect(await res.json()).toMatchObject({ enabled: true, canCreate: false, links: [{ id: "s".repeat(22) }] });
   });
 
   it("refuses another site's origin", async () => {

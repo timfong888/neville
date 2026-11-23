@@ -6,7 +6,7 @@ import type { Manifestation } from "@/lib/library/model";
 import type { OwnLink } from "@/lib/share";
 
 /** `failed`: the account's links could not be loaded, so whether one exists is unknown. */
-type State = { enabled: boolean; links: OwnLink[]; failed?: boolean } | null;
+type State = { enabled: boolean; canCreate: boolean; links: OwnLink[]; failed?: boolean } | null;
 
 /**
  * Make a public link to one manifestation, copy it, and revoke it. Only a
@@ -25,17 +25,17 @@ export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDe
     try {
       const q = fromDevice ? "" : `?manifestation=${encodeURIComponent(m.id)}`;
       const res = await fetch(`/api/share${q}`, { cache: "no-store" });
-      const j = (await res.json().catch(() => null)) as { enabled?: boolean; links?: OwnLink[]; error?: string } | null;
+      const j = (await res.json().catch(() => null)) as { enabled?: boolean; canCreate?: boolean; links?: OwnLink[]; error?: string } | null;
       if (!res.ok) {
         // Unknown, not "none": offering to share here could make a second link.
-        setState({ enabled: true, links: [], failed: true });
+        setState({ enabled: true, canCreate: false, links: [], failed: true });
         setMsg(j?.error ?? "Could not load your links just now. Reload to try again.");
         return;
       }
-      setState({ enabled: !!j?.enabled, links: j?.links ?? [] });
+      setState({ enabled: !!j?.enabled, canCreate: !!j?.canCreate, links: j?.links ?? [] });
       setMsg("");
     } catch {
-      setState({ enabled: true, links: [], failed: true });
+      setState({ enabled: true, canCreate: false, links: [], failed: true });
       setMsg("Could not load your links just now. Reload to try again.");
     }
   }, [m.id, fromDevice]);
@@ -124,6 +124,8 @@ export default function SharePanel({ m, fromDevice }: { m: Manifestation; fromDe
             </button>
           </div>
         </>
+      ) : !state.canCreate ? (
+        <p className="small muted">Making new public links is paused right now.</p>
       ) : (
         <>
           <p className="small muted">Make a read-only page of this manifestation that anyone can open, signed in or not. You can revoke it from any device.</p>

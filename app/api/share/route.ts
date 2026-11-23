@@ -16,11 +16,14 @@ const wrongOrigin = (req: Request) => {
 };
 
 /**
- * Sharing needs the database, the text model (content check) and sign-in, and
- * stops with the generation kill switch (SPEECH_ENABLED=false), which halts
- * every paid model call. Opening and revoking existing links still work.
+ * Managing links (listing and revoking your own) needs the database and
+ * sign-in. Making a new one also needs the text model for the content check,
+ * and stops with the generation kill switch (SPEECH_ENABLED=false), which
+ * halts every paid model call. The switch never hides existing links or the
+ * means to revoke them.
  */
-const sharingOn = () => generationEnabled() && dbConfigured() && !!apiKey() && accountsEnabled();
+const linksOn = () => dbConfigured() && accountsEnabled();
+const canCreate = () => linksOn() && generationEnabled() && !!apiKey();
 
 /** The signed-in user, null when signed out, or "unavailable" when the lookup failed. */
 async function who(req: Request): Promise<SignedIn | null | "unavailable"> {
@@ -31,19 +34,22 @@ async function who(req: Request): Promise<SignedIn | null | "unavailable"> {
   }
 }
 
-// GET: whether sharing is on here. With ?manifestation=<id>, also the signed-in
-// account's live links to it, so its panel shows them on any device.
+// GET: whether links are on here (`enabled`) and whether new ones can be made
+// right now (`canCreate`). With ?manifestation=<id>, also the signed-in
+// account's live links to it, so its panel shows them, and can revoke them, on
+// any device, even while making new links is paused.
 export async function GET(req: Request) {
-  const enabled = sharingOn();
+  const enabled = linksOn();
+  const create = canCreate();
   const mid = new URL(req.url).searchParams.get("manifestation");
-  if (!enabled || mid === null) return NextResponse.json({ enabled, links: [] });
+  if (!enabled || mid === null) return NextResponse.json({ enabled, canCreate: create, links: [] });
   if (!UUID.test(mid)) return NextResponse.json({ error: "Which manifestation?" }, { status: 400 });
   const user = await who(req);
   if (user === "unavailable") return NextResponse.json({ error: "Could not check your sign-in just now." }, { status: 503 });
-  if (!user) return NextResponse.json({ enabled, signedIn: false, links: [] });
+  if (!user) return NextResponse.json({ enabled, canCreate: create, signedIn: false, links: [] });
   try {
     const links = await listShares(getPool(), user.id, mid);
-    return NextResponse.json({ enabled, signedIn: true, links }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ enabled, canCreate: create, signedIn: true, links }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "Could not load your links just now." }, { status: 503 });
   }
@@ -56,7 +62,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (wrongOrigin(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const key = apiKey();
-  if (!sharingOn() || !key) {
+  if (!canCreate() || !key) {
     return NextResponse.json({ code: "off", error: "Public links are not switched on yet." }, { status: 503 });
   }
   const user = await who(req);
