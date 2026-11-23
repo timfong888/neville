@@ -5,6 +5,7 @@ import { accountsEnabled, currentUser, type SignedIn } from "@/lib/server/accoun
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
 import { createShare, listShares, MAX_LINKS_PER_DAY, reserveShareAttempt } from "@/lib/server/shareDb";
 import { vetScript } from "@/lib/server/vet";
+import { record } from "@/lib/server/ledger";
 import { parseShare, UUID } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
@@ -85,7 +86,13 @@ export async function POST(req: Request) {
   const budget = await underCeiling(key);
   if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
 
-  const vet = await vetScript(key, [parsed.value.title, ...parsed.value.lines]);
+  const vetted = [parsed.value.title, ...parsed.value.lines];
+  const vet = await vetScript(key, vetted);
+  // Every paid check goes in the spend ledger, as for re-recording; only a
+  // check that never reached the model is left out.
+  if (vet.ok || vet.reason !== "unavailable") {
+    await record({ route: "share", kind: "vet", model: vet.model, chars: vetted.join(" ").length, estUsd: vet.costUsd });
+  }
   if (!vet.ok) {
     return vet.reason === "rejected"
       ? NextResponse.json({ code: "not_shareable", error: "This one can't be shared publicly." }, { status: 422 })
