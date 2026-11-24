@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DRAFT_STORAGE_KEY, readDraft, startingDraft, writeDraft } from "@/lib/draftStore";
+import { DRAFT_STORAGE_KEY, clearDraft, hasDraft, readDraft, startingDraft, writeDraft } from "@/lib/draftStore";
 
 // A minimal browser: localStorage only, as the create page uses it.
 let store: Map<string, string>;
@@ -35,6 +35,13 @@ describe("the wish draft (#100)", () => {
     writeDraft({ want: "x", name: "y" });
     writeDraft({ want: "", name: "" });
     expect(store.has(DRAFT_STORAGE_KEY)).toBe(false);
+  });
+  it("deleting device data removes the draft, so the next person sees an empty form", () => {
+    writeDraft({ want: "A private wish", name: "Tim" });
+    expect(hasDraft()).toBe(true);
+    clearDraft();
+    expect(hasDraft()).toBe(false);
+    expect(startingDraft("")).toEqual({ want: "", name: "", shared: false });
   });
   it("caps lengths and ignores a corrupt or blocked store", () => {
     writeDraft({ want: "w".repeat(400), name: "n".repeat(60) });

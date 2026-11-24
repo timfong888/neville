@@ -37,6 +37,21 @@ export function writeDraft(d: Draft): void {
   }
 }
 
+/** Removes the draft, e.g. when the listener deletes everything on this device. */
+export function clearDraft(): void {
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    /* nothing stored */
+  }
+}
+
+/** Whether a typed wish or name is kept on this device. */
+export const hasDraft = (): boolean => {
+  const d = readDraft();
+  return !!(d.want || d.name);
+};
+
 /**
  * What the form starts with: a shared link (?w=&n=) wins for display but is not
  * saved, so it never replaces the listener's own draft; otherwise the saved draft.

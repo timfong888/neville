@@ -8,6 +8,7 @@ import { AccountStore } from "@/lib/library/accountStore";
 import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { getDeviceStore } from "@/lib/library/useLibrary";
 import { moveDeviceWork } from "@/lib/account/moveDeviceWork";
+import { clearDraft, hasDraft } from "@/lib/draftStore";
 
 export default function AccountPage() {
   const { account, ready } = useAccount();
@@ -22,6 +23,9 @@ export default function AccountPage() {
 
   const signedIn = account.enabled && !!account.user;
   const deviceCount = deviceLib.manifestations.length;
+  // A wish typed on the create page but not yet saved (#100) also counts as device data.
+  const [draftKept, setDraftKept] = useState(false);
+  useEffect(() => setDraftKept(hasDraft()), []);
   // Anything on the device to move: manifestations or playlists (even empty ones).
   const deviceItems = deviceCount + deviceLib.playlists.length;
 
@@ -64,6 +68,7 @@ export default function AccountPage() {
   };
 
   const signOut = async () => {
+    clearDraft();
     await authClient.signOut().catch(() => undefined);
     await fetchAccount(true);
     window.location.assign("/account");
@@ -94,6 +99,8 @@ export default function AccountPage() {
     } catch {
       /* nothing stored */
     }
+    clearDraft();
+    setDraftKept(false);
     refreshDevice();
     setMsg("Everything saved on this device has been deleted.");
   };
@@ -204,7 +211,7 @@ export default function AccountPage() {
             {deviceLib.playlists.length === 1 ? "playlist" : "playlists"} saved in this browser. No one else can see
             them, and they are lost if you clear this site&apos;s data.
           </p>
-          <button className="btn sm ghost danger" onClick={clearDevice} disabled={!deviceCount && !deviceLib.playlists.length}>
+          <button className="btn sm ghost danger" onClick={clearDevice} disabled={!deviceCount && !deviceLib.playlists.length && !draftKept}>
             Delete everything on this device
           </button>
         </div>
