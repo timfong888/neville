@@ -1,7 +1,7 @@
 // One place that turns text into audio through OpenRouter. Used by the voice
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
-import { MAX_AUDIO_BYTES, fitPause, silenceBytes, startShares, stitchPcm } from "@/lib/delivery";
+import { MAX_AUDIO_BYTES, fitPause, silenceBytes, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
 import { normalizePcm16 } from "@/lib/loudness";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
@@ -95,8 +95,26 @@ export type Speech =
       starts?: number[];
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
+      /**
+       * Characters in every request sent for this recording: the inline pause
+       * tags of a one-request take, a too-long take thrown away before the line
+       * by line fallback (#76), and requests retried after a provider error or
+       * a dropped connection. A failed request is probably not billed, so this
+       * is an upper bound: the cost ledger prices it, and errs high, not low.
+       */
+      sentChars: number;
     }
-  | { ok: false; status: number; message: string };
+  | {
+      ok: false;
+      status: number;
+      message: string;
+      /**
+       * As on success: characters in every request sent before the failure,
+       * retries included, as an upper bound; 0 when none was sent. synthesize
+       * sets it on every failure; it is optional so other failures fit the type.
+       */
+      sentChars?: number;
+    };
 
 /** Waits before each retry of a line after a provider error; one entry per retry. */
 const RETRY_DELAYS_MS = [400, 1200];
@@ -156,7 +174,26 @@ export async function synthesize(opts: {
    * between the script's lines are fitted to the size limit.
    */
   tail?: number;
+  /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
+  atomic?: boolean;
 }): Promise<Speech> {
+  if (opts.atomic && opts.lines && opts.lines.length > 1 && PCM_ONLY.test(opts.model)) {
+    const started = Date.now();
+    const one = await synthesizeAtomic(opts);
+    // Too long for one response, and the pauses could not be found to shorten:
+    // record line by line instead, where they can be. (When the pauses were
+    // found and shortened and it is still too long, the speech alone is too
+    // long, and line by line would fail the same way: no second recording.)
+    if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
+      const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
+      // The first take was recorded and billed in full, so the ledger counts it too.
+      const discarded = one.sentChars ?? atomicText(opts.lines).length;
+      return again.ok
+        ? { ...again, requests: again.requests + 1, sentChars: again.sentChars + discarded }
+        : { ...again, sentChars: discarded + (again.sentChars ?? 0) };
+    }
+    return one;
+  }
   const { key, model, voice, text, instructions } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
   const stitch = Boolean(
@@ -166,6 +203,8 @@ export async function synthesize(opts: {
   // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
   const limit = Object.entries(PER_REQUEST_LIMIT).find(([prefix]) => model.startsWith(prefix))?.[1];
   const parts = stitch ? opts.lines! : limit && text.length > limit ? splitText(text, limit) : [text];
+  // Every request sent, retries included (see Speech.sentChars).
+  let sentChars = 0;
   const pcm = PCM_ONLY.test(model) || parts.length > 1;
   // 1 is the model's own pace, so it is not sent. Brisk asks for a little faster.
   const wantSpeed = opts.speed && opts.speed >= 0.5 && opts.speed <= 1.2 && opts.speed !== 1 ? opts.speed : undefined;
@@ -181,6 +220,7 @@ export async function synthesize(opts: {
       for (let attempt = 0; ; attempt++) {
         const left = deadline - Date.now();
         if (left < 1000) return { ok: false, status: 504, message: "The voice service did not answer in time." };
+        sentChars += part.length;
         try {
           res = await fetch(`${OPENROUTER}/audio/speech`, {
             method: "POST",
@@ -242,7 +282,8 @@ export async function synthesize(opts: {
     }
   }
   const failed = pieces.find((p) => p && !p.ok);
-  if (failed && !failed.ok) return failed;
+  // Requests already sent (retries included) are still reported for the ledger.
+  if (failed && !failed.ok) return { ...failed, sentChars };
   const done = pieces as Extract<Piece, { ok: true }>[];
 
   const ids = done.map((p) => p.id).filter((x): x is string => Boolean(x));
@@ -251,7 +292,7 @@ export async function synthesize(opts: {
   // MP3 voices (Kokoro, Fish) keep the provider's own level: there is no MP3
   // decoder here. Normalising them is #40. The default voice and the voice mix
   // are PCM voices, so they all arrive at the same loudness.
-  if (!pcm) return { ok: true, audio: chunks[0], mime: "audio/mpeg", requests: parts.length, ids, speedApplied };
+  if (!pcm) return { ok: true, audio: chunks[0], mime: "audio/mpeg", requests: parts.length, sentChars, ids, speedApplied };
 
   let rate = pcmRate(model, done[0].contentType);
   if (opts.compact && rate >= 44100) {
@@ -261,7 +302,7 @@ export async function synthesize(opts: {
   if (!stitch) {
     // Every PCM voice (Gemini, HeyGen) is brought to the same speech loudness, so tracks match in a playlist.
     const pcmAll = normalizePcm16(chunks.length === 1 ? chunks[0] : join(chunks), rate);
-    return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, ids, speedApplied };
+    return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, sentChars, ids, speedApplied };
   }
   const sizes = chunks.map((c) => c.byteLength);
   const tail = Math.min(Math.max(0, opts.tail ?? 0), chunks.length - 1);
@@ -277,13 +318,14 @@ export async function synthesize(opts: {
   const audio = wav(normalizePcm16(joined, rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return { ok: false, status: 502, message: "The recording came out too long to send." };
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars };
   }
   return {
     ok: true,
     audio,
     mime: "audio/wav",
     requests: parts.length,
+    sentChars,
     ids,
     speedApplied,
     starts: tail ? tailStarts(sizes, body.length, gap) : startShares(sizes, gap),
@@ -300,4 +342,71 @@ function tailStarts(sizes: number[], bodyCount: number, gap: number): number[] {
     at += b + (i < bodyCount - 1 ? gap : 0);
     return start;
   });
+}
+
+/** The pause written between lines in an atomic request. Gemini honours it and does not speak it. */
+export const INLINE_PAUSE = "[pause]";
+
+/** The text of an atomic request: every line, with a pause written between them. */
+export function atomicText(lines: string[]): string {
+  return lines.map((l) => l.trim()).join(` ${INLINE_PAUSE} `);
+}
+
+/**
+ * Where each line starts as a share of the whole, estimated for audio recorded
+ * in one piece: speech time in proportion to characters, plus a fixed pause
+ * between lines. Good to about a second, enough for the read-along highlight.
+ */
+export function estimateStarts(lines: string[], durationS: number, pauseS = 1.8): number[] {
+  const chars = lines.map((l) => Math.max(1, l.length));
+  const total = chars.reduce((n, c) => n + c, 0);
+  const gaps = lines.length - 1;
+  const perChar = (durationS - gaps * pauseS) / total;
+  const out: number[] = [];
+  let t = 0;
+  for (let i = 0; i < lines.length; i++) {
+    out.push(durationS > 0 ? Math.min(1, t / durationS) : 0);
+    t += perChar > 0 ? chars[i] * perChar + pauseS : (chars[i] / total) * durationS;
+  }
+  return out;
+}
+
+/**
+ * The whole script in one request: one failure point, retried by `synthesize`
+ * as a whole. The voice is told to pause between lines; those pauses are then
+ * found and set to the pace's own length, so the delivery matches the line by
+ * line recordings, and each line's start is known exactly.
+ */
+async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise<Speech> {
+  const lines = opts.lines!;
+  const out = await synthesize({ ...opts, atomic: false, text: atomicText(lines), lines: undefined, pauseMs: 0 });
+  if (!out.ok) return out;
+  // WAV: 44-byte header, 16-bit mono.
+  const rate = new DataView(out.audio).getUint32(24, true) || 24000;
+  const pcm = out.audio.slice(44);
+  const pieces = splitAtPauses(pcm, rate, lines.length, lines.map((l) => l.length));
+  if (!pieces) {
+    if (out.audio.byteLength > MAX_AUDIO_BYTES) {
+      return { ok: false, status: 413, message: "The recording came out too long to send in one piece.", sentChars: out.sentChars };
+    }
+    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate) };
+  }
+  const sizes = pieces.map((p) => p.byteLength);
+  // The refrain (#77) follows the closing with no pause, and is left out of
+  // the gaps fitted to the size limit, as on the line by line path.
+  const tail = Math.min(Math.max(0, opts.tail ?? 0), pieces.length - 1);
+  const body = pieces.slice(0, pieces.length - tail);
+  const pauseMs = fitPause({
+    pauseMs: opts.pauseMs ?? 0,
+    gaps: body.length - 1,
+    speechBytes: sizes.reduce((n, b) => n + b, 0),
+    rate,
+  });
+  const gap = silenceBytes(pauseMs, rate);
+  const joined = tail ? join([stitchPcm(body, gap), ...pieces.slice(body.length)]) : stitchPcm(pieces, gap);
+  const audio = wav(joined, rate);
+  if (audio.byteLength > MAX_AUDIO_BYTES) {
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars: out.sentChars };
+  }
+  return { ...out, audio, starts: tail ? tailStarts(sizes, body.length, gap) : startShares(sizes, gap), pauseMs };
 }

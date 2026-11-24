@@ -12,6 +12,8 @@ let failOn: string | null = null;
 /** How many more times a request for `failOn` gets a 500 before it succeeds. */
 let failTimes = Infinity;
 let failStatus = 500;
+/** A request for this input gets 4.2 MB of silence back: too long for one response. */
+let bigOn: string | null = null;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -27,6 +29,10 @@ beforeAll(async () => {
       }
       if (refuseSpeed && "speed" in body) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "unknown field speed" } }));
+        return;
+      }
+      if (bigOn && body.input === bigOn) {
+        res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.alloc(4_200_000));
         return;
       }
       // 0.5 s of 44.1 kHz 16-bit mono PCM for PCM requests; a few bytes for MP3.
@@ -164,5 +170,93 @@ describe("a refrain recorded after the script (#77)", () => {
     expect(out.starts).toHaveLength(4);
     const total = 4 * 22050 + 2 * 44100;
     expect(out.starts![3]).toBeCloseTo((3 * 22050 + 2 * 44100) / total, 3);
+  });
+});
+
+describe("atomic voices (#76)", () => {
+  it("records the whole script in one request, with a pause written between lines", async () => {
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: lines.join("\n\n"), lines, pauseMs: 1500, instructions: "Speak slowly.", compact: true, atomic: true,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(seen).toHaveLength(1);
+    expect(seen[0].input).toBe(lines.join(" [pause] "));
+    expect(seen[0].instructions).toBe("Speak slowly.");
+    expect(out.starts).toHaveLength(3);
+    expect(out.starts![0]).toBe(0);
+    expect(out.starts![1]).toBeGreaterThan(0);
+  });
+
+  it("reports every request sent when the retries run out", async () => {
+    failOn = lines.join(" [pause] ");
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true,
+    });
+    failOn = null;
+    expect(out.ok).toBe(false);
+    // The first request and both retries were sent, so all three are counted.
+    expect(seen).toHaveLength(3);
+    if (!out.ok) expect(out.sentChars).toBe(3 * lines.join(" [pause] ").length);
+  });
+
+  it("retries the whole request once the provider has a brief error", async () => {
+    failOn = lines.join(" [pause] ");
+    failTimes = 1;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true,
+    });
+    failOn = null;
+    failTimes = Infinity;
+    expect(out.ok).toBe(true);
+    expect(seen).toHaveLength(2);
+    // Both requests are counted for the ledger, the failed one included.
+    if (out.ok) expect(out.sentChars).toBe(2 * lines.join(" [pause] ").length);
+  });
+
+  it("records line by line when one piece is too long and its pauses cannot be found", async () => {
+    bigOn = lines.join(" [pause] ");
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true, timeoutMs: 20_000,
+    });
+    bigOn = null;
+    expect(out.ok).toBe(true);
+    // One atomic request, then one per line.
+    expect(seen.map((b) => b.input)).toEqual([lines.join(" [pause] "), ...lines]);
+    // Both takes were billed: the thrown-away one is reported for the ledger.
+    if (!out.ok) return;
+    expect(out.requests).toBe(lines.length + 1);
+    expect(out.sentChars).toBe(lines.join(" [pause] ").length + lines.join("").length);
+  });
+
+  it("records a refrain in the same request and puts no pause before it (#77)", async () => {
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: withRefrain, pauseMs: 1500, compact: true, atomic: true, tail: 1,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(seen).toHaveLength(1);
+    expect(seen[0].input).toBe(withRefrain.join(" [pause] "));
+    expect(out.starts).toHaveLength(4);
+    // One start per recorded line; the refrain comes after the closing.
+    const s = out.starts!;
+    expect(s[3]).toBeGreaterThan(s[2]);
+  });
+
+  it("leaves voices without the flag line by line", async () => {
+    const synthesize = await load();
+    await synthesize({ key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat", text: "", lines, pauseMs: 1500 });
+    expect(seen).toHaveLength(3);
   });
 });

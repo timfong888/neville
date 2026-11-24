@@ -6,9 +6,10 @@
 // says where each line starts. The loop is built here, from that one clip, so
 // minutes of repetition cost nothing extra to make.
 
-/** Choices in minutes; 0 is off. Tim has not set these: an assumption on #77. */
-export const REPEAT_MINUTES = [0, 1, 3, 5, 10, 20] as const;
-export const MAX_REPEAT_MINUTES = 20;
+/** Choices in minutes; 0 is off. Tim, 2026-11-24 (#77): 1, 3, 5 or 10. */
+export const REPEAT_MINUTES = [0, 1, 3, 5, 10] as const;
+/** Tim, 2026-11-24 (#77): 10 minutes at most, on phones and desktop alike. */
+export const MAX_REPEAT_MINUTES = 10;
 export const DEFAULT_REPEAT_MINUTES = 0;
 
 /** The silence after each repetition grows from the first value to the second over the session, so it settles. */

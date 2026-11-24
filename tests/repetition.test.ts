@@ -24,8 +24,11 @@ function recording() {
 }
 
 describe("programming mode settings", () => {
-  it("offers Off to 20 minutes and clamps anything else", () => {
-    expect(REPEAT_MINUTES).toEqual([0, 1, 3, 5, 10, 20]);
+  it("offers Off to 10 minutes and clamps anything else", () => {
+    expect(REPEAT_MINUTES).toEqual([0, 1, 3, 5, 10]);
+    expect(MAX_REPEAT_MINUTES).toBe(10);
+    // A 20 stored before the cap is read back as 10.
+    expect(clampMinutes(20)).toBe(10);
     expect(clampMinutes(3)).toBe(3);
     expect(clampMinutes(-1)).toBe(0);
     expect(clampMinutes("x")).toBe(0);
