@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lineStarts } from "@/lib/audio";
+import { CLOSING } from "@/lib/prompt";
 import type { Manifestation } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import { DEFAULT_MUSIC, type MusicChoice, type Segment } from "@/lib/music";
@@ -580,7 +581,7 @@ export default function PlaylistPlayer({
       >
         <div className="blob" />
         <div className="line" aria-live="polite">
-          {line ?? (done ? "And so it is." : "")}
+          {line ?? (done ? CLOSING : "")}
         </div>
       </div>
       <p className="small muted" aria-live="polite">

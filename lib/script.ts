@@ -1,6 +1,7 @@
 // Placeholder script writer for the Demo 1 prototype.
 // The real app sends the same inputs to an LLM through the model router.
 // This runs in the browser and costs nothing.
+import { CLOSING } from "@/lib/prompt";
 
 const FIRST_TO_SECOND: Array<[RegExp, string]> = [
   [/\bI am\b/gi, "you are"],
@@ -61,7 +62,7 @@ const VARIANTS: Line[][] = [
     (_c, n) => withName(n, "you no longer hope for this. You live from it."),
     () => "When a doubt rises, you watch it pass like a cloud.",
     () => "You are grateful. You are calm. You are certain.",
-    (c) => `${capitalise(c)}. And so it is.`,
+    (c) => `${capitalise(c)}. ${CLOSING}`,
   ],
   [
     () => "Close your eyes. Let your shoulders drop.",
@@ -114,13 +115,23 @@ export function hashOf(s: string): number {
 export function neutralScript(name: string): string[] {
   return [
     name ? `${name}, take a slow breath in, and let it go.` : "Take a slow breath in, and let it go.",
-    "You are safe, and you are at ease.",
+    "You are at ease, here and now.",
     "Your shoulders soften, and your breath moves gently.",
     "You have everything you need in this moment.",
     "Good things come to you easily, and you welcome them.",
     "You are kind to yourself and to the people around you.",
     "You feel a quiet warmth in your chest.",
-    "You are grateful for this day and for who you are becoming.",
-    "And so it is.",
+    "You are grateful for this day and for who you are.",
+    CLOSING,
   ];
+}
+
+/**
+ * Script lines the server sent with a failed recording, or null when the value
+ * is not a short list of short strings. Guards what the device voice reads.
+ */
+export function scriptLines(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length < 3 || value.length > 20) return null;
+  if (!value.every((l) => typeof l === "string" && l.trim().length > 0 && l.length <= 200)) return null;
+  return value as string[];
 }
