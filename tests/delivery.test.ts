@@ -145,6 +145,25 @@ describe("splitAtPauses (#76)", () => {
     expect(ms[2]).toBeLessThan(1400);
   });
 
+  it("cuts at the real line ends on a longer script with a breath and a missed pause", () => {
+    // 9 lines of 1200 ms speech with 1200 ms pauses; line 3 has a 1300 ms breath
+    // in the middle, and the pause after line 6 is only 400 ms (Sinatra's case on #81).
+    const parts: Array<[boolean, number]> = [];
+    for (let i = 1; i <= 9; i++) {
+      if (i === 3) parts.push([true, 600], [false, 1300], [true, 600]);
+      else parts.push([true, 1200]);
+      if (i < 9) parts.push([false, i === 6 ? 400 : 1200]);
+    }
+    const ms = splitAtPauses(signal(parts), rate, 9, Array(9).fill(30))!.map((p) => Math.round((p.byteLength / 2 / rate) * 1000));
+    expect(ms).toHaveLength(9);
+    // Line 3 keeps its breath; lines 6 and 7 are separate.
+    expect(ms[2]).toBeGreaterThanOrEqual(2500);
+    for (const i of [0, 1, 3, 4, 5, 6, 7, 8]) {
+      expect(ms[i]).toBeGreaterThanOrEqual(1200);
+      expect(ms[i]).toBeLessThan(1500);
+    }
+  });
+
   it("checks each piece against its line's share of the words", () => {
     expect(piecesFitLines([100, 100, 30], [30, 30, 10])).toBe(true);
     expect(piecesFitLines([100, 100, 5], [30, 30, 30])).toBe(false);

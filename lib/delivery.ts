@@ -246,16 +246,15 @@ export function splitAtPauses(
     .filter(([a, b]) => a > 0 && b < samples.length);
   if (runs.length < gaps) return null;
   const longest = [...runs].sort((x, y) => y[1] - y[0] - (x[1] - x[0])).slice(0, gaps).sort((x, y) => x[0] - y[0]);
-  const first = cutAt(pcm, rate, longest);
-  if (!lineChars || lineChars.length !== lines) return first;
-  if (piecesFitLines(first.map((p) => p.byteLength), lineChars)) return first;
-  // A long breath inside a line can outlast a pause the voice under-honoured,
-  // so a cut landed mid-sentence. Try again: for each line end, the longest
-  // silence near where the words say that line should end.
+  if (!lineChars || lineChars.length !== lines) return cutAt(pcm, rate, longest);
+  // With the words per line, each cut is anchored where the words put that
+  // line's end, counted in speech time: the longest silence near there. A
+  // long breath inside another line is out of reach, and a pause the voice
+  // under-honoured is still found. The pieces are then checked once more.
   const guided = guidedCuts(runs, samples.length, lineChars);
   if (!guided) return null;
-  const second = cutAt(pcm, rate, guided);
-  return piecesFitLines(second.map((p) => p.byteLength), lineChars) ? second : null;
+  const pieces = cutAt(pcm, rate, guided);
+  return piecesFitLines(pieces.map((p) => p.byteLength), lineChars) ? pieces : null;
 }
 
 /** Cuts `pcm` at the given silences, keeping a little silence on both sides of each cut. */
@@ -273,9 +272,12 @@ function cutAt(pcm: ArrayBuffer, rate: number, cuts: Array<[number, number]>): A
 }
 
 /**
- * One silence per line end: the silence nearest to where that line should end
- * by its share of the characters, counted in speech time (silences left out),
- * so breaths inside a line do not move the estimate.
+ * One silence per line end. Where each line should end is worked out from its
+ * share of the characters, counted in speech time (silences left out), so
+ * breaths inside a line do not move the estimate. Among the silences within
+ * reach of that point (about half a line), the best is the longest after a
+ * penalty of twice its distance, so a long breath just out of place loses to
+ * the real pause; with none in reach, the nearest.
  */
 function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: number[]): Array<[number, number]> | null {
   const silent = runs.reduce((n, [a, b]) => n + (b - a), 0);
@@ -293,6 +295,7 @@ function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: num
     return pos + (t - heard);
   };
   const chars = lineChars.reduce((n, c) => n + c, 0);
+  const reach = (speech / lineChars.length) * 0.6;
   const out: Array<[number, number]> = [];
   let acc = 0;
   let after = 0;
@@ -301,7 +304,12 @@ function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: num
     const expect = sampleAt((acc / chars) * speech);
     const left = runs.filter(([a]) => a >= after);
     if (!left.length) return null;
-    const pick = left.reduce((x, y) => (Math.abs((y[0] + y[1]) / 2 - expect) < Math.abs((x[0] + x[1]) / 2 - expect) ? y : x));
+    // Distance from the expected line end to a silence: 0 if it falls inside it.
+    const dist = ([a, b]: [number, number]) => (expect < a ? a - expect : expect > b ? expect - b : 0);
+    const near = left.filter((r) => dist(r) <= reach);
+    const pick = near.length
+      ? near.reduce((x, y) => (y[1] - y[0] - 2 * dist(y) > x[1] - x[0] - 2 * dist(x) ? y : x))
+      : left.reduce((x, y) => (dist(y) < dist(x) ? y : x));
     out.push(pick);
     after = pick[1];
   }
