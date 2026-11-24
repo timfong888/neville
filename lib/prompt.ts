@@ -129,7 +129,7 @@ export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
  * is null when missing or unusable: 2 to 12 words, no stock phrase, never a
  * future or a want.
  */
-export function splitRefrain(raw: string): { script: string; refrain: string | null } {
+export function splitRefrain(raw: string, wish = ""): { script: string; refrain: string | null } {
   const lines = raw.split("\n");
   const drop = new Set<number>();
   let found = null as string | null;
@@ -159,7 +159,7 @@ export function splitRefrain(raw: string): { script: string; refrain: string | n
   const ok =
     words >= 2 &&
     words <= 12 &&
-    !bannedIn([r]) &&
+    !bannedIn([r], wish) &&
     !/\b(?:will|want|wish|hope|someday|one day)\b/i.test(r) &&
     // Spoken by the guide to the listener, like the script: never "I" or "my".
     !/\bI\b/.test(r) &&

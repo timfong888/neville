@@ -31,11 +31,6 @@ export async function scriptModels(): Promise<string[]> {
   return listed.length ? listed : limits.scriptModels;
 }
 
-/** The first configured model that OpenRouter lists. */
-export async function scriptModel(): Promise<string> {
-  return (await scriptModels())[0];
-}
-
 export type Script = {
   lines: string[];
   source: "model" | "template";
@@ -94,7 +89,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
       const text = json.choices?.[0]?.message?.content;
-      const parts = typeof text === "string" ? splitRefrain(text) : null;
+      const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want) : null;
       if (lines) return { lines, source: "model", model, refrain: parts?.refrain ?? DEFAULT_REFRAIN };
       variant++;

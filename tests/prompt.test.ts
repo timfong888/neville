@@ -168,6 +168,11 @@ describe("refrain (#77)", () => {
     expect(refrain).toBe("The house is yours, thank you.");
     expect(script).toContain("The refrain of birdsong fills your quiet morning.");
   });
+  it("keeps a refrain in the listener's own words, even with a banned phrase", () => {
+    const raw = "x\nRefrain: Your journey across Japan is done. Thank you";
+    expect(splitRefrain(raw).refrain).toBeNull();
+    expect(splitRefrain(raw, "my journey across Japan").refrain).toBe("Your journey across Japan is done. Thank you.");
+  });
   it("refuses a refrain that wants, waits or rambles", () => {
     expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();
