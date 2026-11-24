@@ -331,12 +331,14 @@ describe("atomic voices (#76)", () => {
     // The body's single take is too long to keep, so it is recorded line by line,
     // and those pauses too leave room for the pause, closing and refrain after it.
     bigOn = lines.slice(0, -1).join(" [pause] ");
+    voicedAtomic = true;
     const synthesize = await load();
     const out = await synthesize({
       key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
-      text: "", lines: [...lines, "The house is yours."], pauseMs: 60_000, atomic: true, tail: 1, timeoutMs: 20_000,
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 300_000, atomic: true, tail: 1, timeoutMs: 20_000,
     });
     bigOn = null;
+    voicedAtomic = false;
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.tailDropped).toBeFalsy();
