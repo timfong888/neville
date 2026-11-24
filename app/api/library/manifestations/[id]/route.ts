@@ -15,6 +15,7 @@ import {
   uploadRefusal,
 } from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
+import { sameSiteRequest } from "@/lib/server/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,8 @@ type Ctx = { params: Promise<{ id: string }> };
  * (file), optional `removeAudio=1`. No audio field keeps the current recording.
  */
 export async function PUT(req: Request, { params }: Ctx) {
+  // First, before the body is read or anything is uploaded or recorded: a wrong Origin must cost nothing.
+  if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const { id } = await params;
   if (!isId(id)) return NextResponse.json({ error: "Bad id." }, { status: 400 });
   let form: FormData;
@@ -114,6 +117,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     await addTombstones(db, keys);
     return NextResponse.json({ ok: true });
   });
-  await purgeAudio(purge);
+  // Only when something was deleted: purgeAudio also sweeps old leftovers, which a refused or failed request must not trigger.
+  if (purge.length) await purgeAudio(purge);
   return res;
 }

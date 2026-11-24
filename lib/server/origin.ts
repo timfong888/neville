@@ -1,6 +1,14 @@
 // Same-site guard for state-changing requests to the account and library APIs.
 // A cross-site form or fetch carries the attacker's Origin; one with no Origin
 // at all is refused too, so this does not lean on SameSite cookies alone.
+//
+// Audit of the routes that change data (all call this before any read of the
+// body, upload, or database write):
+//   DELETE /api/account                      first line of the handler
+//   PUT    /api/library/manifestations/[id]  first line (uploads and tombstones follow it)
+//   DELETE /api/library/manifestations/[id]  via asOwner, which checks first
+//   PUT, DELETE /api/library/playlists/[id]  PUT first line; DELETE via asOwner
+// GET routes (/api/library, .../audio, /api/account) are reads and are not guarded.
 import { LEGACY_ORIGINS, PRIMARY_ORIGIN } from "@/lib/server/accounts";
 
 /**
