@@ -96,6 +96,18 @@ export type Speech =
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
       /**
+       * True when `starts` are estimated from the text, not measured (an atomic
+       * take whose pauses could not be found). Good enough for the read-along,
+       * never for cutting the audio.
+       */
+      startsEstimated?: boolean;
+      /**
+       * True when the `tail` lines (the refrain) are not in the audio or
+       * `starts`: their own recording failed or would not fit. The listener
+       * gets the script without the loop.
+       */
+      tailDropped?: boolean;
+      /**
        * Characters in every request sent for this recording: the inline pause
        * tags of a one-request take, a too-long take thrown away before the line
        * by line fallback (#76), and requests retried after a provider error or
@@ -168,10 +180,23 @@ export async function synthesize(opts: {
   instructions?: string;
   compact?: boolean;
   timeoutMs?: number;
+  /**
+   * How many of the last `lines` are extras the app cuts off (the refrain,
+   * #77): joined with no pause before them, and left out when the pauses
+   * between the script's lines are fitted to the size limit.
+   */
+  tail?: number;
   /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
   atomic?: boolean;
+  /**
+   * Bytes to leave free under the response limit when fitting an atomic
+   * take's pauses: room for audio joined after it (the closing and refrain).
+   */
+  reserveBytes?: number;
 }): Promise<Speech> {
   if (opts.atomic && opts.lines && opts.lines.length > 1 && PCM_ONLY.test(opts.model)) {
+    const tail = Math.min(Math.max(0, opts.tail ?? 0), opts.lines.length - 2);
+    if (tail > 0) return withRecordedTail(opts, tail);
     const started = Date.now();
     const one = await synthesizeAtomic(opts);
     // Too long for one response, and the pauses could not be found to shorten:
@@ -299,14 +324,18 @@ export async function synthesize(opts: {
     return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, sentChars, ids, speedApplied };
   }
   const sizes = chunks.map((c) => c.byteLength);
+  const tail = Math.min(Math.max(0, opts.tail ?? 0), chunks.length - 1);
+  const body = chunks.slice(0, chunks.length - tail);
   const pauseMs = fitPause({
     pauseMs: opts.pauseMs!,
-    gaps: chunks.length - 1,
+    gaps: body.length - 1,
     speechBytes: sizes.reduce((n, b) => n + b, 0),
     rate,
+    maxBytes: MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0),
   });
   const gap = silenceBytes(pauseMs, rate);
-  const audio = wav(normalizePcm16(stitchPcm(chunks, gap), rate), rate);
+  const joined = tail ? join([stitchPcm(body, gap), ...chunks.slice(body.length)]) : stitchPcm(chunks, gap);
+  const audio = wav(normalizePcm16(joined, rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
     return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars };
@@ -319,9 +348,20 @@ export async function synthesize(opts: {
     sentChars,
     ids,
     speedApplied,
-    starts: startShares(sizes, gap),
+    starts: tail ? tailStarts(sizes, body.length, gap) : startShares(sizes, gap),
     pauseMs,
   };
+}
+
+/** Line starts when the first `bodyCount` pieces have `gap` bytes between them and the rest follow directly. */
+function tailStarts(sizes: number[], bodyCount: number, gap: number): number[] {
+  const total = sizes.reduce((n, b) => n + b, 0) + Math.max(0, bodyCount - 1) * gap;
+  let at = 0;
+  return sizes.map((b, i) => {
+    const start = Math.round((at / total) * 10000) / 10000;
+    at += b + (i < bodyCount - 1 ? gap : 0);
+    return start;
+  });
 }
 
 /** The pause written between lines in an atomic request. Gemini honours it and does not speak it. */
@@ -330,6 +370,81 @@ export const INLINE_PAUSE = "[pause]";
 /** The text of an atomic request: every line, with a pause written between them. */
 export function atomicText(lines: string[]): string {
   return lines.map((l) => l.trim()).join(` ${INLINE_PAUSE} `);
+}
+
+/** PCM bytes in a WAV take (after its 44-byte header). */
+const a0 = (x: Extract<Speech, { ok: true }>) => x.audio.byteLength - 44;
+
+/**
+ * An atomic voice with extra lines after the script (the refrain, #77). The
+ * loop is built by cutting the recording at the closing's start and the
+ * refrain's start, so both must be exact; a single take's starts may only be
+ * estimated. So the script before the closing is recorded in one take, and
+ * the closing and the refrain each in a short request of their own, all at
+ * once. They are joined with the pace's pause before the closing and none
+ * before the refrain, and both cut points are then measured, never guessed.
+ * If only the refrain fails, the script is kept without it (`tailDropped`).
+ */
+async function withRecordedTail(opts: Parameters<typeof synthesize>[0], tail: number): Promise<Speech> {
+  const lines = opts.lines!;
+  const scriptLines = lines.slice(0, lines.length - tail);
+  const body = scriptLines.slice(0, -1);
+  // Too short for a take of its own: record every line on its own instead.
+  if (body.length < 2) return synthesize({ ...opts, atomic: false });
+  const closing = scriptLines[scriptLines.length - 1];
+  const extra = lines.slice(scriptLines.length).join(" ");
+  const single = (text: string) => synthesize({ ...opts, atomic: false, text, lines: undefined, pauseMs: 0, tail: 0 });
+  const [first, end, refrain] = await Promise.all([
+    // The body's pauses leave room for the pause before the closing and for
+    // the closing and refrain themselves (a generous 8 s of speech at 24 kHz).
+    synthesize({ ...opts, lines: body, tail: 0, reserveBytes: silenceBytes(opts.pauseMs ?? 0, 24000) + 24000 * 2 * 8 }),
+    single(closing),
+    single(extra),
+  ]);
+  const sent = (first.sentChars ?? 0) + (end.sentChars ?? 0) + (refrain.sentChars ?? 0);
+  if (!first.ok) return { ...first, sentChars: sent };
+  if (!end.ok) return { ...end, sentChars: sent };
+  const rate = new DataView(first.audio).getUint32(24, true);
+  const sameRate = (x: Extract<Speech, { ok: true }>) => x.mime === "audio/wav" && new DataView(x.audio).getUint32(24, true) === rate;
+  if (first.mime !== "audio/wav" || !sameRate(end)) {
+    return { ok: false, status: 502, message: "The recording could not be put together.", sentChars: sent };
+  }
+  const a = first.audio.slice(44);
+  const c = end.audio.slice(44);
+  // The pause before the closing, as between the body's lines; shortened only
+  // if the joined script would not otherwise fit in one response.
+  const room = MAX_AUDIO_BYTES - 44 - a0(first) - (end.audio.byteLength - 44);
+  const pauseMs = Math.min(first.pauseMs ?? opts.pauseMs ?? 0, Math.max(0, Math.floor((room / 2 / rate) * 1000)));
+  const gap = new ArrayBuffer(silenceBytes(pauseMs, rate));
+  const useRefrain = refrain.ok && sameRate(refrain);
+  const r = useRefrain ? refrain.audio.slice(44) : new ArrayBuffer(0);
+  let audio = wav(join(useRefrain ? [a, gap, c, r] : [a, gap, c]), rate);
+  let dropped = !useRefrain;
+  if (audio.byteLength > MAX_AUDIO_BYTES && useRefrain) {
+    audio = wav(join([a, gap, c]), rate);
+    dropped = true;
+  }
+  if (audio.byteLength > MAX_AUDIO_BYTES) {
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars: sent };
+  }
+  const total = a.byteLength + gap.byteLength + c.byteLength + (dropped ? 0 : r.byteLength);
+  const at = (bytes: number) => Math.round((bytes / total) * 10000) / 10000;
+  const starts = [
+    ...(first.starts ?? [0]).map((x) => at(x * a.byteLength)),
+    at(a.byteLength + gap.byteLength),
+    ...(dropped ? [] : [at(a.byteLength + gap.byteLength + c.byteLength)]),
+  ];
+  return {
+    ...first,
+    audio,
+    requests: first.requests + end.requests + (refrain.ok ? refrain.requests : 1),
+    ids: [...first.ids, ...end.ids, ...(refrain.ok ? refrain.ids : [])],
+    sentChars: sent,
+    starts,
+    pauseMs,
+    startsEstimated: first.startsEstimated,
+    ...(dropped ? { tailDropped: true } : {}),
+  };
 }
 
 /**
@@ -366,10 +481,12 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   const pcm = out.audio.slice(44);
   const pieces = splitAtPauses(pcm, rate, lines.length, lines.map((l) => l.length));
   if (!pieces) {
-    if (out.audio.byteLength > MAX_AUDIO_BYTES) {
+    // Kept with its own pauses, it must also leave the room reserved for what
+    // is joined after it; if not, line by line can shorten the pauses.
+    if (out.audio.byteLength > MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0)) {
       return { ok: false, status: 413, message: "The recording came out too long to send in one piece.", sentChars: out.sentChars };
     }
-    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate) };
+    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate), startsEstimated: true };
   }
   const sizes = pieces.map((p) => p.byteLength);
   const pauseMs = fitPause({
@@ -377,6 +494,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
     gaps: pieces.length - 1,
     speechBytes: sizes.reduce((n, b) => n + b, 0),
     rate,
+    maxBytes: MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0),
   });
   const gap = silenceBytes(pauseMs, rate);
   const audio = wav(stitchPcm(pieces, gap), rate);

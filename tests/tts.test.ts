@@ -14,13 +14,20 @@ let failTimes = Infinity;
 let failStatus = 500;
 /** A request for this input gets 4.2 MB of silence back: too long for one response. */
 let bigOn: string | null = null;
+/** When set, an atomic request gets speech back: 0.6 s of tone per line with 0.8 s of silence between. */
+let voicedAtomic = false;
+/** With voicedAtomic: the silence after each line but the last, in ms; default 800 each. */
+let atomicGapsMs: number[] | null = null;
+/** Delay before an atomic request is answered, in ms. */
+let atomicDelayMs = 0;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
-    req.on("end", () => {
+    req.on("end", async () => {
       const body = JSON.parse(raw);
+      if (atomicDelayMs && String(body.input).includes("[pause]")) await new Promise((r) => setTimeout(r, atomicDelayMs));
       seen.push(body);
       if (failOn && body.input === failOn && failTimes > 0) {
         failTimes--;
@@ -33,6 +40,28 @@ beforeAll(async () => {
       }
       if (bigOn && body.input === bigOn) {
         res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.alloc(4_200_000));
+        return;
+      }
+      if (voicedAtomic && String(body.input).includes("[pause]")) {
+        const rate = 24000;
+        const parts = String(body.input).split(" [pause] ");
+        const tone = Math.round(rate * 0.6);
+        const gaps = parts.slice(1).map((_, k) => Math.round((rate * (atomicGapsMs?.[k] ?? 800)) / 1000));
+        const pcm = new Int16Array(parts.length * tone + gaps.reduce((n, g) => n + g, 0));
+        let at = 0;
+        parts.forEach((_, k) => {
+          for (let i = 0; i < tone; i++) pcm[at + i] = Math.round(8000 * Math.sin((2 * Math.PI * 220 * i) / rate));
+          at += tone + (gaps[k] ?? 0);
+        });
+        res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.from(pcm.buffer));
+        return;
+      }
+      if (voicedAtomic && body.response_format === "pcm") {
+        // A plain line from the same voice: 0.6 s of tone at the same 24 kHz.
+        const rate = 24000;
+        const pcm = new Int16Array(Math.round(rate * 0.6));
+        for (let i = 0; i < pcm.length; i++) pcm[i] = Math.round(8000 * Math.sin((2 * Math.PI * 220 * i) / rate));
+        res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.from(pcm.buffer));
         return;
       }
       // 0.5 s of 44.1 kHz 16-bit mono PCM for PCM requests; a few bytes for MP3.
@@ -155,6 +184,24 @@ describe("synthesize with pauses", () => {
   });
 });
 
+describe("a refrain recorded after the script (#77)", () => {
+  it("follows the last line with no pause, and does not count as a gap", async () => {
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: "", lines: withRefrain, pauseMs: 1000, compact: true, tail: 1,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // 4 x 0.5 s of speech at 22.05 kHz, and pauses only between the 3 script lines.
+    expect(out.audio.byteLength).toBe(44 + 4 * 22050 + 2 * 44100);
+    expect(out.starts).toHaveLength(4);
+    const total = 4 * 22050 + 2 * 44100;
+    expect(out.starts![3]).toBeCloseTo((3 * 22050 + 2 * 44100) / total, 3);
+  });
+});
+
 describe("atomic voices (#76)", () => {
   it("records the whole script in one request, with a pause written between lines", async () => {
     const synthesize = await load();
@@ -217,6 +264,114 @@ describe("atomic voices (#76)", () => {
     if (!out.ok) return;
     expect(out.requests).toBe(lines.length + 1);
     expect(out.sentChars).toBe(lines.join(" [pause] ").length + lines.join("").length);
+  });
+
+  it("records a refrain in its own request and joins it after the closing with no pause (#77)", async () => {
+    voicedAtomic = true;
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: withRefrain, pauseMs: 1500, compact: true, atomic: true, tail: 1,
+    });
+    voicedAtomic = false;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // One take for the script before the closing, then the closing and the refrain
+    // each on their own: the two places the loop cuts are never taken from a single take.
+    const body = lines.slice(0, -1).join(" [pause] ");
+    expect(seen.map((b) => b.input).sort()).toEqual([body, "It is done.", "The house is yours."].sort());
+    expect(out.requests).toBe(3);
+    expect(out.tailDropped).toBeFalsy();
+    const s = out.starts!;
+    expect(s).toHaveLength(4);
+    expect(s[3]).toBeGreaterThan(s[2]);
+    expect(s[2]).toBeGreaterThan(s[1]);
+    expect(out.sentChars).toBe(body.length + "It is done.".length + "The house is yours.".length);
+  });
+
+  it("gives the closing and the refrain exact starts even when the take's starts are estimated", async () => {
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: withRefrain, pauseMs: 1500, atomic: true, tail: 1,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // The silent take has no pauses to find, so its own starts are estimates, but the
+    // closing and the refrain start exactly where the pieces are joined.
+    expect(seen).toHaveLength(3);
+    const s = out.starts!;
+    expect(s).toHaveLength(4);
+    // 0.5 s take, 1.5 s pause, 0.5 s closing, 0.5 s refrain (44.1 kHz in the mock).
+    const take = 44100, gap = 44100 * 1.5 * 2, total = take + gap + take + take;
+    expect(s[2]).toBeCloseTo((take + gap) / total, 3);
+    expect(s[3]).toBeCloseTo((take + gap + take) / total, 3);
+  });
+
+  it("keeps a long-paused script with its closing and refrain under the size limit", async () => {
+    // 60 s pauses would fill the response with the body's own pause, leaving no
+    // room for the closing; the body take leaves room for what is joined after it.
+    voicedAtomic = true;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 60_000, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    voicedAtomic = false;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.tailDropped).toBeFalsy();
+    expect(out.starts).toHaveLength(4);
+    expect(out.audio.byteLength).toBeLessThanOrEqual(4_000_000);
+  });
+
+  it("leaves the same room when the body take falls back to line by line", async () => {
+    // The body's single take is too long to keep, so it is recorded line by line,
+    // and those pauses too leave room for the pause, closing and refrain after it.
+    bigOn = lines.slice(0, -1).join(" [pause] ");
+    voicedAtomic = true;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 300_000, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    bigOn = null;
+    voicedAtomic = false;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.tailDropped).toBeFalsy();
+    expect(out.starts).toHaveLength(4);
+    expect(out.audio.byteLength).toBeLessThanOrEqual(4_000_000);
+  });
+
+  it("fails when the closing's own request fails, rather than play a script without it", async () => {
+    failOn = "It is done.";
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 1500, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    failOn = null;
+    expect(out.ok).toBe(false);
+  });
+
+  it("keeps the script without the refrain when only the refrain's request fails", async () => {
+    voicedAtomic = true;
+    failOn = "The house is yours.";
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: withRefrain, pauseMs: 1500, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    voicedAtomic = false;
+    failOn = null;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.tailDropped).toBe(true);
+    expect(out.starts).toHaveLength(3);
   });
 
   it("leaves voices without the flag line by line", async () => {
