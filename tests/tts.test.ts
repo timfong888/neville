@@ -172,6 +172,20 @@ describe("atomic voices (#76)", () => {
     expect(out.starts![1]).toBeGreaterThan(0);
   });
 
+  it("reports every request sent when the retries run out", async () => {
+    failOn = lines.join(" [pause] ");
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true,
+    });
+    failOn = null;
+    expect(out.ok).toBe(false);
+    // The first request and both retries were sent, so all three are counted.
+    expect(seen).toHaveLength(3);
+    if (!out.ok) expect(out.sentChars).toBe(3 * lines.join(" [pause] ").length);
+  });
+
   it("retries the whole request once the provider has a brief error", async () => {
     failOn = lines.join(" [pause] ");
     failTimes = 1;

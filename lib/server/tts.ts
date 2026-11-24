@@ -177,7 +177,7 @@ export async function synthesize(opts: {
     if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
       const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
       // The first take was recorded and billed in full, so the ledger counts it too.
-      const discarded = atomicText(opts.lines).length;
+      const discarded = one.sentChars ?? atomicText(opts.lines).length;
       return again.ok
         ? { ...again, requests: again.requests + 1, sentChars: again.sentChars + discarded }
         : { ...again, sentChars: discarded + (again.sentChars ?? 0) };
@@ -272,7 +272,8 @@ export async function synthesize(opts: {
     }
   }
   const failed = pieces.find((p) => p && !p.ok);
-  if (failed && !failed.ok) return failed;
+  // Requests already sent (retries included) are still reported for the ledger.
+  if (failed && !failed.ok) return { ...failed, sentChars };
   const done = pieces as Extract<Piece, { ok: true }>[];
 
   const ids = done.map((p) => p.id).filter((x): x is string => Boolean(x));
@@ -304,7 +305,7 @@ export async function synthesize(opts: {
   const audio = wav(normalizePcm16(stitchPcm(chunks, gap), rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return { ok: false, status: 502, message: "The recording came out too long to send." };
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars };
   }
   return {
     ok: true,
@@ -362,7 +363,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   const pieces = splitAtPauses(pcm, rate, lines.length, lines.map((l) => l.length));
   if (!pieces) {
     if (out.audio.byteLength > MAX_AUDIO_BYTES) {
-      return { ok: false, status: 413, message: "The recording came out too long to send in one piece." };
+      return { ok: false, status: 413, message: "The recording came out too long to send in one piece.", sentChars: out.sentChars };
     }
     return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate) };
   }
@@ -376,7 +377,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   const gap = silenceBytes(pauseMs, rate);
   const audio = wav(stitchPcm(pieces, gap), rate);
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return { ok: false, status: 502, message: "The recording came out too long to send." };
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars: out.sentChars };
   }
   return { ...out, audio, starts: startShares(sizes, gap), pauseMs };
 }
