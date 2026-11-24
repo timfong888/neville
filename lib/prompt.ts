@@ -122,7 +122,10 @@ export function bannedIn(lines: string[], wish = ""): string | null {
 // Before the label it allows what cleanLines strips: a bullet, numbering,
 // a heading mark, quotes or emphasis.
 const REFRAIN_LABEL =
-  /^[ \t]*(?:(?:[-*•]|\d+[.)]|#+)[ \t]*)?["“'`*_]*(?:the[ \t]+)?refrain["”'`*_]*[ \t]*(?:\([^)\n]*\))?[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
+  /^[ \t]*(?:(?:[-*•]|\d+[.)]|#+)[ \t]*)?["“”'‘’`*_]*(?:the[ \t]+)?refrain["“”'‘’`*_]*[ \t]*(?:\([^)\n]*\))?[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
+
+/** Quotes and markdown emphasis around a refrain or its label; apostrophes inside words stay. */
+const EDGE_DECORATION = /^[\s"“”'‘’`*_]+|[\s"“”'‘’`*_]+$/g;
 
 /** A refrain spoken on a loop when the model gives none, or gives an unusable one. */
 export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
@@ -140,7 +143,9 @@ export function splitRefrain(raw: string, wish = ""): { script: string; refrain:
   // one, where the prompt asks for it.
   const labels = lines.flatMap((line, i) => {
     const m = REFRAIN_LABEL.exec(line);
-    return m ? [{ i, text: (m[1] ?? "").trim() }] : [];
+    // "**Refrain:**" or '"Refrain:"' on its own line leaves only decoration
+    // after the colon: that is no refrain, so the next line is read instead.
+    return m ? [{ i, text: (m[1] ?? "").replace(EDGE_DECORATION, "") }] : [];
   });
   for (const { i } of labels) drop.add(i);
   const last = labels.at(-1);
@@ -157,7 +162,7 @@ export function splitRefrain(raw: string, wish = ""): { script: string; refrain:
   const script = lines.filter((_, i) => !drop.has(i)).join("\n");
   const text: string | null = found;
   if (text === null) return { script, refrain: null };
-  const r = text.replace(/[*_#`"“”]/g, "").replace(/\s+/g, " ").replace(/!+/g, ".").trim();
+  const r = text.replace(EDGE_DECORATION, "").replace(/[*_#`"“”]/g, "").replace(/\s+/g, " ").replace(/!+/g, ".").trim();
   const words = r.split(" ").length;
   const ok =
     words >= 2 &&
