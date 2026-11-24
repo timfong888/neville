@@ -31,7 +31,7 @@ Paths are relative to the repository root.
 |---|---|---|
 | React web app for the MVP | Built | Next.js on Vercel, `docs/specs/architecture.md` |
 | Full working backend, including payments | Partial | Route handlers exist; database and accounts in #13; payments #3 step 4 (out of scope here) |
-| Expo and EAS, App Store and Play Store after the MVP | Not yet | #3 (deferred); architecture spec "Later: Expo" |
+| Expo and EAS, App Store and Play Store after the MVP | In progress | #71 (decision), `native-ios.md`; phases #89, #91, #92, #93 |
 | Voice through a router, to compare cost and quality | Built | OpenRouter in `lib/server/tts.ts`; bake-off at `/voices` (#4) |
 | Image generation, many realistic images | Not yet | #15 |
 | Background music that keeps me listening | Built | Three bundled CC0 loops (Sleep, Calm, Active) in `public/music/`, volume slider, dips under the voice (#30) |
