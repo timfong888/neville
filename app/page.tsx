@@ -10,6 +10,7 @@ import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { lineStarts } from "@/lib/audio";
+import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
@@ -597,7 +598,7 @@ export default function DemoPage() {
       >
         <div className="blob" />
         <div className="line" aria-live="polite">
-          {current ?? (idx >= lines.length ? "And so it is." : "")}
+          {current ?? (idx >= lines.length ? CLOSING : "")}
         </div>
       </div>
 
