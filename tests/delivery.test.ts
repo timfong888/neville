@@ -13,6 +13,7 @@ import {
   silentRuns,
   splitAtPauses,
   piecesFitLines,
+  speechBounds,
   speedFor,
   startShares,
   stitchPcm,
@@ -162,6 +163,38 @@ describe("splitAtPauses (#76)", () => {
       expect(ms[i]).toBeGreaterThanOrEqual(1200);
       expect(ms[i]).toBeLessThan(1500);
     }
+  });
+
+  it("ignores silence before the first word and after the last when placing cuts", () => {
+    // Sinatra's cases on #81: 9 lines of 1.2 s with 1.2 s pauses, plus edge silence.
+    const build = (lead: number, tail: number, breathInLast: boolean) => {
+      const parts: Array<[boolean, number]> = lead ? [[false, lead]] : [];
+      for (let i = 1; i <= 9; i++) {
+        if (i === 9 && breathInLast) parts.push([true, 600], [false, 300], [true, 600]);
+        else parts.push([true, 1200]);
+        if (i < 9) parts.push([false, 1200]);
+      }
+      if (tail) parts.push([false, tail]);
+      return signal(parts);
+    };
+    for (const [lead, tail, breath] of [[0, 600, true], [0, 1000, false], [500, 800, true]] as const) {
+      const pieces = splitAtPauses(build(lead, tail, breath), rate, 9, Array(9).fill(30));
+      expect(pieces, `lead ${lead} tail ${tail} breath ${breath}`).not.toBeNull();
+      const ms = pieces!.map((p) => Math.round((p.byteLength / 2 / rate) * 1000));
+      // Every piece is one line: about 1.2 s of speech plus kept silence (and edge silence at the ends).
+      for (let i = 1; i < 8; i++) {
+        expect(ms[i]).toBeGreaterThanOrEqual(1200);
+        expect(ms[i]).toBeLessThan(1500);
+      }
+      expect(ms[8]).toBeGreaterThanOrEqual(1200 + (breath ? 300 : 0));
+    }
+  });
+
+  it("finds where the sound starts and ends", () => {
+    const pcm = new Int16Array(signal([[false, 500], [true, 1000], [false, 700]]));
+    const [a, b] = speechBounds(pcm, rate);
+    expect(Math.abs(a - rate * 0.5)).toBeLessThanOrEqual(rate * 0.02);
+    expect(Math.abs(b - rate * 1.5)).toBeLessThanOrEqual(rate * 0.02);
   });
 
   it("checks each piece against its line's share of the words", () => {

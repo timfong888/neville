@@ -251,7 +251,7 @@ export function splitAtPauses(
   // line's end, counted in speech time: the longest silence near there. A
   // long breath inside another line is out of reach, and a pause the voice
   // under-honoured is still found. The pieces are then checked once more.
-  const guided = guidedCuts(runs, samples.length, lineChars);
+  const guided = guidedCuts(runs, speechBounds(samples, rate), lineChars);
   if (!guided) return null;
   const pieces = cutAt(pcm, rate, guided);
   return piecesFitLines(pieces.map((p) => p.byteLength), lineChars) ? pieces : null;
@@ -279,15 +279,24 @@ function cutAt(pcm: ArrayBuffer, rate: number, cuts: Array<[number, number]>): A
  * penalty of twice its distance, so a long breath just out of place loses to
  * the real pause; with none in reach, the nearest.
  */
-function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: number[]): Array<[number, number]> | null {
-  const silent = runs.reduce((n, [a, b]) => n + (b - a), 0);
-  const speech = total - silent;
+function guidedCuts(
+  runs: Array<[number, number]>,
+  bounds: [number, number],
+  lineChars: number[],
+): Array<[number, number]> | null {
+  // Speech is counted from the first to the last sound: silence before the
+  // first word or after the last is not speech, and would push every
+  // expected line end late.
+  const [first, last] = bounds;
+  const inner = runs.filter(([a, b]) => a >= first && b <= last);
+  const silent = inner.reduce((n, [a, b]) => n + (b - a), 0);
+  const speech = last - first - silent;
   if (speech <= 0) return null;
   // The sample at which `t` samples of speech have been heard.
   const sampleAt = (t: number): number => {
-    let pos = 0;
+    let pos = first;
     let heard = 0;
-    for (const [a, b] of runs) {
+    for (const [a, b] of inner) {
       if (heard + (a - pos) >= t) return pos + (t - heard);
       heard += a - pos;
       pos = b;
@@ -314,6 +323,21 @@ function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: num
     after = pick[1];
   }
   return out;
+}
+
+/** The first and last sample of sound (not silence) in 16-bit mono PCM, by the same windows as `silentRuns`. */
+export function speechBounds(pcm: Int16Array, rate: number, threshold = 500): [number, number] {
+  const win = Math.max(1, Math.floor(rate * 0.02));
+  const loud = (i: number) => {
+    const end = Math.min(pcm.length, i + win);
+    for (let j = i; j < end; j++) if (Math.abs(pcm[j]) >= threshold) return true;
+    return false;
+  };
+  let first = 0;
+  while (first < pcm.length && !loud(first)) first += win;
+  let last = pcm.length;
+  while (last > first && !loud(Math.max(first, last - win))) last -= win;
+  return first >= pcm.length ? [0, pcm.length] : [first, Math.min(pcm.length, last)];
 }
 
 /** True when each piece's share of the audio is roughly its line's share of the characters (0.45x to 2.2x). */
