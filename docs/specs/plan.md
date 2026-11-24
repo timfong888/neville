@@ -17,9 +17,9 @@ A calm voice that reads you a short script about your wish as if it is already t
 |---|---|---|---|---|
 | 1 | Retry brief voice-provider errors; read the written script if the voice still fails | #73, PR #75 | About half of recordings were failing. Smallest, safest fix. | — |
 | 2 | Script prompt paraphrases Lesson 1, plus a fixed-input eval | #78, PR (draft) | Approved by Tim. It changes what every new script says. | — |
-| 3 | Closing line: replace "And so it is." | #79 | Tiny, and Tim found it "chippy". | Tim's pick |
-| 4 | Atomic voice: one request per script, pauses and pace inside it | #76 | One failure point instead of 10 to 13. Pace and pauses only work on a Gemini voice. | Tim: default voice |
-| 5 | Programming mode: minutes of repetition | #77 | Tim's chosen technique for the short script. Needs the refrain from step 2. | Tim: default and max minutes, order |
+| 3 | Closing line: "It is done." (Tim, 2026-11-24) | #79, PR #80 | Tiny, and Tim found "And so it is." "chippy". | — |
+| 4 | Atomic voice: one request per script, pauses and pace inside it; Gemini is the default voice (Tim, 2026-11-24) | #76 | One failure point instead of 10 to 13. Pace and pauses only work on a Gemini voice. | — |
+| 5 | Programming mode: script, then the refrain looped in the app with an optional bell, then the closing | #77 | Tim's chosen technique for the short script. Needs the refrain from step 2. | Minutes defaults are assumptions (Off; 1/3/5/10/20) |
 | 6 | Sign-in inside the iOS shell | #70 | Saving and playlists need an account on the phone. | — |
 | 7 | Native app approach | #71, #64, #68 | Decide one codebase or shared logic once the web app's core is solid. | Tim |
 

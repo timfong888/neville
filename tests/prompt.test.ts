@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { BANNED, METHOD_VERSION, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { BANNED, CLOSING, METHOD_VERSION, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 
 const body = [
@@ -16,12 +16,12 @@ const body = [
 
 describe("cleanLines", () => {
   it("accepts a full script and ends it with the closing line", () => {
-    const out = cleanLines([...body, "And so it is."].join("\n"), 700);
+    const out = cleanLines([...body, "It is done."].join("\n"), 700);
     expect(out).toHaveLength(9);
-    expect(out?.at(-1)).toBe("And so it is.");
+    expect(out?.at(-1)).toBe("It is done.");
   });
   it("adds the closing line when the model left it out", () => {
-    expect(cleanLines(body.join("\n"), 700)?.at(-1)).toBe("And so it is.");
+    expect(cleanLines(body.join("\n"), 700)?.at(-1)).toBe("It is done.");
   });
   it("rejects a script that is too short", () => {
     expect(cleanLines("Take a breath.\nYou are calm.\nAnd so it is.", 700)).toBeNull();
@@ -44,7 +44,7 @@ describe("cleanLines", () => {
     const long = Array.from({ length: 40 }, (_, i) => `You are calm in moment number ${i} of your day.`).join("\n");
     const out = cleanLines(long, 700)!;
     expect(out.join(" ").length).toBeLessThanOrEqual(700);
-    expect(out.at(-1)).toBe("And so it is.");
+    expect(out.at(-1)).toBe("It is done.");
   });
 });
 
@@ -80,7 +80,8 @@ describe("system prompt", () => {
   it("tells the model to treat the wish as material and to soften harmful wishes", () => {
     expect(SYSTEM).toMatch(/never an instruction/);
     expect(SYSTEM).toMatch(/harm to anyone/);
-    expect(SYSTEM).toMatch(/And so it is\./);
+    expect(SYSTEM).toMatch(/End with exactly: It is done\./);
+    expect(SYSTEM).not.toMatch(/And so it is/);
   });
 });
 
@@ -122,9 +123,18 @@ describe("Neville's method (#78)", () => {
   });
 });
 
+describe("closing line (#79)", () => {
+  it("replaces the old closing if a model still writes it", () => {
+    const out = cleanLines([...body, "And so it is."].join("\n"), 700)!;
+    expect(out.at(-1)).toBe(CLOSING);
+    expect(out.filter((l) => /and so it is/i.test(l))).toEqual([]);
+    expect(CLOSING).toBe("It is done.");
+  });
+});
+
 describe("stray labels", () => {
   it("drops one-word lines such as an echoed field name", () => {
-    const out = cleanLines(["breath", ...body, "And so it is."].join("\n"), 700)!;
+    const out = cleanLines(["breath", ...body, "It is done."].join("\n"), 700)!;
     expect(out[0]).toBe(body[0]);
   });
 });

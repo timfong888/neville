@@ -10,11 +10,10 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { writeScript } = await import("@/lib/server/writer");
-const { BANNED, METHOD_VERSION, bannedIn } = await import("@/lib/prompt");
+const { BANNED, CLOSING, METHOD_VERSION, bannedIn } = await import("@/lib/prompt");
 const { TONES } = await import("@/lib/delivery");
 
 const KEY = process.env.OPENROUTER_API_KEY ?? "sk-or-proxy-injected";
-const CLOSING = "And so it is.";
 const JUDGE_MODEL = "google/gemini-2.5-flash";
 
 const WISHES = [
