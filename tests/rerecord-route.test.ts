@@ -93,6 +93,11 @@ describe("POST /api/rerecord", () => {
     // The default voice is atomic: one request, a pause marker between lines.
     expect(calls.filter((c) => c.path.startsWith("/audio/speech"))).toHaveLength(1);
     expect((speech?.body as { input: string }).input).toBe("Take a slow breath. [pause] You are calm and steady.");
+    // Same delivery as /api/manifest at the default pace and tone.
+    const D = await import("@/lib/delivery");
+    const pace = D.resolvePace(undefined);
+    const tone = D.resolveTone(undefined);
+    expect(speech?.body).toMatchObject({ speed: D.speedFor(pace, tone), instructions: D.styleInstruction(pace, tone) });
   });
 
   it("records a voice without the atomic flag as plain text", async () => {

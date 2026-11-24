@@ -6,7 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
-import { pauseFor, resolvePace, resolveTone } from "@/lib/delivery";
+import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,6 +14,16 @@ export const maxDuration = 60;
 // Same style line /api/manifest sends Gemini voices today.
 const STYLE = "Speak slowly, calmly and warmly, like a meditation guide. Leave a short pause after each sentence.";
 const TAKES_STYLE = /^google\/gemini/;
+
+// Atomic voices re-record at the default pace and tone (Slow, Calm), with the
+// same speed, style instruction and pause /api/manifest sends for them.
+const DEFAULT_PACE = resolvePace(undefined);
+const DEFAULT_TONE = resolveTone(undefined);
+const DEFAULT_DELIVERY = {
+  pauseMs: pauseFor(DEFAULT_PACE, DEFAULT_TONE),
+  speed: speedFor(DEFAULT_PACE, DEFAULT_TONE),
+  instructions: styleInstruction(DEFAULT_PACE, DEFAULT_TONE),
+};
 
 function visitor(req: Request): string {
   return (
@@ -86,11 +96,9 @@ export async function POST(req: Request) {
     compact: true,
     timeoutMs: 42_000,
     // Voices flagged atomic record the edited lines in one request with a
-    // pause after each, set to the default pace's length, as /api/manifest
-    // does (#76). Other voices keep the one-request text above.
-    ...(voice.atomic === true
-      ? { lines, pauseMs: pauseFor(resolvePace(undefined), resolveTone(undefined)), atomic: true }
-      : {}),
+    // pause after each, at the default pace's speed, style and pause, as
+    // /api/manifest does (#76). Other voices keep the one-request text above.
+    ...(voice.atomic === true ? { lines, ...DEFAULT_DELIVERY, atomic: true } : {}),
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
