@@ -46,7 +46,7 @@ export default function Spike() {
       const meta = { title: `Spike: ${m}${bellOn ? " + bell" : ""}`, artist: "Neville" };
       if (m === "playlist") {
         // Native gapless sequencing: refrain, (bell), refrain, ... looping the whole list.
-        const l = createAudioPlaylist({ sources: bellOn ? [f.single, f.bell] : [f.single], loop: "all", updateInterval: 250 });
+        const l = createAudioPlaylist({ sources: bellOn ? [f.refrainOnly, f.bell] : [f.single], loop: "all", updateInterval: 250 });
         l.setActiveForLockScreen(true, meta);
         l.play();
         list.current = l;
