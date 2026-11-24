@@ -96,9 +96,11 @@ export type Speech =
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
       /**
-       * Characters sent in every request behind this recording, as billed:
-       * the inline pause tags of a one-request take, and a too-long take thrown
-       * away before the line by line fallback (#76). The cost ledger prices this.
+       * Characters in every take that came back with audio, which is what is
+       * billed: the inline pause tags of a one-request take, and a too-long
+       * take thrown away before the line by line fallback (#76). A request
+       * retried after a provider error (5xx) or a dropped connection returned
+       * no audio and is not counted. The cost ledger prices this.
        */
       sentChars: number;
     }
