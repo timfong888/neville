@@ -73,6 +73,13 @@ describe("buildSession", () => {
     const firstGap = sec(4) + sec(1.5);
     expect(s.pcm[firstGap + 5]).toBe(999);
     expect(s.pcm[firstGap + sec(1) + 5]).toBe(0);
+    // A bell longer than the silence fades out instead of stopping hard.
+    const long = new Int16Array(sec(10)).fill(999);
+    const cut = buildSession({ pcm: r.pcm, rate, starts: r.starts, scriptLines: r.lines, refrain: r.refrain, minutes: 1, bell: long })!;
+    const gapEnd = firstGap + Math.round((3000 * rate) / 1000);
+    expect(cut.pcm[gapEnd - 1]).toBe(0);
+    expect(Math.abs(cut.pcm[gapEnd - Math.round(rate * 0.02)])).toBeLessThan(600);
+    expect(cut.pcm[gapEnd - Math.round(rate * 0.1)]).toBe(999);
     const off = buildSession({ pcm: r.pcm, rate, starts: r.starts, scriptLines: r.lines, refrain: r.refrain, minutes: 1 })!;
     expect(off.pcm[firstGap + 5]).toBe(0);
   });

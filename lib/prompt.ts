@@ -111,7 +111,9 @@ export function bannedIn(lines: string[]): string | null {
 }
 
 /** The refrain line the model writes after the script, for programming mode (#77). */
-const REFRAIN_LINE = /^\s*(?:[-*•]\s*)?\**refrain\**\s*[:\-–]\s*(.+)$/im;
+const REFRAIN_LINE = /^\s*(?:[-*•]\s*)?\**(?:the\s+)?refrain\**\s*(?:\([^)]*\))?\s*[:\-–—]\s*(.+)$/im;
+/** Any line that starts with the refrain label: never spoken as part of the script. */
+const REFRAIN_LABEL = /^\s*(?:[-*•]\s*)?\**(?:the\s+)?refrain\b.*$/gim;
 
 /** A refrain spoken on a loop when the model gives none, or gives an unusable one. */
 export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
@@ -123,8 +125,9 @@ export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
  */
 export function splitRefrain(raw: string): { script: string; refrain: string | null } {
   const m = REFRAIN_LINE.exec(raw);
-  if (!m) return { script: raw, refrain: null };
-  const script = raw.replace(m[0], "");
+  // Whatever happens below, no line that starts with the label is left in the script.
+  const script = raw.replace(REFRAIN_LABEL, "");
+  if (!m) return { script, refrain: null };
   const r = m[1].replace(/[*_#`"“”]/g, "").replace(/\s+/g, " ").replace(/!+/g, ".").trim();
   const words = r.split(" ").length;
   const ok =
@@ -133,7 +136,8 @@ export function splitRefrain(raw: string): { script: string; refrain: string | n
     !bannedIn([r]) &&
     !/\b(?:will|want|wish|hope|someday|one day)\b/i.test(r) &&
     // Spoken by the guide to the listener, like the script: never "I" or "my".
-    !/\b(?:I|my|me|mine|myself)\b/.test(r);
+    !/\bI\b/.test(r) &&
+    !/\b(?:my|me|mine|myself)\b/i.test(r);
   return { script, refrain: ok ? (/[.?]$/.test(r) ? r : `${r}.`) : null };
 }
 

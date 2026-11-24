@@ -136,9 +136,14 @@ export function buildSession(opts: {
     out.set(clip, w);
     w += clip.length;
     if (opts.bell?.length) {
-      // The bell rings at the start of the silence, cut short if the silence is.
-      const b = opts.bell.subarray(0, Math.min(opts.bell.length, gap));
-      out.set(b, w);
+      // The bell rings at the start of the silence. If the silence is shorter
+      // than the bell, it fades out over its last 40 ms instead of clicking off.
+      const len = Math.min(opts.bell.length, gap);
+      out.set(opts.bell.subarray(0, len), w);
+      if (len < opts.bell.length) {
+        const fade = Math.min(len, Math.round(rate * 0.04));
+        for (let i = 0; i < fade; i++) out[w + len - fade + i] = Math.round(out[w + len - fade + i] * (1 - (i + 1) / fade));
+      }
     }
     w += gap;
   }

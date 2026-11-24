@@ -336,6 +336,8 @@ export default function DemoPage() {
     setIdx(-1);
     let next: Made | null = null;
     let written: string[] | null = null;
+    // Repetition was asked for but could not be built (a voice that cannot loop).
+    let noLoop = false;
     let why = "";
     // Mix voices on: each new recording takes the next voice in the set.
     const mixing = readMixOn();
@@ -373,6 +375,7 @@ export default function DemoPage() {
           refrain && allStarts
             ? await composeSession({ audio, scriptLines: made, starts: allStarts, refrain, minutes: repeatMin, bellOn }).catch(() => null)
             : null;
+        noLoop = repeatMin > 0 && !session;
         next = session
           ? { ...base, lines: session.lines, url: session.url, starts: session.starts, saveUrl: session.saveUrl, saveLines: made }
           : {
@@ -406,9 +409,12 @@ export default function DemoPage() {
         ? written
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
-        : next.source === "template"
-          ? "A personal script could not be written just now, so this is a general one."
-          : "",
+        : [
+            next.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
+            noLoop ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
     );
     setStage("player");
   };

@@ -127,6 +127,8 @@ export async function POST(req: Request) {
       "X-Script-Source": script.source,
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
+      // Repetition was asked for, but this voice's audio cannot be cut apart to loop.
+      ...(body.repeat === true && !repeat ? { "X-Repeat": "unsupported" } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,

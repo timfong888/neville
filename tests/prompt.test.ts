@@ -148,12 +148,21 @@ describe("refrain (#77)", () => {
     expect(script).not.toMatch(/Refrain/);
     expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
   });
+  it("never leaves a refrain label in the spoken script", () => {
+    for (const label of ["Refrain — The house is yours.", "Refrain (for repeating): The house is yours.", "The refrain: The house is yours.", "**Refrain**: The house is yours.", "Refrain"]) {
+      const { script, refrain } = splitRefrain([...body, "It is done.", label].join("\n"));
+      expect(script.toLowerCase()).not.toContain("refrain");
+      if (label !== "Refrain") expect(refrain).toBe("The house is yours.");
+      expect(cleanLines(script, 700)?.join(" ")).not.toMatch(/refrain/i);
+    }
+  });
   it("refuses a refrain that wants, waits or rambles", () => {
     expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: My house by the sea is mine").refrain).toBeNull();
     expect(splitRefrain(`x\nRefrain: ${"word ".repeat(14)}`).refrain).toBeNull();
     expect(splitRefrain("no refrain here").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
     expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
   });
 });
