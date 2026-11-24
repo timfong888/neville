@@ -189,6 +189,8 @@ describe("refrain (#77)", () => {
     expect(splitRefrain("x\nRefrain: My house by the sea is mine").refrain).toBeNull();
     expect(splitRefrain(`x\nRefrain: ${"word ".repeat(14)}`).refrain).toBeNull();
     expect(splitRefrain("no refrain here").refrain).toBeNull();
+    // Not addressed to the listener: the "you" of "thank you" does not count.
+    expect(splitRefrain("x\nRefrain: The house is finished, thank you.").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
     expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
   });

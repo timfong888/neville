@@ -133,7 +133,7 @@ export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
 /**
  * Splits the model's reply into the script text and its refrain. The refrain
  * is null when missing or unusable: 2 to 12 words, no stock phrase, never a
- * future or a want.
+ * future or a want, and addressed to the listener as "you".
  */
 export function splitRefrain(raw: string, wish = ""): { script: string; refrain: string | null } {
   const lines = raw.split("\n");
@@ -171,7 +171,10 @@ export function splitRefrain(raw: string, wish = ""): { script: string; refrain:
     !/\b(?:will|want|wish|hope|someday|one day)\b/i.test(r) &&
     // Spoken by the guide to the listener, like the script: never "I" or "my".
     !/\bI\b/.test(r) &&
-    !/\b(?:my|me|mine|myself)\b/i.test(r);
+    !/\b(?:my|me|mine|myself)\b/i.test(r) &&
+    // Addressed to the listener, as the prompt asks: a "you" form other than
+    // the one in "thank you".
+    /\b(?:you|your|yours|yourself)\b/i.test(r.replace(/\bthank you\b/gi, ""));
   return { script, refrain: ok ? (/[.?]$/.test(r) ? r : `${r}.`) : null };
 }
 
