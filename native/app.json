@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Neville",
+    "slug": "neville",
+    "version": "2.0.0",
+    "scheme": "neville",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#151820",
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "pckg.neville",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Neville uses the microphone only if you choose to record your own voice.",
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "extra": {
+      "eas": { "projectId": "06736e9f-b30f-46e4-88a2-ac392ba047ec" }
+    },
+    "owner": "blockstitch"
+  }
+}
