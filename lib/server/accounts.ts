@@ -8,25 +8,16 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { appleAudience, appleNonceProblem } from "@/lib/appleSignIn";
+import { googleConfigured, missingAccountVars, providersFor } from "@/lib/server/providers";
 import { tryAppleClientSecret } from "@/lib/server/appleSecret";
 import { getPool, withTx } from "@/lib/server/db";
 import { sniffAudio } from "@/lib/server/audioSniff";
 import { randomUUID } from "node:crypto";
 import { addTombstones, type Db, oldestTombstones } from "@/lib/server/libraryDb";
 
-const REQUIRED = [
-  "DATABASE_URL",
-  "BLOB_READ_WRITE_TOKEN",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "BETTER_AUTH_SECRET",
-] as const;
-
 /** Names of the variables still missing, for the status page. Never their values. */
 export function missingVars(): string[] {
-  const missing: string[] = REQUIRED.filter((k) => !process.env[k]?.trim());
-  if (process.env.ACCOUNTS_ENABLED?.trim().toLowerCase() !== "true") missing.unshift("ACCOUNTS_ENABLED=true");
-  return missing;
+  return missingAccountVars(process.env, appleEnabled());
 }
 
 export function accountsEnabled(): boolean {
@@ -92,14 +83,20 @@ function appleSecret(): string | null {
   return secret;
 }
 
-/** Sign in with Apple is offered only when all four Apple variables are set and the key is usable. Google stays required. */
+/** Sign in with Apple is offered only when all four Apple variables are set and the key is usable. */
 export function appleEnabled(): boolean {
   return appleSecret() !== null;
 }
 
-/** Sign-in buttons to show: Google always, Apple when configured. */
+/** Sign-in buttons to show: each provider that is configured. */
 export function signInProviders(): ("google" | "apple")[] {
-  return appleEnabled() ? ["google", "apple"] : ["google"];
+  return providersFor(process.env, appleEnabled());
+}
+
+/** Google, only when both its variables are set. Otherwise it is not registered, so a request for it fails with "provider not found". */
+function googleProvider() {
+  if (!googleConfigured()) return {};
+  return { google: { clientId: process.env.GOOGLE_CLIENT_ID!.trim(), clientSecret: process.env.GOOGLE_CLIENT_SECRET!.trim() } };
 }
 
 function appleProvider() {
@@ -126,15 +123,9 @@ function makeAuth() {
     database: getPool(),
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: baseURL(),
-    // Google only at MVP (architecture spec): no passwords, no email service.
+    // Social sign-in only (architecture spec): no passwords, no email service.
     emailAndPassword: { enabled: false },
-    socialProviders: {
-      google: {
-        clientId: process.env.GOOGLE_CLIENT_ID as string,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      },
-      ...apple,
-    },
+    socialProviders: { ...googleProvider(), ...apple },
     // Apple returns to the callback with a form POST from its own origin.
     trustedOrigins: [PRIMARY_ORIGIN, ...LEGACY_ORIGINS, ...NATIVE_TRUSTED, ...("apple" in apple ? ["https://appleid.apple.com"] : [])],
     // expo() lets the native app sign in and carry its session; nextCookies() keeps the website's cookies.
