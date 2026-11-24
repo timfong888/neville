@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Link } from "expo-router";
 import { PACES, TONES } from "@/lib/delivery";
 import type { AccountState } from "@/lib/api/client";
 import { api, API_URL, appVersion } from "../src/api";
@@ -61,6 +62,7 @@ export default function Home() {
           />
         ) : null}
         {note ? <Text style={s.p}>{note}</Text> : null}
+        <Link href="/spike" style={s.link}>Audio spike</Link>
       </View>
     </ScrollView>
   );
@@ -70,6 +72,7 @@ const s = StyleSheet.create({
   page: { flexGrow: 1, justifyContent: "center", padding: 24, backgroundColor: "#151820" },
   card: { gap: 12 },
   h1: { color: "#fff", fontSize: 34, fontWeight: "600" },
+  link: { color: "#8ab4ff", fontSize: 16 },
   p: { color: "#c9ced8", fontSize: 16 },
   apple: { height: 48, width: "100%" },
   btn: { borderColor: "#c9ced8", borderWidth: 1, borderRadius: 8, padding: 12, alignItems: "center" },
