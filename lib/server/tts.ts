@@ -98,6 +98,9 @@ export type Speech =
     }
   | { ok: false; status: number; message: string };
 
+/** Waits before each retry of a line after a provider error; one entry per retry. */
+const RETRY_DELAYS_MS = [400, 1200];
+
 /** How many line requests run at once when lines are stitched. */
 const LINE_CONCURRENCY = 3;
 
@@ -165,26 +168,37 @@ export async function synthesize(opts: {
 
   const one = async (part: string): Promise<Piece> => {
     for (const withSpeed of wantSpeed && !speedRefused ? [true, false] : [false]) {
-      const left = deadline - Date.now();
-      if (left < 1000) return { ok: false, status: 504, message: "The voice service did not answer in time." };
-      let res: Response;
-      try {
-        res = await fetch(`${OPENROUTER}/audio/speech`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
-          body: JSON.stringify({
-            model,
-            ...(voice ? { voice } : {}),
-            ...(instructions ? { instructions } : {}),
-            ...(withSpeed ? { speed: wantSpeed } : {}),
-            input: part,
-            response_format: pcm ? "pcm" : "mp3",
-          }),
-          signal: AbortSignal.timeout(left),
-        });
-      } catch {
-        return { ok: false, status: 504, message: "The voice service did not answer in time." };
+      let res: Response | null = null;
+      // A provider error (5xx) or a dropped connection is usually brief: HeyGen
+      // answers about 1 request in 16 with a 500. A script is recorded line by
+      // line, so without a retry one such answer loses the whole recording (#73).
+      for (let attempt = 0; ; attempt++) {
+        const left = deadline - Date.now();
+        if (left < 1000) return { ok: false, status: 504, message: "The voice service did not answer in time." };
+        try {
+          res = await fetch(`${OPENROUTER}/audio/speech`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Neville" },
+            body: JSON.stringify({
+              model,
+              ...(voice ? { voice } : {}),
+              ...(instructions ? { instructions } : {}),
+              ...(withSpeed ? { speed: wantSpeed } : {}),
+              input: part,
+              response_format: pcm ? "pcm" : "mp3",
+            }),
+            signal: AbortSignal.timeout(left),
+          });
+        } catch {
+          res = null;
+        }
+        const transient = !res || res.status >= 500;
+        const wait = RETRY_DELAYS_MS[attempt];
+        if (!transient || wait === undefined || deadline - Date.now() < wait + 2000) break;
+        await res?.body?.cancel().catch(() => {});
+        await new Promise((r) => setTimeout(r, wait));
       }
+      if (!res) return { ok: false, status: 504, message: "The voice service did not answer in time." };
       if (!res.ok) {
         // A model that does not know `speed` may answer 400 or 422. Ask again without it.
         if (withSpeed && (res.status === 400 || res.status === 422)) {

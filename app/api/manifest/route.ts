@@ -92,7 +92,18 @@ export async function POST(req: Request) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: spoken, estUsd: null, ok: false });
-    return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
+    // The upstream reason, so a failure can be read from the log (#73). Never the key.
+    console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    return NextResponse.json(
+      {
+        code: "voice_failed",
+        error: "The voice could not be recorded just now.",
+        // The model's script was already written and vetted: the device voice
+        // reads it instead of the general one. A template script is not sent.
+        ...(script.source === "model" ? { lines: script.lines } : {}),
+      },
+      { status: 502 },
+    );
   }
 
   await record({
