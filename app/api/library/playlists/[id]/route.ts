@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import type { Playlist } from "@/lib/library/model";
 import { deletePlaylist, isId, putPlaylist } from "@/lib/server/libraryDb";
 import { asOwner } from "@/lib/server/libraryRoute";
+import { sameSiteRequest } from "@/lib/server/origin";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PUT(req: Request, { params }: Ctx) {
+  // Same order as the manifestation route: the Origin check comes before the body is read.
+  if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const { id } = await params;
   if (!isId(id)) return NextResponse.json({ error: "Bad id." }, { status: 400 });
   const body = (await req.json().catch(() => null)) as Partial<Playlist> | null;

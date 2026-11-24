@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/accounts", () => ({
@@ -24,5 +24,37 @@ describe("sameSiteRequest", () => {
     expect(sameSiteRequest(req("DELETE", "https://evil.example"))).toBe(false);
     expect(sameSiteRequest(req("DELETE"))).toBe(false);
     expect(sameSiteRequest(req("PUT", "null"))).toBe(false);
+  });
+
+  it("matches the origin exactly: case, default port, trailing dot and path variants are refused", () => {
+    for (const o of [
+      "https://GETNEVILLE.vercel.app",
+      "https://getneville.vercel.app:443",
+      "https://getneville.vercel.app.",
+      "https://getneville.vercel.app/",
+      "http://getneville.vercel.app",
+      "https://getneville.vercel.app:8443",
+    ]) {
+      expect(sameSiteRequest(req("PUT", o)), o).toBe(false);
+    }
+  });
+
+  describe("BETTER_AUTH_URL", () => {
+    const saved = process.env.BETTER_AUTH_URL;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.BETTER_AUTH_URL;
+      else process.env.BETTER_AUTH_URL = saved;
+    });
+    it("adds the origin of the configured URL, not its path", () => {
+      process.env.BETTER_AUTH_URL = "https://custom.example/some/path";
+      expect(sameSiteRequest(req("PUT", "https://custom.example"))).toBe(true);
+      expect(sameSiteRequest(req("PUT", "https://custom.example/some/path"))).toBe(false);
+    });
+    it("ignores a value that is not a URL, and a blank one", () => {
+      process.env.BETTER_AUTH_URL = "not a url";
+      expect(sameSiteRequest(req("PUT", "https://evil.example"))).toBe(false);
+      process.env.BETTER_AUTH_URL = "   ";
+      expect(sameSiteRequest(req("PUT", "https://getneville.vercel.app"))).toBe(true);
+    });
   });
 });
