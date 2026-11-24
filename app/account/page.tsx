@@ -155,9 +155,12 @@ export default function AccountPage() {
                 <span>✓ Delete it all, any time</span>
               </li>
             </ul>
-            <button className="btn primary block" onClick={() => signIn("google")} disabled={!account.enabled || !!busy}>
-              Continue with Google
-            </button>
+            {/* With accounts off the button stays as a disabled placeholder; with them on it shows only if Google is set up. */}
+            {(!account.enabled || account.providers?.includes("google")) && (
+              <button className="btn primary block" onClick={() => signIn("google")} disabled={!account.enabled || !!busy}>
+                Continue with Google
+              </button>
+            )}
             {account.providers?.includes("apple") && (
               <button className="btn block apple" onClick={() => signIn("apple")} disabled={!!busy}>
                 <svg aria-hidden="true" width="14" height="17" viewBox="0 0 814 1000" style={{ marginRight: 8, verticalAlign: "-2px" }}>
