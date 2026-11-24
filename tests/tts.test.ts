@@ -310,6 +310,23 @@ describe("atomic voices (#76)", () => {
     expect(s[3]).toBeCloseTo((take + gap + take) / total, 3);
   });
 
+  it("keeps a long-paused script with its closing and refrain under the size limit", async () => {
+    // 60 s pauses would fill the response with the body's own pause, leaving no
+    // room for the closing; the body take leaves room for what is joined after it.
+    voicedAtomic = true;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 60_000, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    voicedAtomic = false;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.tailDropped).toBeFalsy();
+    expect(out.starts).toHaveLength(4);
+    expect(out.audio.byteLength).toBeLessThanOrEqual(4_000_000);
+  });
+
   it("fails when the closing's own request fails, rather than play a script without it", async () => {
     failOn = "It is done.";
     const synthesize = await load();

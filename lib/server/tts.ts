@@ -188,6 +188,11 @@ export async function synthesize(opts: {
   tail?: number;
   /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
   atomic?: boolean;
+  /**
+   * Bytes to leave free under the response limit when fitting an atomic
+   * take's pauses: room for audio joined after it (the closing and refrain).
+   */
+  reserveBytes?: number;
 }): Promise<Speech> {
   if (opts.atomic && opts.lines && opts.lines.length > 1 && PCM_ONLY.test(opts.model)) {
     const tail = Math.min(Math.max(0, opts.tail ?? 0), opts.lines.length - 2);
@@ -366,6 +371,9 @@ export function atomicText(lines: string[]): string {
   return lines.map((l) => l.trim()).join(` ${INLINE_PAUSE} `);
 }
 
+/** PCM bytes in a WAV take (after its 44-byte header). */
+const a0 = (x: Extract<Speech, { ok: true }>) => x.audio.byteLength - 44;
+
 /**
  * An atomic voice with extra lines after the script (the refrain, #77). The
  * loop is built by cutting the recording at the closing's start and the
@@ -386,7 +394,9 @@ async function withRecordedTail(opts: Parameters<typeof synthesize>[0], tail: nu
   const extra = lines.slice(scriptLines.length).join(" ");
   const single = (text: string) => synthesize({ ...opts, atomic: false, text, lines: undefined, pauseMs: 0, tail: 0 });
   const [first, end, refrain] = await Promise.all([
-    synthesize({ ...opts, lines: body, tail: 0 }),
+    // The body's pauses leave room for the pause before the closing and for
+    // the closing and refrain themselves (a generous 8 s of speech at 24 kHz).
+    synthesize({ ...opts, lines: body, tail: 0, reserveBytes: silenceBytes(opts.pauseMs ?? 0, 24000) + 24000 * 2 * 8 }),
     single(closing),
     single(extra),
   ]);
@@ -400,7 +410,10 @@ async function withRecordedTail(opts: Parameters<typeof synthesize>[0], tail: nu
   }
   const a = first.audio.slice(44);
   const c = end.audio.slice(44);
-  const pauseMs = first.pauseMs ?? opts.pauseMs ?? 0;
+  // The pause before the closing, as between the body's lines; shortened only
+  // if the joined script would not otherwise fit in one response.
+  const room = MAX_AUDIO_BYTES - 44 - a0(first) - (end.audio.byteLength - 44);
+  const pauseMs = Math.min(first.pauseMs ?? opts.pauseMs ?? 0, Math.max(0, Math.floor((room / 2 / rate) * 1000)));
   const gap = new ArrayBuffer(silenceBytes(pauseMs, rate));
   const useRefrain = refrain.ok && sameRate(refrain);
   const r = useRefrain ? refrain.audio.slice(44) : new ArrayBuffer(0);
@@ -478,6 +491,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
     gaps: pieces.length - 1,
     speechBytes: sizes.reduce((n, b) => n + b, 0),
     rate,
+    maxBytes: MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0),
   });
   const gap = silenceBytes(pauseMs, rate);
   const audio = wav(stitchPcm(pieces, gap), rate);
