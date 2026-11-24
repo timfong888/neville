@@ -374,18 +374,24 @@ export function atomicText(lines: string[]): string {
 
 /**
  * The script without its last lines (the refrain), from a take whose line
- * starts are only estimated. Cut in the silence nearest the refrain's
- * estimated start, keeping 120 ms of it, so no word of the closing is lost.
- * With no silence to cut in, the cut falls at the estimate itself.
+ * starts are only estimated. Cut only in a measured silence: one after the
+ * closing has begun, the nearest to the refrain's estimated start, keeping
+ * 120 ms of it so no word of the closing is lost. With no such silence the
+ * estimate is not trusted for cutting, and the recording fails as before.
  */
 function dropTail(take: Extract<Speech, { ok: true }>, keep: number): Speech {
   const starts = take.starts ?? [];
   const rate = new DataView(take.audio).getUint32(24, true) || 24000;
   const pcm = new Int16Array(take.audio.slice(44));
+  const closingAt = Math.round((starts[keep - 1] ?? 0) * pcm.length);
   const guess = Math.round((starts[keep] ?? 1) * pcm.length);
-  const runs = silentRuns(pcm, rate).filter(([a, b]) => a > 0 && b < pcm.length);
-  const near = runs.sort((x, y) => Math.abs((x[0] + x[1]) / 2 - guess) - Math.abs((y[0] + y[1]) / 2 - guess))[0];
-  const cut = Math.min(pcm.length, near ? near[0] + Math.round(rate * 0.12) : guess);
+  const near = silentRuns(pcm, rate)
+    .filter(([a, b]) => a > closingAt && b < pcm.length)
+    .sort((x, y) => Math.abs((x[0] + x[1]) / 2 - guess) - Math.abs((y[0] + y[1]) / 2 - guess))[0];
+  if (!near) {
+    return { ok: false, status: 502, message: "The recording could not be cut into lines in time.", sentChars: take.sentChars };
+  }
+  const cut = Math.min(pcm.length, near[0] + Math.round(rate * 0.12));
   const scale = pcm.length / Math.max(1, cut);
   return {
     ...take,

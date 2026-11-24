@@ -16,6 +16,8 @@ let failStatus = 500;
 let bigOn: string | null = null;
 /** When set, an atomic request gets speech back: 0.6 s of tone per line with 0.8 s of silence between. */
 let voicedAtomic = false;
+/** With voicedAtomic: the silence after each line but the last, in ms; default 800 each. */
+let atomicGapsMs: number[] | null = null;
 /** Delay before an atomic request is answered, in ms. */
 let atomicDelayMs = 0;
 
@@ -44,11 +46,12 @@ beforeAll(async () => {
         const rate = 24000;
         const parts = String(body.input).split(" [pause] ");
         const tone = Math.round(rate * 0.6);
-        const gap = Math.round(rate * 0.8);
-        const pcm = new Int16Array(parts.length * tone + (parts.length - 1) * gap);
+        const gaps = parts.slice(1).map((_, k) => Math.round((rate * (atomicGapsMs?.[k] ?? 800)) / 1000));
+        const pcm = new Int16Array(parts.length * tone + gaps.reduce((n, g) => n + g, 0));
+        let at = 0;
         parts.forEach((_, k) => {
-          const at = k * (tone + gap);
           for (let i = 0; i < tone; i++) pcm[at + i] = Math.round(8000 * Math.sin((2 * Math.PI * 220 * i) / rate));
+          at += tone + (gaps[k] ?? 0);
         });
         res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.from(pcm.buffer));
         return;
@@ -292,23 +295,43 @@ describe("atomic voices (#76)", () => {
   });
 
   it("keeps the script and leaves the refrain out when there is no time to record line by line", async () => {
+    // Speech with the pause after line 1 missing, so the lines cannot all be
+    // found, but the pause before the refrain is there to cut in.
+    voicedAtomic = true;
+    atomicGapsMs = [0, 800, 800];
     atomicDelayMs = 1200;
     const synthesize = await load();
     const withRefrain = [...lines, "The house is yours."];
     const out = await synthesize({
       key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
-      text: "", lines: withRefrain, pauseMs: 1500, compact: true, atomic: true, tail: 1, timeoutMs: 2000,
+      text: "", lines: withRefrain, pauseMs: 1500, atomic: true, tail: 1, timeoutMs: 2000,
     });
+    voicedAtomic = false;
+    atomicGapsMs = null;
     atomicDelayMs = 0;
-    // The slow take used over half the budget and its pauses could not be found:
-    // no second recording, and no failure either.
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(seen).toHaveLength(1);
     expect(out.tailDropped).toBe(true);
     expect(out.starts).toHaveLength(3);
-    // Shorter than the whole take (0.5 s at 22.05 kHz after compacting): the refrain is cut off.
-    expect(out.audio.byteLength).toBeLessThan(44 + 22050);
+    // Cut 120 ms into the pause before the refrain: 3 lines of 0.6 s, one 0.8 s pause.
+    const rate = 24000;
+    const want = 3 * Math.round(rate * 0.6) + Math.round(rate * 0.8) + Math.round(rate * 0.12);
+    expect((out.audio.byteLength - 44) / 2).toBe(want);
+  });
+
+  it("fails rather than cut at an estimate when no pause before the refrain can be measured", async () => {
+    atomicDelayMs = 1200;
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: withRefrain, pauseMs: 1500, atomic: true, tail: 1, timeoutMs: 2000,
+    });
+    atomicDelayMs = 0;
+    expect(out.ok).toBe(false);
+    expect(seen).toHaveLength(1);
+    if (!out.ok) expect(out.sentChars).toBe(withRefrain.join(" [pause] ").length);
   });
 
   it("leaves voices without the flag line by line", async () => {
