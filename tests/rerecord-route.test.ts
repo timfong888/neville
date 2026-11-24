@@ -90,6 +90,15 @@ describe("POST /api/rerecord", () => {
     expect(res.headers.get("Content-Type")).toMatch(/^audio\//);
     expect(paths()).toContain("/chat/completions");
     const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
+    // The default voice is atomic: one request, a pause marker between lines.
+    expect(calls.filter((c) => c.path.startsWith("/audio/speech"))).toHaveLength(1);
+    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. [pause] You are calm and steady.");
+  });
+
+  it("records a voice without the atomic flag as plain text", async () => {
+    const res = await POST(req({ ...script, voiceId: "heygen-nadine" }));
+    expect(res.status).toBe(200);
+    const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
     expect((speech?.body as { input: string }).input).toBe("Take a slow breath. You are calm and steady.");
   });
 

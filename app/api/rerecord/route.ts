@@ -6,6 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
+import { pauseFor, resolvePace, resolveTone } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -84,6 +85,12 @@ export async function POST(req: Request) {
     instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
     compact: true,
     timeoutMs: 42_000,
+    // Voices flagged atomic record the edited lines in one request with a
+    // pause after each, set to the default pace's length, as /api/manifest
+    // does (#76). Other voices keep the one-request text above.
+    ...(voice.atomic === true
+      ? { lines, pauseMs: pauseFor(resolvePace(undefined), resolveTone(undefined)), atomic: true }
+      : {}),
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
@@ -97,8 +104,9 @@ export async function POST(req: Request) {
     kind: "speech",
     model: voice.model,
     voiceId: voice.id,
-    chars: text.length,
-    estUsd: await estimateSpeech(voice.model, text.length),
+    // A discarded first take (too long for one response) was billed as well.
+    chars: text.length + (speech.discardedChars ?? 0),
+    estUsd: await estimateSpeech(voice.model, text.length + (speech.discardedChars ?? 0)),
   });
   return new NextResponse(speech.audio, {
     headers: {
