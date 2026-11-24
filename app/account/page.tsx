@@ -68,7 +68,6 @@ export default function AccountPage() {
   };
 
   const signOut = async () => {
-    clearDraft();
     await authClient.signOut().catch(() => undefined);
     await fetchAccount(true);
     window.location.assign("/account");
@@ -82,6 +81,7 @@ export default function AccountPage() {
       setMsg("Your account could not be deleted just now. Nothing was removed.");
       return;
     }
+    clearDraft();
     await authClient.signOut().catch(() => undefined);
     await fetchAccount(true);
     window.location.assign("/account?deleted=1");
