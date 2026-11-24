@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanLines } from "@/lib/prompt";
-import { neutralScript, toYouStatement } from "@/lib/script";
+import { neutralScript, scriptLines, toYouStatement } from "@/lib/script";
 
 describe("neutralScript (the fallback when the text model did not write the script)", () => {
   it("takes no wish at all, so it cannot repeat the visitor's words", () => {
@@ -27,5 +27,20 @@ describe("toYouStatement", () => {
   it("turns a wish into a present-tense you statement", () => {
     expect(toYouStatement("I want to be calm and confident when I speak")).toBe("you are calm and confident when you speak");
     expect(toYouStatement("")).toBe("you are living the life you chose");
+  });
+});
+
+describe("scriptLines (the server's script sent with a failed recording)", () => {
+  it("accepts a short list of short lines", () => {
+    const l = ["Breathe in.", "You own the house by the sea.", "And so it is."];
+    expect(scriptLines(l)).toEqual(l);
+  });
+  it("rejects anything else", () => {
+    expect(scriptLines(undefined)).toBeNull();
+    expect(scriptLines("You are calm.")).toBeNull();
+    expect(scriptLines(["a", "b"])).toBeNull();
+    expect(scriptLines(["ok line", 3, "And so it is."])).toBeNull();
+    expect(scriptLines(["ok line", "x".repeat(201), "And so it is."])).toBeNull();
+    expect(scriptLines(Array.from({ length: 21 }, () => "Line."))).toBeNull();
   });
 });

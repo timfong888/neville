@@ -9,6 +9,9 @@ let server: Server;
 const seen: Array<Record<string, unknown>> = [];
 let refuseSpeed = false;
 let failOn: string | null = null;
+/** How many more times a request for `failOn` gets a 500 before it succeeds. */
+let failTimes = Infinity;
+let failStatus = 500;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -17,8 +20,9 @@ beforeAll(async () => {
     req.on("end", () => {
       const body = JSON.parse(raw);
       seen.push(body);
-      if (failOn && body.input === failOn) {
-        res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "boom" } }));
+      if (failOn && body.input === failOn && failTimes > 0) {
+        failTimes--;
+        res.writeHead(failStatus, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "boom" } }));
         return;
       }
       if (refuseSpeed && "speed" in body) {
@@ -93,7 +97,7 @@ describe("synthesize with pauses", () => {
     expect(out.ok && Buffer.from(out.audio).toString()).toBe("ID3");
   });
 
-  it("stops starting new lines once one fails", async () => {
+  it("gives up after a line fails three times", async () => {
     failOn = "Breathe in.";
     const synthesize = await load();
     const many = ["Breathe in.", ...Array.from({ length: 8 }, (_, i) => `Line ${i}.`)];
@@ -103,8 +107,39 @@ describe("synthesize with pauses", () => {
     });
     failOn = null;
     expect(out.ok).toBe(false);
-    // The first three start together; nothing after the failure is started.
-    expect(seen.length).toBeLessThanOrEqual(3);
+    // The failing line is tried 3 times (2 retries) before the recording gives
+    // up. Other lines go on while it is retried, since the retry may succeed;
+    // no line is asked for twice except the failing one.
+    expect(seen.filter((b) => b.input === "Breathe in.")).toHaveLength(3);
+    expect(seen.length).toBeLessThanOrEqual(many.length + 2);
+  });
+
+  it("retries a line once the provider has a brief error, and records the whole script", async () => {
+    failOn = "You are calm.";
+    failTimes = 1;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: lines.join("\n\n"), lines, pauseMs: 500,
+    });
+    failOn = null;
+    failTimes = Infinity;
+    expect(out.ok).toBe(true);
+    expect(seen.filter((b) => b.input === "You are calm.")).toHaveLength(2);
+  });
+
+  it("does not retry a refusal (4xx)", async () => {
+    failOn = "You are calm.";
+    failStatus = 403;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: lines.join("\n\n"), lines, pauseMs: 500,
+    });
+    failOn = null;
+    failStatus = 500;
+    expect(out.ok).toBe(false);
+    expect(seen.filter((b) => b.input === "You are calm.")).toHaveLength(1);
   });
 
   it("sends no speed when none is asked for", async () => {
