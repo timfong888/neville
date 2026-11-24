@@ -9,12 +9,18 @@
     "export:ios": "expo export --platform ios"
   },
   "dependencies": {
+    "@better-auth/expo": "^1.7.27",
     "@expo/metro-runtime": "~58.0.17",
+    "better-auth": "^1.7.27",
     "expo": "~58.0.26",
+    "expo-apple-authentication": "~58.0.3",
     "expo-constants": "~58.0.16",
     "expo-linking": "~58.0.17",
+    "expo-network": "~58.0.5",
     "expo-router": "~58.0.32",
+    "expo-secure-store": "~58.0.3",
     "expo-status-bar": "~58.0.5",
+    "expo-web-browser": "~58.1.0",
     "react": "19.3.0",
     "react-dom": "^19.3.0",
     "react-native": "0.88.1",

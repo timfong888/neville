@@ -44,6 +44,8 @@ export type ApiOptions = {
   baseUrl: string;
   /** Extra headers for every request: the session cookie, and the origin on a phone. May be async. */
   headers?: () => Record<string, string> | Promise<Record<string, string>>;
+  /** `"omit"` on a phone: its cookie jar must not add a second Cookie header to the one we send. */
+  credentials?: RequestCredentials;
   /** Defaults to the global `fetch`. Tests inject their own. */
   fetch?: typeof fetch;
 };
@@ -83,7 +85,7 @@ export function createApi(opts: ApiOptions) {
 
   async function call(path: string, init: RequestInit = {}): Promise<Response> {
     const extra = (await opts.headers?.()) ?? {};
-    const res = await doFetch(`${base}${path}`, { cache: "no-store", ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
+    const res = await doFetch(`${base}${path}`, { cache: "no-store", ...(opts.credentials ? { credentials: opts.credentials } : {}), ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
     if (res.ok) return res;
     const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown } | null;
     const lines = Array.isArray(j?.lines) && j.lines.every((l) => typeof l === "string") ? (j.lines as string[]) : undefined;
