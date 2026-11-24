@@ -31,3 +31,25 @@ export function appleUserFromFullName(
   if (!firstName && !lastName) return undefined;
   return { name: { ...(firstName ? { firstName } : {}), ...(lastName ? { lastName } : {}) } };
 }
+
+/** Shortest raw nonce the server accepts. The app sends 32 random bytes as 64 hex characters. */
+export const MIN_NONCE_LENGTH = 32;
+
+/**
+ * Better Auth checks an Apple ID token's nonce only when the request carries one, so a request that
+ * leaves it out would skip the replay check. This says why an Apple ID-token sign-in must be refused,
+ * or null when it is fine (or is not an Apple ID-token sign-in at all).
+ */
+export function appleNonceProblem(path: string | undefined, body: unknown): string | null {
+  if (path !== "/sign-in/social") return null;
+  const b = body as { provider?: unknown; idToken?: { nonce?: unknown } | null } | null | undefined;
+  if (b?.provider !== "apple" || !b.idToken) return null;
+  const nonce = b.idToken.nonce;
+  return typeof nonce === "string" && nonce.length >= MIN_NONCE_LENGTH ? null : "Sign in with Apple needs a nonce.";
+}
+
+/** Audiences accepted for an Apple ID token: the web Services ID, plus the app's bundle id when set. */
+export function appleAudience(clientId: string, bundleId: string | undefined): string[] {
+  const app = bundleId?.trim();
+  return app ? [clientId, app] : [clientId];
+}
