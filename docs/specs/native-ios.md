@@ -1,9 +1,8 @@
 # Native iOS app
 
-Status: proposal, revised 2026-11-24 after Tim's answers in #71. Nothing here
-is built.
+Status: approved by Tim on 2026-11-24 (#71). Phase 0 is in progress.
 
-## Decision proposed
+## Decision
 
 One UI codebase. One repo, one API.
 
@@ -99,7 +98,23 @@ domain serves the Expo web build and the old DOM screens are deleted.
 In-app purchase on iOS and Stripe on web, App Store submission (#64), share
 page (#28) with links that open the app, Android.
 
+## Tracking
+
+| Phase | Issue |
+| --- | --- |
+| 0 Prerequisites | #89 (parts: #83, #84, #85, #86) |
+| 1 First TestFlight build | #91 |
+| 2 Parity and cutover | #92 |
+| 3 Store | #93 |
+
 ## Decided by Tim (2026-11-24)
+
+- One UI codebase is the end state. "My hunch is that having one codebase is
+  best."
+- The live website is cut over when the new build reaches parity (end of
+  Phase 2), not earlier. "Accept both"
+- `/voices`, `/architecture`, `/admin/usage` and `/mode-samples` stay in Next
+  and are not ported. "Accept both"
 
 - `native/` lives in this repo, reusing bundle `pckg.neville` and the EAS
   project.
@@ -125,8 +140,3 @@ page (#28) with links that open the app, Android.
   keyboard focus and first load size. Acceptable while the site has no users.
 - DOM-only controls (4 selects, 3 range sliders) need replacements that work
   on both platforms.
-
-## Open questions
-
-See #71: when to cut the live site over (default: at parity), and whether the
-internal pages stay in Next (default: yes).
