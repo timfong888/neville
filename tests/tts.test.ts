@@ -200,7 +200,7 @@ describe("atomic voices (#76)", () => {
     // Both takes were billed: the thrown-away one is reported for the ledger.
     if (!out.ok) return;
     expect(out.requests).toBe(lines.length + 1);
-    expect(out.discardedChars).toBe(lines.join(" [pause] ").length);
+    expect(out.sentChars).toBe(lines.join(" [pause] ").length + lines.join("").length);
   });
 
   it("leaves voices without the flag line by line", async () => {

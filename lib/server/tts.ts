@@ -96,13 +96,19 @@ export type Speech =
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
       /**
-       * Characters sent in a take that was billed and then thrown away: the
-       * one-request recording that came back too long before the line by line
-       * fallback (#76). The cost ledger adds them to what it prices.
+       * Characters sent in every request behind this recording, as billed:
+       * the inline pause tags of a one-request take, and a too-long take thrown
+       * away before the line by line fallback (#76). The cost ledger prices this.
        */
-      discardedChars?: number;
+      sentChars: number;
     }
-  | { ok: false; status: number; message: string };
+  | {
+      ok: false;
+      status: number;
+      message: string;
+      /** Set when a take known to be billed was thrown away before the failure. */
+      sentChars?: number;
+    };
 
 /** Waits before each retry of a line after a provider error; one entry per retry. */
 const RETRY_DELAYS_MS = [400, 1200];
@@ -169,9 +175,10 @@ export async function synthesize(opts: {
     if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
       const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
       // The first take was recorded and billed in full, so the ledger counts it too.
+      const discarded = atomicText(opts.lines).length;
       return again.ok
-        ? { ...again, requests: again.requests + 1, discardedChars: atomicText(opts.lines).length }
-        : again;
+        ? { ...again, requests: again.requests + 1, sentChars: again.sentChars + discarded }
+        : { ...again, sentChars: discarded + (again.sentChars ?? 0) };
     }
     return one;
   }
@@ -184,6 +191,7 @@ export async function synthesize(opts: {
   // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
   const limit = Object.entries(PER_REQUEST_LIMIT).find(([prefix]) => model.startsWith(prefix))?.[1];
   const parts = stitch ? opts.lines! : limit && text.length > limit ? splitText(text, limit) : [text];
+  const sentChars = parts.reduce((n, p) => n + p.length, 0);
   const pcm = PCM_ONLY.test(model) || parts.length > 1;
   // 1 is the model's own pace, so it is not sent. Brisk asks for a little faster.
   const wantSpeed = opts.speed && opts.speed >= 0.5 && opts.speed <= 1.2 && opts.speed !== 1 ? opts.speed : undefined;
@@ -269,7 +277,7 @@ export async function synthesize(opts: {
   // MP3 voices (Kokoro, Fish) keep the provider's own level: there is no MP3
   // decoder here. Normalising them is #40. The default voice and the voice mix
   // are PCM voices, so they all arrive at the same loudness.
-  if (!pcm) return { ok: true, audio: chunks[0], mime: "audio/mpeg", requests: parts.length, ids, speedApplied };
+  if (!pcm) return { ok: true, audio: chunks[0], mime: "audio/mpeg", requests: parts.length, sentChars, ids, speedApplied };
 
   let rate = pcmRate(model, done[0].contentType);
   if (opts.compact && rate >= 44100) {
@@ -279,7 +287,7 @@ export async function synthesize(opts: {
   if (!stitch) {
     // Every PCM voice (Gemini, HeyGen) is brought to the same speech loudness, so tracks match in a playlist.
     const pcmAll = normalizePcm16(chunks.length === 1 ? chunks[0] : join(chunks), rate);
-    return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, ids, speedApplied };
+    return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, sentChars, ids, speedApplied };
   }
   const sizes = chunks.map((c) => c.byteLength);
   const pauseMs = fitPause({
@@ -299,6 +307,7 @@ export async function synthesize(opts: {
     audio,
     mime: "audio/wav",
     requests: parts.length,
+    sentChars,
     ids,
     speedApplied,
     starts: startShares(sizes, gap),

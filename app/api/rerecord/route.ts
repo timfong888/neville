@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
-    await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: text.length, estUsd: null, ok: false });
+    await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
@@ -104,9 +104,9 @@ export async function POST(req: Request) {
     kind: "speech",
     model: voice.model,
     voiceId: voice.id,
-    // A discarded first take (too long for one response) was billed as well.
-    chars: text.length + (speech.discardedChars ?? 0),
-    estUsd: await estimateSpeech(voice.model, text.length + (speech.discardedChars ?? 0)),
+    // What was sent, as billed: pause tags and any discarded first take included.
+    chars: speech.sentChars,
+    estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
   return new NextResponse(speech.audio, {
     headers: {

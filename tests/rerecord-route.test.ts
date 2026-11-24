@@ -135,7 +135,8 @@ describe("POST /api/rerecord", () => {
     const rows = await L.ledger().recent(10);
     expect(rows.map((r) => r.kind)).toEqual(["speech", "vet"]);
     expect(rows[1]).toMatchObject({ route: "rerecord", model: "google/gemini-2.5-flash-lite", estUsd: 0.00002 });
-    expect(rows[0].chars).toBe("Take a slow breath. You are calm and steady.".length);
+    // The default voice is atomic: the ledger counts the pause tags sent with the lines.
+    expect(rows[0].chars).toBe("Take a slow breath. [pause] You are calm and steady.".length);
   });
 
   it("records a rejected vet (it was paid for) but no speech", async () => {
