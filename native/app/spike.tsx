@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { type AudioPlayer, type AudioPlaylist, createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
-import { makeFiles } from "../src/spike";
+import { type Mode, makeFiles } from "../src/spike";
 
 // Audio spike (#85). Three ways to loop a short refrain, with the screen locked.
 // What to listen for: a gap or click at each repeat, lock-screen controls, and
 // whether it keeps going for minutes with the phone locked.
-type Mode = "loop" | "playlist" | "long";
-const REPEATS = 80; // 80 x 1.5 s = 2 minutes in the long file
+const REPEATS = 80; // long file: 80 x 1.5 s = 2 minutes, or about 4.4 minutes with the bell (each gap grows to the 1.8 s bell)
 
 export default function Spike() {
   const [bellOn, setBellOn] = useState(false);
@@ -42,16 +41,16 @@ export default function Spike() {
   const start = (m: Mode) => {
     stop();
     try {
-      const f = makeFiles(REPEATS, bellOn);
+      const f = makeFiles(m, REPEATS, bellOn);
       const meta = { title: `Spike: ${m}${bellOn ? " + bell" : ""}`, artist: "Neville" };
       if (m === "playlist") {
         // Native gapless sequencing: refrain, (bell), refrain, ... looping the whole list.
-        const l = createAudioPlaylist({ sources: bellOn ? [f.refrainOnly, f.bell] : [f.single], loop: "all", updateInterval: 250 });
+        const l = createAudioPlaylist({ sources: f.sources, loop: "all", updateInterval: 250 });
         l.setActiveForLockScreen(true, meta);
         l.play();
         list.current = l;
       } else {
-        const p = createAudioPlayer(m === "loop" ? f.single : f.long, { updateInterval: 250 });
+        const p = createAudioPlayer(f.sources[0], { updateInterval: 250 });
         p.loop = m === "loop";
         p.setActiveForLockScreen(true, meta, { showSeekBackward: false, showSeekForward: false });
         p.addListener("playbackStatusUpdate", (s) => {

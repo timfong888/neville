@@ -36,8 +36,11 @@ export class ApiError extends Error {
   }
 }
 
-/** A file to upload. In React Native a file is `{ uri, name, type }`; on the web it is a Blob. */
-export type FileLike = Blob | { uri: string; name: string; type: string };
+/**
+ * A file to upload: a Blob on the web; on a phone, a Blob or an object with `bytes()` (Expo's `File`
+ * from expo-file-system). Expo SDK 58's fetch rejects React Native's `{ uri, name, type }` shape.
+ */
+export type FileLike = Blob | { bytes(): Promise<Uint8Array> | Uint8Array };
 
 export type ApiOptions = {
   /** For example `https://getneville.vercel.app`. No trailing slash needed. */
@@ -142,7 +145,7 @@ export function createApi(opts: ApiOptions) {
       /** `audio` undefined keeps the stored recording; null removes it. */
       async putManifestation(m: Manifestation, audio?: FileLike | null): Promise<void> {
         const form = new FormData();
-        // `append`, not `set`: React Native's FormData has no `set`. It takes { uri, name, type } where the web takes a Blob.
+        // `append`, not `set`: React Native's FormData has no `set`.
         form.append("meta", JSON.stringify(m));
         if (audio) (form as { append(k: string, v: unknown, name?: string): void }).append("audio", audio, "audio");
         if (audio === null) form.append("removeAudio", "1");

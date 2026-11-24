@@ -25,18 +25,20 @@ function save(name: string, pcm: Int16Array): string {
   return f.uri;
 }
 
-/** The three ways to loop, as files on disk. */
-export function makeFiles(repeats: number, withBell: boolean) {
+export type Mode = "loop" | "playlist" | "long";
+
+/** The files one variant needs, and only those (the long file with the bell is about 12 MB). */
+export function makeFiles(mode: Mode, repeats: number, withBell: boolean) {
   const r = refrain();
   const b = bell(RATE);
-  return {
-    // One refrain. Looping is left to the player.
-    // With the bell on, the bell follows the refrain inside the file, so the loop flag repeats both.
-    single: save(withBell ? "spike-refrain-bell.wav" : "spike-refrain.wav", withBell ? renderRefrain({ refrain: r, rate: RATE, repeats: 2, gapMs: 0, bell: b }).slice(0, r.length + b.length) : r),
-    // The refrain alone, and the bell alone, for the playlist variant.
-    refrainOnly: save("spike-refrain.wav", r),
-    bell: save("spike-bell.wav", b),
-    // Every repeat (and the bell, if asked) rendered into one file.
-    long: save(withBell ? "spike-long-bell.wav" : "spike-long.wav", renderRefrain({ refrain: r, rate: RATE, repeats, gapMs: 0, bell: withBell ? b : undefined })),
-  };
+  if (mode === "long") {
+    return { sources: [save(withBell ? "spike-long-bell.wav" : "spike-long.wav", renderRefrain({ refrain: r, rate: RATE, repeats, gapMs: 0, bell: withBell ? b : undefined }))] };
+  }
+  if (mode === "playlist") {
+    // The playlist sequences the bell as its own track.
+    return { sources: withBell ? [save("spike-refrain.wav", r), save("spike-bell.wav", b)] : [save("spike-refrain.wav", r)] };
+  }
+  // Loop flag: with the bell on, the bell follows the refrain inside the file, so the loop repeats both.
+  const one = withBell ? renderRefrain({ refrain: r, rate: RATE, repeats: 2, gapMs: 0, bell: b }).slice(0, r.length + b.length) : r;
+  return { sources: [save(withBell ? "spike-refrain-bell.wav" : "spike-refrain.wav", one)] };
 }

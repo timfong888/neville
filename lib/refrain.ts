@@ -80,8 +80,3 @@ export function renderRefrain(p: RefrainPlan): Int16Array {
   }
   return out;
 }
-
-/** Seconds of audio the plan makes. */
-export function refrainSeconds(p: Pick<RefrainPlan, "refrain" | "rate" | "repeats" | "gapMs" | "bell">): number {
-  return renderRefrain(p).length / p.rate;
-}
