@@ -110,8 +110,8 @@ export type Speech =
       message: string;
       /**
        * As on success: characters in every request sent before the failure,
-       * retries included, as an upper bound. Unset only when the failure came
-       * before any request was sent.
+       * retries included, as an upper bound; 0 when none was sent. synthesize
+       * sets it on every failure; it is optional so other failures fit the type.
        */
       sentChars?: number;
     };
