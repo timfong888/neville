@@ -156,6 +156,12 @@ describe("refrain (#77)", () => {
       expect(cleanLines(script, 700)?.join(" ")).not.toMatch(/refrain/i);
     }
   });
+  it("takes a refrain written on the line after its label, and keeps it out of the script", () => {
+    const { script, refrain } = splitRefrain([...body, "It is done.", "Refrain:", "The house is yours."].join("\n"));
+    expect(refrain).toBe("The house is yours.");
+    expect(script).not.toMatch(/house is yours|refrain/i);
+    expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
+  });
   it("refuses a refrain that wants, waits or rambles", () => {
     expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();

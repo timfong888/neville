@@ -52,3 +52,14 @@ export async function composeSession(opts: {
     repeats: s.repeats,
   };
 }
+
+/**
+ * The script alone, cut off before the refrain recorded after it, for when the
+ * loop cannot be built. Null when the audio cannot be cut (not 16-bit WAV).
+ */
+export async function scriptOnly(audio: Blob, refrainStart: number): Promise<string | null> {
+  const wav = parseWav(await audio.arrayBuffer());
+  if (!wav || !(refrainStart > 0 && refrainStart < 1)) return null;
+  const end = Math.round(refrainStart * wav.pcm.length);
+  return URL.createObjectURL(new Blob([toWav(wav.pcm.subarray(0, end), wav.rate)], { type: "audio/wav" }));
+}

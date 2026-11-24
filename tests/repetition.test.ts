@@ -114,3 +114,19 @@ describe("WAV helpers", () => {
     expect(resample(new Int16Array(24000), 24000, 22050).length).toBe(22050);
   });
 });
+
+describe("scriptOnly (when the loop cannot be built)", () => {
+  it("cuts the recording before the refrain", async () => {
+    const { scriptOnly } = await import("@/lib/repetitionClient");
+    const r = recording();
+    const url = await scriptOnly(new Blob([toWav(r.pcm, rate)]), r.starts[3]);
+    expect(url).not.toBeNull();
+    const back = parseWav(await (await fetch(url!)).arrayBuffer())!;
+    expect(back.pcm.length).toBe(sec(5));
+    expect([...back.pcm].includes(400)).toBe(false);
+  });
+  it("gives null for audio it cannot cut", async () => {
+    const { scriptOnly } = await import("@/lib/repetitionClient");
+    expect(await scriptOnly(new Blob(["ID3 not a wav"]), 0.8)).toBeNull();
+  });
+});

@@ -10,7 +10,7 @@ import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { REPEAT_MINUTES } from "@/lib/repetition";
-import { composeSession } from "@/lib/repetitionClient";
+import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
 import { lineStarts } from "@/lib/audio";
 import { CLOSING } from "@/lib/prompt";
@@ -336,8 +336,9 @@ export default function DemoPage() {
     setIdx(-1);
     let next: Made | null = null;
     let written: string[] | null = null;
-    // Repetition was asked for but could not be built (a voice that cannot loop).
-    let noLoop = false;
+    // Repetition was asked for but could not be built: "voice" when the voice
+    // cannot loop, "build" when this recording could not be cut into a loop.
+    let noLoop: "" | "voice" | "build" = "";
     let why = "";
     // Mix voices on: each new recording takes the next voice in the set.
     const mixing = readMixOn();
@@ -375,14 +376,18 @@ export default function DemoPage() {
           refrain && allStarts
             ? await composeSession({ audio, scriptLines: made, starts: allStarts, refrain, minutes: repeatMin, bellOn }).catch(() => null)
             : null;
-        noLoop = repeatMin > 0 && !session;
+        noLoop = repeatMin > 0 && !session ? (refrain ? "build" : "voice") : "";
+        // The loop could not be built from a recording that has the refrain at
+        // its end: play and keep the script alone, without that last line.
+        const plain =
+          !session && refrain && allStarts ? await scriptOnly(audio, allStarts[made.length]).catch(() => null) : null;
         next = session
           ? { ...base, lines: session.lines, url: session.url, starts: session.starts, saveUrl: session.saveUrl, saveLines: made }
           : {
               ...base,
-              lines: refrain ? [...made, refrain] : made,
-              url: URL.createObjectURL(audio),
-              starts: allStarts ?? readStarts(res.headers.get("X-Line-Starts"), made.length),
+              lines: made,
+              url: plain ?? URL.createObjectURL(audio),
+              starts: plain && allStarts ? allStarts.slice(0, made.length).map((x) => x / allStarts[made.length]) : readStarts(res.headers.get("X-Line-Starts"), made.length),
             };
       } else {
         const j = (await res.json().catch(() => null)) as { error?: string; lines?: unknown } | null;
@@ -411,7 +416,11 @@ export default function DemoPage() {
           : `${why} Here is a general version in your device's own voice.`
         : [
             next.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
-            noLoop ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.` : "",
+            noLoop === "voice"
+              ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
+              : noLoop === "build"
+                ? "The repetition could not be built this time, so this plays the script alone."
+                : "",
           ]
             .filter(Boolean)
             .join(" "),
