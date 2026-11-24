@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { appleUserFromFullName, makeNoncePair, nonceFromBytes } from "@/lib/appleSignIn";
+import { appleAudience, appleNonceProblem, appleUserFromFullName, makeNoncePair, nonceFromBytes } from "@/lib/appleSignIn";
 
 const sha = async (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -33,5 +33,39 @@ describe("apple name", () => {
   it("sends nothing on later sign-ins, when Apple returns no name", () => {
     expect(appleUserFromFullName(null)).toBeUndefined();
     expect(appleUserFromFullName({ givenName: "", familyName: "  " })).toBeUndefined();
+  });
+});
+
+describe("appleNonceProblem", () => {
+  const nonce = "a".repeat(64);
+  const apple = (idToken: unknown) => ({ provider: "apple", idToken });
+  it("refuses an Apple ID-token sign-in with no nonce, an empty one, a short one or a non-string", () => {
+    for (const idToken of [{ token: "t" }, { token: "t", nonce: "" }, { token: "t", nonce: "abc" }, { token: "t", nonce: 12 }]) {
+      expect(appleNonceProblem("/sign-in/social", apple(idToken))).not.toBeNull();
+    }
+  });
+  it("accepts one with a full-length nonce", () => {
+    expect(appleNonceProblem("/sign-in/social", apple({ token: "t", nonce }))).toBeNull();
+  });
+  it("leaves the web redirect flow, other providers and other paths alone", () => {
+    expect(appleNonceProblem("/sign-in/social", { provider: "apple" })).toBeNull();
+    expect(appleNonceProblem("/sign-in/social", { provider: "google", idToken: { token: "t" } })).toBeNull();
+    expect(appleNonceProblem("/sign-out", apple({ token: "t" }))).toBeNull();
+    expect(appleNonceProblem(undefined, null)).toBeNull();
+  });
+  it("accepts the nonce the app actually makes", async () => {
+    const { raw } = await makeNoncePair(new Uint8Array(32).fill(1), sha);
+    expect(appleNonceProblem("/sign-in/social", apple({ token: "t", nonce: raw }))).toBeNull();
+  });
+});
+
+describe("appleAudience", () => {
+  it("is the Services ID alone when no bundle id is set, so the app's token is refused", () => {
+    expect(appleAudience("com.example.web", undefined)).toEqual(["com.example.web"]);
+    expect(appleAudience("com.example.web", "")).toEqual(["com.example.web"]);
+    expect(appleAudience("com.example.web", "  \n")).toEqual(["com.example.web"]);
+  });
+  it("adds the trimmed bundle id when set, keeping the Services ID", () => {
+    expect(appleAudience("com.example.web", "pckg.neville\n")).toEqual(["com.example.web", "pckg.neville"]);
   });
 });

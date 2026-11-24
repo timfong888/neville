@@ -5,7 +5,9 @@ import "server-only";
 import { del, get, put } from "@vercel/blob";
 import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
+import { appleAudience, appleNonceProblem } from "@/lib/appleSignIn";
 import { tryAppleClientSecret } from "@/lib/server/appleSecret";
 import { getPool, withTx } from "@/lib/server/db";
 import { sniffAudio } from "@/lib/server/audioSniff";
@@ -104,15 +106,14 @@ function appleProvider() {
   const clientSecret = appleSecret();
   if (!clientSecret) return {};
   const clientId = appleVar("APPLE_CLIENT_ID");
-  const bundleId = process.env.APPLE_APP_BUNDLE_ID?.trim();
+  const audience = appleAudience(clientId, process.env.APPLE_APP_BUNDLE_ID);
   return {
     apple: {
       clientId,
       clientSecret,
-      // For the future iOS app: accept ID tokens issued to its bundle id as well
-      // as to the web Services ID. Better Auth's appBundleIdentifier would
-      // replace the Services ID as the audience, so list both explicitly.
-      ...(bundleId ? { audience: [clientId, bundleId] } : {}),
+      // The web Services ID, plus the iOS app's bundle id when APPLE_APP_BUNDLE_ID is set. Better Auth's
+      // appBundleIdentifier would replace the Services ID as the audience, so list both explicitly.
+      audience,
     },
   };
 }
@@ -138,6 +139,13 @@ function makeAuth() {
     trustedOrigins: [PRIMARY_ORIGIN, ...LEGACY_ORIGINS, ...NATIVE_TRUSTED, ...("apple" in apple ? ["https://appleid.apple.com"] : [])],
     // expo() lets the native app sign in and carry its session; nextCookies() keeps the website's cookies.
     plugins: [expo(), nextCookies()],
+    // Better Auth skips the nonce check when a request has no nonce; the app always sends one, so require it.
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        const problem = appleNonceProblem(ctx.path, ctx.body);
+        if (problem) throw new APIError("BAD_REQUEST", { message: problem });
+      }),
+    },
   });
 }
 
