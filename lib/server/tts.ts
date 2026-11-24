@@ -96,11 +96,11 @@ export type Speech =
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
       /**
-       * Characters in every take that came back with audio, which is what is
-       * billed: the inline pause tags of a one-request take, and a too-long
-       * take thrown away before the line by line fallback (#76). A request
-       * retried after a provider error (5xx) or a dropped connection returned
-       * no audio and is not counted. The cost ledger prices this.
+       * Characters in every request sent for this recording: the inline pause
+       * tags of a one-request take, a too-long take thrown away before the line
+       * by line fallback (#76), and requests retried after a provider error or
+       * a dropped connection. A failed request is probably not billed, so this
+       * is an upper bound: the cost ledger prices it, and errs high, not low.
        */
       sentChars: number;
     }
@@ -193,7 +193,8 @@ export async function synthesize(opts: {
   // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
   const limit = Object.entries(PER_REQUEST_LIMIT).find(([prefix]) => model.startsWith(prefix))?.[1];
   const parts = stitch ? opts.lines! : limit && text.length > limit ? splitText(text, limit) : [text];
-  const sentChars = parts.reduce((n, p) => n + p.length, 0);
+  // Every request sent, retries included (see Speech.sentChars).
+  let sentChars = 0;
   const pcm = PCM_ONLY.test(model) || parts.length > 1;
   // 1 is the model's own pace, so it is not sent. Brisk asks for a little faster.
   const wantSpeed = opts.speed && opts.speed >= 0.5 && opts.speed <= 1.2 && opts.speed !== 1 ? opts.speed : undefined;
@@ -209,6 +210,7 @@ export async function synthesize(opts: {
       for (let attempt = 0; ; attempt++) {
         const left = deadline - Date.now();
         if (left < 1000) return { ok: false, status: 504, message: "The voice service did not answer in time." };
+        sentChars += part.length;
         try {
           res = await fetch(`${OPENROUTER}/audio/speech`, {
             method: "POST",

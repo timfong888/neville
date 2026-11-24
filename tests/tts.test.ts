@@ -184,6 +184,8 @@ describe("atomic voices (#76)", () => {
     failTimes = Infinity;
     expect(out.ok).toBe(true);
     expect(seen).toHaveLength(2);
+    // Both requests are counted for the ledger, the failed one included.
+    if (out.ok) expect(out.sentChars).toBe(2 * lines.join(" [pause] ").length);
   });
 
   it("records line by line when one piece is too long and its pauses cannot be found", async () => {
