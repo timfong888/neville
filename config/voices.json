@@ -1,5 +1,5 @@
 {
-  "default": "heygen-nadine",
+  "default": "gemini-sulafat",
   "voices": [
     {
       "id": "heygen-nadine",
@@ -142,7 +142,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Soft female voice"
+      "desc": "Soft female voice",
+      "atomic": true
     },
     {
       "id": "gemini-vindemiatrix",
@@ -155,7 +156,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Gentle female voice"
+      "desc": "Gentle female voice",
+      "atomic": true
     },
     {
       "id": "gemini-sulafat",
@@ -168,7 +170,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Warm female voice"
+      "desc": "Warm female voice",
+      "atomic": true
     },
     {
       "id": "gemini-enceladus",
@@ -181,7 +184,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Breathy male voice"
+      "desc": "Breathy male voice",
+      "atomic": true
     },
     {
       "id": "gemini-algieba",
@@ -194,7 +198,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Smooth male voice"
+      "desc": "Smooth male voice",
+      "atomic": true
     },
     {
       "id": "gemini-kore",
@@ -207,7 +212,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Firm female voice"
+      "desc": "Firm female voice",
+      "atomic": true
     },
     {
       "id": "gemini-charon",
@@ -220,7 +226,8 @@
       "enabled": true,
       "tier": "mid",
       "generate": true,
-      "desc": "Low, steady male voice"
+      "desc": "Low, steady male voice",
+      "atomic": true
     },
     {
       "id": "kokoro-af-heart",
@@ -282,7 +289,7 @@
       "enabled": true,
       "tier": "free",
       "generate": true,
-      "desc": "The model\u2019s own voice, free to record"
+      "desc": "The model’s own voice, free to record"
     },
     {
       "id": "fish-s2-1-pro",

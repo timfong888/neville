@@ -87,6 +87,7 @@ export async function POST(req: Request) {
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     timeoutMs: 42_000,
+    atomic: voice.atomic === true,
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests

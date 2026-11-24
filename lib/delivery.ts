@@ -202,3 +202,52 @@ export function startShares(chunkBytes: number[], pauseBytes: number): number[] 
     return Math.round(start * 10000) / 10000;
   });
 }
+
+/** Silent runs in 16-bit mono PCM as [first, end) sample indexes, each at least `minMs` long. */
+export function silentRuns(pcm: Int16Array, rate: number, minMs = 250, threshold = 500): Array<[number, number]> {
+  const win = Math.max(1, Math.floor(rate * 0.02));
+  const out: Array<[number, number]> = [];
+  let start = -1;
+  for (let i = 0; i < pcm.length; i += win) {
+    let peak = 0;
+    const end = Math.min(pcm.length, i + win);
+    for (let j = i; j < end; j++) {
+      const a = Math.abs(pcm[j]);
+      if (a > peak) peak = a;
+    }
+    if (peak < threshold) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if (((i - start) * 1000) / rate >= minMs) out.push([start, i]);
+      start = -1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Cuts one recording of `lines` lines into one piece per line, at the longest
+ * silences: a voice told to pause between lines leaves its longest gaps there.
+ * Each cut keeps a little of the silence on both sides so no word is clipped.
+ * Null when there are not enough silences to cut at.
+ */
+export function splitAtPauses(pcm: ArrayBuffer, rate: number, lines: number): ArrayBuffer[] | null {
+  const gaps = lines - 1;
+  if (gaps <= 0) return [pcm];
+  const samples = new Int16Array(pcm, 0, Math.floor(pcm.byteLength / 2));
+  const runs = silentRuns(samples, rate)
+    // Ignore leading and trailing silence: they are not between lines.
+    .filter(([a, b]) => a > 0 && b < samples.length);
+  if (runs.length < gaps) return null;
+  const cuts = [...runs].sort((x, y) => y[1] - y[0] - (x[1] - x[0])).slice(0, gaps).sort((x, y) => x[0] - y[0]);
+  const tail = Math.floor(rate * 0.12);
+  const lead = Math.floor(rate * 0.06);
+  const pieces: ArrayBuffer[] = [];
+  let from = 0;
+  for (const [a, b] of cuts) {
+    pieces.push(pcm.slice(from * 2, Math.min(b, a + tail) * 2));
+    from = Math.max(a, b - lead);
+  }
+  pieces.push(pcm.slice(from * 2));
+  return pieces;
+}

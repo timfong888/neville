@@ -1,7 +1,7 @@
 // One place that turns text into audio through OpenRouter. Used by the voice
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
-import { MAX_AUDIO_BYTES, fitPause, silenceBytes, startShares, stitchPcm } from "@/lib/delivery";
+import { MAX_AUDIO_BYTES, fitPause, silenceBytes, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
 import { normalizePcm16 } from "@/lib/loudness";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
@@ -150,7 +150,19 @@ export async function synthesize(opts: {
   instructions?: string;
   compact?: boolean;
   timeoutMs?: number;
+  /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
+  atomic?: boolean;
 }): Promise<Speech> {
+  if (opts.atomic && opts.lines && opts.lines.length > 1 && PCM_ONLY.test(opts.model)) {
+    const started = Date.now();
+    const one = await synthesizeAtomic(opts);
+    // Too long for one response (a very slow read): record line by line instead,
+    // where the pauses can be shortened to fit.
+    if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
+      return synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
+    }
+    return one;
+  }
   const { key, model, voice, text, instructions } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
   const stitch = Boolean(
@@ -280,4 +292,66 @@ export async function synthesize(opts: {
     starts: startShares(sizes, gap),
     pauseMs,
   };
+}
+
+/** The pause written between lines in an atomic request. Gemini honours it and does not speak it. */
+export const INLINE_PAUSE = "[pause]";
+
+/** The text of an atomic request: every line, with a pause written between them. */
+export function atomicText(lines: string[]): string {
+  return lines.map((l) => l.trim()).join(` ${INLINE_PAUSE} `);
+}
+
+/**
+ * Where each line starts as a share of the whole, estimated for audio recorded
+ * in one piece: speech time in proportion to characters, plus a fixed pause
+ * between lines. Good to about a second, enough for the read-along highlight.
+ */
+export function estimateStarts(lines: string[], durationS: number, pauseS = 1.8): number[] {
+  const chars = lines.map((l) => Math.max(1, l.length));
+  const total = chars.reduce((n, c) => n + c, 0);
+  const gaps = lines.length - 1;
+  const perChar = (durationS - gaps * pauseS) / total;
+  const out: number[] = [];
+  let t = 0;
+  for (let i = 0; i < lines.length; i++) {
+    out.push(durationS > 0 ? Math.min(1, t / durationS) : 0);
+    t += perChar > 0 ? chars[i] * perChar + pauseS : (chars[i] / total) * durationS;
+  }
+  return out;
+}
+
+/**
+ * The whole script in one request: one failure point, retried by `synthesize`
+ * as a whole. The voice is told to pause between lines; those pauses are then
+ * found and set to the pace's own length, so the delivery matches the line by
+ * line recordings, and each line's start is known exactly.
+ */
+async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise<Speech> {
+  const lines = opts.lines!;
+  const out = await synthesize({ ...opts, atomic: false, text: atomicText(lines), lines: undefined, pauseMs: 0 });
+  if (!out.ok) return out;
+  // WAV: 44-byte header, 16-bit mono.
+  const rate = new DataView(out.audio).getUint32(24, true) || 24000;
+  const pcm = out.audio.slice(44);
+  const pieces = splitAtPauses(pcm, rate, lines.length);
+  if (!pieces) {
+    if (out.audio.byteLength > MAX_AUDIO_BYTES) {
+      return { ok: false, status: 413, message: "The recording came out too long to send in one piece." };
+    }
+    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate) };
+  }
+  const sizes = pieces.map((p) => p.byteLength);
+  const pauseMs = fitPause({
+    pauseMs: opts.pauseMs ?? 0,
+    gaps: pieces.length - 1,
+    speechBytes: sizes.reduce((n, b) => n + b, 0),
+    rate,
+  });
+  const gap = silenceBytes(pauseMs, rate);
+  const audio = wav(stitchPcm(pieces, gap), rate);
+  if (audio.byteLength > MAX_AUDIO_BYTES) {
+    return { ok: false, status: 413, message: "The recording came out too long to send in one piece." };
+  }
+  return { ...out, audio, starts: startShares(sizes, gap), pauseMs };
 }

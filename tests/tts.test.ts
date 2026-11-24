@@ -148,3 +148,41 @@ describe("synthesize with pauses", () => {
     expect(seen[0]).not.toHaveProperty("speed");
   });
 });
+
+describe("atomic voices (#76)", () => {
+  it("records the whole script in one request, with a pause written between lines", async () => {
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: lines.join("\n\n"), lines, pauseMs: 1500, instructions: "Speak slowly.", compact: true, atomic: true,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(seen).toHaveLength(1);
+    expect(seen[0].input).toBe(lines.join(" [pause] "));
+    expect(seen[0].instructions).toBe("Speak slowly.");
+    expect(out.starts).toHaveLength(3);
+    expect(out.starts![0]).toBe(0);
+    expect(out.starts![1]).toBeGreaterThan(0);
+  });
+
+  it("retries the whole request once the provider has a brief error", async () => {
+    failOn = lines.join(" [pause] ");
+    failTimes = 1;
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true,
+    });
+    failOn = null;
+    failTimes = Infinity;
+    expect(out.ok).toBe(true);
+    expect(seen).toHaveLength(2);
+  });
+
+  it("leaves voices without the flag line by line", async () => {
+    const synthesize = await load();
+    await synthesize({ key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat", text: "", lines, pauseMs: 1500 });
+    expect(seen).toHaveLength(3);
+  });
+});

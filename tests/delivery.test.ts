@@ -10,6 +10,8 @@ import {
   resolvePace,
   resolveTone,
   silenceBytes,
+  silentRuns,
+  splitAtPauses,
   speedFor,
   startShares,
   stitchPcm,
@@ -95,5 +97,44 @@ describe("fitPause", () => {
       const ms = fitPause({ pauseMs: 4000, gaps: 11, speechBytes, rate: 22050 });
       expect(44 + speechBytes + silenceBytes(ms, 22050) * 11).toBeLessThanOrEqual(MAX_AUDIO_BYTES);
     }
+  });
+});
+
+describe("splitAtPauses (#76)", () => {
+  const rate = 8000;
+  // Speech (a loud square wave) and silence, in ms.
+  function signal(parts: Array<[boolean, number]>): ArrayBuffer {
+    const n = parts.reduce((s, [, ms]) => s + (rate * ms) / 1000, 0);
+    const out = new Int16Array(n);
+    let at = 0;
+    for (const [loud, ms] of parts) {
+      const len = (rate * ms) / 1000;
+      for (let i = 0; i < len; i++) out[at + i] = loud ? (i % 20 < 10 ? 8000 : -8000) : 0;
+      at += len;
+    }
+    return out.buffer;
+  }
+
+  it("cuts at the longest silences, one piece per line", () => {
+    // Three lines; a short breath inside line 2; long pauses between lines.
+    const pcm = signal([[true, 800], [false, 900], [true, 400], [false, 300], [true, 400], [false, 1200], [true, 700]]);
+    const pieces = splitAtPauses(pcm, rate, 3)!;
+    expect(pieces).toHaveLength(3);
+    const ms = pieces.map((p) => (p.byteLength / 2 / rate) * 1000);
+    // Line 2 keeps its inner breath; every line keeps its speech.
+    expect(ms[0]).toBeGreaterThanOrEqual(800);
+    expect(ms[1]).toBeGreaterThanOrEqual(1100);
+    expect(ms[2]).toBeGreaterThanOrEqual(700);
+    // The long pauses are mostly gone, ready to be set to the pace's length.
+    expect(ms.reduce((a, b) => a + b, 0)).toBeLessThan(4700 - 1500);
+  });
+
+  it("gives null when there are too few pauses to cut at", () => {
+    expect(splitAtPauses(signal([[true, 1000], [false, 400], [true, 1000]]), rate, 4)).toBeNull();
+  });
+
+  it("finds silent runs of at least the minimum length", () => {
+    const pcm = new Int16Array(signal([[true, 500], [false, 200], [true, 500], [false, 600], [true, 500]]));
+    expect(silentRuns(pcm, rate).length).toBe(1);
   });
 });
