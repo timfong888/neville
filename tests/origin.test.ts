@@ -20,6 +20,11 @@ describe("sameSiteRequest", () => {
     expect(sameSiteRequest(req("PUT", "https://getneville.vercel.app"))).toBe(true);
     expect(sameSiteRequest(req("PUT", "https://neville-delta.vercel.app"))).toBe(true);
   });
+  it("accepts the native app's origin, still refuses lookalikes", () => {
+    expect(sameSiteRequest(req("PUT", "neville://"))).toBe(true);
+    expect(sameSiteRequest(req("PUT", "neville://evil"))).toBe(false);
+    expect(sameSiteRequest(req("PUT", "https://neville.evil.example"))).toBe(false);
+  });
   it("refuses another site and a missing Origin", () => {
     expect(sameSiteRequest(req("DELETE", "https://evil.example"))).toBe(false);
     expect(sameSiteRequest(req("DELETE"))).toBe(false);
