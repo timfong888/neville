@@ -119,7 +119,10 @@ export function bannedIn(lines: string[], wish = ""): string | null {
 /** A line that starts with the refrain label, and what follows the label on it. */
 // Text after the label needs a separator, so a spoken line such as "The
 // refrain of birdsong fills the room" is never taken for the label.
-const REFRAIN_LABEL = /^[ \t]*(?:[-*•][ \t]*)?\**(?:the[ \t]+)?refrain\**[ \t]*(?:\([^)\n]*\))?[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
+// Before the label it allows what cleanLines strips: a bullet, numbering,
+// a heading mark, quotes or emphasis.
+const REFRAIN_LABEL =
+  /^[ \t]*(?:(?:[-*•]|\d+[.)]|#+)[ \t]*)?["“'`*_]*(?:the[ \t]+)?refrain["”'`*_]*[ \t]*(?:\([^)\n]*\))?[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
 
 /** A refrain spoken on a loop when the model gives none, or gives an unusable one. */
 export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
