@@ -55,6 +55,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     // The recording still needs most of the minute.
     const deadline = Date.now() + 14_000;
     let m = 0;
+    // Bumped only after an unusable reply, so a handover after a rate limit
+    // still asks for the version the listener chose.
+    let variant = opts.variant;
     for (let attempt = 0; attempt < 2 && m < models.length; attempt++) {
       const left = deadline - Date.now();
       if (attempt > 0 && left < 4_000) break;
@@ -72,7 +75,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
               { role: "system", content: SYSTEM },
               {
                 role: "user",
-                content: wishMessage(opts.want, opts.name, opts.variant + attempt, opts.toneNote),
+                content: wishMessage(opts.want, opts.name, variant, opts.toneNote),
               },
             ],
           }),
@@ -92,8 +95,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text) : null;
-      const lines = parts ? cleanLines(parts.script, limits.maxScriptChars) : null;
+      const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want) : null;
       if (lines) return { lines, source: "model", model, refrain: parts?.refrain ?? DEFAULT_REFRAIN };
+      variant++;
     }
     return template();
   } catch {

@@ -101,11 +101,16 @@ export const BANNED = [
   /\b(?:getting|coming) closer\b/i,
 ];
 
-/** The banned phrase found in `lines`, or null. */
-export function bannedIn(lines: string[]): string | null {
+/**
+ * The banned phrase found in `lines`, or null. A phrase that is in the
+ * listener's own wish is allowed: the script is asked to use their words, so
+ * "my journey across Japan" or "my business is growing" must not be refused.
+ */
+export function bannedIn(lines: string[], wish = ""): string | null {
+  const own = wish.toLowerCase();
   for (const l of lines) for (const re of BANNED) {
     const m = re.exec(l);
-    if (m) return m[0];
+    if (m && !own.includes(m[0].toLowerCase())) return m[0];
   }
   return null;
 }
@@ -166,7 +171,7 @@ const MIN_BODY_LINES = 6;
 const MIN_BODY_WORDS = 40;
 
 /** Tidy model output into spoken lines within the length cap. Null when unusable or too thin. */
-export function cleanLines(raw: string, maxChars: number): string[] | null {
+export function cleanLines(raw: string, maxChars: number, wish = ""): string[] | null {
   const lines = raw
     .split(/\n+/)
     .map((l) =>
@@ -198,6 +203,6 @@ export function cleanLines(raw: string, maxChars: number): string[] | null {
   // under the brief so a good script that runs slightly short still passes.
   const words = out.join(" ").split(/\s+/).length;
   if (out.length < MIN_BODY_LINES || words < MIN_BODY_WORDS) return null;
-  if (bannedIn(out)) return null;
+  if (bannedIn(out, wish)) return null;
   return [...out, closing];
 }

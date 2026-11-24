@@ -178,3 +178,14 @@ describe("refrain (#77)", () => {
     expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
   });
 });
+
+describe("the listener's own words (#80 review)", () => {
+  it("allows a banned phrase that is in the wish", () => {
+    const lines = [...body.slice(0, 7), "Your journey across Japan is yours."];
+    expect(bannedIn(lines)).not.toBeNull();
+    expect(bannedIn(lines, "I want my journey across Japan")).toBeNull();
+    expect(cleanLines(lines.join("\n"), 700, "my journey across Japan")).not.toBeNull();
+    // Only the wish's own phrase is allowed, not every banned phrase.
+    expect(bannedIn([...lines, "You feel the momentum."], "my journey across Japan")).toBe("momentum");
+  });
+});
