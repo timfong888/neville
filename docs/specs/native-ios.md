@@ -1,66 +1,84 @@
 # Native iOS app
 
-Status: proposal, awaiting Tim's decision in #71. Nothing here is built.
+Status: proposal, revised 2026-11-24 after Tim's answers in #71. Nothing here
+is built.
 
 ## Decision proposed
 
-One repo, one API, shared logic. Separate web and native screens for now.
+One UI codebase. One repo, one API.
 
-- The website stays as it is: Next.js, DOM and CSS.
-- A new Expo app in `native/` holds the iOS screens, written in React Native.
-- Both use the same `/api/*` route handlers and the same logic in `lib/`.
-- After the first TestFlight build, decide whether the website adopts the
-  native screens through Expo Router web. That would give one UI codebase.
+- `native/` is the one client: Expo SDK 58 with Expo Router, built for iOS and
+  for web. Screens are written once in React Native.
+- Next.js stays as the backend. The 12 `/api/*` route handlers do not change.
+- One domain. The production host serves the Expo web build and rewrites
+  `/api/*` and the internal pages to the Next deployment. Same origin, so
+  cookies, Origin checks and OAuth redirect URIs stay as they are.
+- The old DOM screens are deleted when the new build reaches parity.
 
 `ios-shell/` is a WebView shell. It is not the end goal and is not submitted
 for App Review. It is removed once the native build is on TestFlight.
 
-## Why not one UI codebase now
+## Why this changed
 
-- React web does not compile to iOS. The website's 19 client files (3,164
-  lines) are DOM elements and CSS classes, so sharing the UI means rewriting
-  the working website in React Native components first.
-- Audio is platform-specific either way (`<audio>`, Web Audio and Media
-  Session on web; `expo-audio` on iOS).
-- No tested Next 16 + react-native-web setup was found. Solito lists Next 15.2
-  with Expo SDK 52.
+The first version of this spec kept separate web and native screens, mainly
+to protect the live website. Tim, 2026-11-24: "I don't think there is a risk
+with the live site no one is using it." With that removed:
+
+- The screens must be written in React Native for iOS anyway. Reusing them on
+  the web is cheaper than keeping a second copy.
+- The untested Next 16 + react-native-web combination is avoided, because
+  React Native screens never run inside Next.
+- The web build can be checked in a browser on every PR, which shortens the
+  test loop. Only audio and sign-in need a phone.
 
 Evidence and the option comparison are in #71.
 
-## What is shared
+## Platform seams
 
-| Shared | Not shared |
-| --- | --- |
-| `/api/*` route handlers (12) | Screens |
-| Platform-neutral `lib/` modules (16 files, 1,588 lines) and their tests | Audio playback |
-| `config/voices.json`, `config/limits.json` | Device storage |
-| `LibraryStore` interface (`lib/library/store.ts`) | Sign-in UI |
-| A typed API client (to be written) | |
+Each has a `.web.ts` and a `.native.ts` file, kept outside the routes folder.
+
+| Seam | Web | Native |
+| --- | --- | --- |
+| Audio | today's `<audio>` + Web Audio code (`lib/musicBed.ts`) | `expo-audio`, background play, lock screen |
+| Library store | today's IndexedDB store (`lib/library/store.ts`) | files on the device |
+| Settings store | `localStorage` | key-value storage |
+| Auth client | cookies, same origin | `@better-auth/expo` with `expo-secure-store` |
+
+## What is shared and what stays in Next
+
+- Shared by web and iOS: all user screens, the platform-neutral `lib/`
+  modules (16 files, 1,588 lines) and their tests, `config/*.json`, a typed
+  API client.
+- Stays in Next: `/api/*`, `/voices` bake-off, `/architecture`,
+  `/admin/usage`, `/mode-samples/*`, and the public share page (#28), which
+  needs preview tags rendered on the server.
 
 ## Versions
 
 Expo SDK 58: React Native 0.88, React 19.3.0, react-native-web 0.21.
-The site is on Next 16.4.6, React 19.3.1, better-auth ^1.7.26.
-The native app keeps its own `package.json`, so the two React versions do not
-have to match.
+The backend is on Next 16.4.6, React 19.3.1, better-auth ^1.7.26.
+`native/` has its own `package.json`, so the React versions need not match.
 
 ## Phases
 
 Sizes are rough days of agent work, without device testing or App Review.
 
-### Phase 0: prerequisites (3 to 5)
+### Phase 0: prerequisites (4 to 6)
 
-- `native/` Expo app with Expo Router that imports `lib/`. No website files move.
+- `native/` scaffold for iOS and web, theme taken from `app/globals.css`,
+  the four seams.
 - Typed API client with an injectable base URL and auth header.
 - Auth: `@better-auth/expo` server plugin, `neville://` in `trustedOrigins`,
   `APPLE_APP_BUNDLE_ID=pckg.neville`, native Sign in with Apple by ID token,
   Google through the system browser. Settle #62 so native requests still pass.
 - Audio spike on a real phone: voice plus looped music with the screen locked
   and lock-screen controls. Decide how ducking works natively.
+- Deployment proof: Expo web preview calling `/api/*` on the Next deployment
+  through a rewrite, signed in.
 
-### Phase 1: first TestFlight build (5 to 8)
+### Phase 1: first TestFlight build (6 to 9)
 
-Screens:
+Screens, written once and shipped to TestFlight and a web preview URL:
 
 - Create: wish, script, recording.
 - Player: background audio and lock-screen controls.
@@ -70,32 +88,45 @@ Screens:
 
 The music bed is included only if the spike is clean.
 
-### Phase 2: parity (5 to 8)
+### Phase 2: parity and cutover (6 to 9)
 
 Playlists and "Play all", account library sync and "move device work", music
-bed with ducking, mix voices, onboarding, re-record.
+bed with ducking, mix voices, onboarding, re-record. Then the production
+domain serves the Expo web build and the old DOM screens are deleted.
 
-### Phase 3: store and convergence (5 or more)
+### Phase 3: store (5 or more)
 
-In-app purchase through RevenueCat, App Store submission (#64), the decision
-on one UI codebase, Android.
+In-app purchase on iOS and Stripe on web, App Store submission (#64), share
+page (#28) with links that open the app, Android.
+
+## Decided by Tim (2026-11-24)
+
+- `native/` lives in this repo, reusing bundle `pckg.neville` and the EAS
+  project.
+- Phase 1 scope as listed above.
+- No purchase screen before Phase 3.
+- iPhone only, tested through TestFlight.
 
 ## App Review
 
 - 4.2 minimum functionality: do not submit a WebView shell.
 - 4.8 login: Google sign-in requires Sign in with Apple, as the native sheet.
 - 5.1.1(v): account deletion must be in the app.
-- 3.1.1: digital subscriptions sold in the app use in-app purchase.
+- 3.1.1: digital subscriptions sold in the app use in-app purchase. The
+  Stripe path must not ship in the iOS build.
 
 ## Risks
 
-- Scheduled ducking and the gapless music loop may not match the web version.
-  Fallback: a fixed music level, or mix the bed into the file.
-- Slow test loop: EAS build, TestFlight, Tim's phone. No simulator in cloud
-  sessions.
-- Features are built twice in the UI until the one-codebase decision is made.
-  Keep feature logic in `lib/`.
+- Scheduled ducking and the gapless music loop may not match the web version
+  on iOS. Fallback: a fixed music level, or mix the bed into the file.
+- The two-project deployment behind one domain is unproven here until the
+  Phase 0 proof.
+- React Native on web is weaker than hand-written HTML for desktop layout,
+  keyboard focus and first load size. Acceptable while the site has no users.
+- DOM-only controls (4 selects, 3 range sliders) need replacements that work
+  on both platforms.
 
 ## Open questions
 
-See #71. Each has a default.
+See #71: when to cut the live site over (default: at parity), and whether the
+internal pages stay in Next (default: yes).
