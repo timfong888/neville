@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { BANNED, CLOSING, METHOD_VERSION, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 
 const body = [
@@ -136,6 +136,63 @@ describe("stray labels", () => {
   it("drops one-word lines such as an echoed field name", () => {
     const out = cleanLines(["breath", ...body, "It is done."].join("\n"), 700)!;
     expect(out[0]).toBe(body[0]);
+  });
+});
+
+describe("refrain (#77)", () => {
+  it("asks for a refrain after the script and splits it off", () => {
+    expect(SYSTEM).toMatch(/Refrain: /);
+    const raw = [...body, "It is done.", "Refrain: The house by the sea is yours, thank you"].join("\n");
+    const { script, refrain } = splitRefrain(raw);
+    expect(refrain).toBe("The house by the sea is yours, thank you.");
+    expect(script).not.toMatch(/Refrain/);
+    expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
+  });
+  it("never leaves a refrain label in the spoken script", () => {
+    for (const label of ["Refrain — The house is yours.", "Refrain (for repeating): The house is yours.", "The refrain: The house is yours.", "**Refrain**: The house is yours.", "11. Refrain: The house is yours.", "## Refrain: The house is yours.", '"Refrain: The house is yours."', "'Refrain: The house is yours.'", "‘Refrain: The house is yours.’", "Refrain for repeating: The house is yours.", "Refrain"]) {
+      const { script, refrain } = splitRefrain([...body, "It is done.", label].join("\n"));
+      expect(script.toLowerCase()).not.toContain("refrain");
+      if (label !== "Refrain") expect(refrain).toBe("The house is yours.");
+      expect(cleanLines(script, 700)?.join(" ")).not.toMatch(/refrain/i);
+    }
+  });
+  it("takes a refrain written on the line after its label, and keeps it out of the script", () => {
+    const { script, refrain } = splitRefrain([...body, "It is done.", "Refrain:", "The house is yours."].join("\n"));
+    expect(refrain).toBe("The house is yours.");
+    expect(script).not.toMatch(/house is yours|refrain/i);
+    expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
+  });
+  it("reads the next line when a decorated label stands alone", () => {
+    for (const label of ["**Refrain:**", '"Refrain:"', "_Refrain:_", "## **Refrain:**", "'Refrain:'"]) {
+      const { script, refrain } = splitRefrain([...body, "It is done.", label, "The house is yours."].join("\n"));
+      expect(refrain, label).toBe("The house is yours.");
+      expect(script, label).not.toMatch(/house is yours|refrain/i);
+    }
+  });
+  it("keeps apostrophes inside the refrain", () => {
+    expect(splitRefrain("x\nRefrain: You're home now. Thank you").refrain).toBe("You're home now. Thank you.");
+  });
+  it("never takes a spoken line that starts with the word refrain", () => {
+    const raw = ["You are home.", "The refrain of birdsong fills your quiet morning.", "You are calm.", "It is done.", "Refrain: The house is yours, thank you"].join("\n");
+    const { script, refrain } = splitRefrain(raw);
+    expect(refrain).toBe("The house is yours, thank you.");
+    expect(script).toContain("The refrain of birdsong fills your quiet morning.");
+  });
+  it("keeps a refrain in the listener's own words, even with a banned phrase", () => {
+    const raw = "x\nRefrain: Your journey across Japan is done. Thank you";
+    expect(splitRefrain(raw).refrain).toBeNull();
+    expect(splitRefrain(raw, "my journey across Japan").refrain).toBe("Your journey across Japan is done. Thank you.");
+  });
+  it("refuses a refrain that wants, waits or rambles", () => {
+    expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: My house by the sea is mine").refrain).toBeNull();
+    expect(splitRefrain(`x\nRefrain: ${"word ".repeat(14)}`).refrain).toBeNull();
+    expect(splitRefrain("no refrain here").refrain).toBeNull();
+    // Not addressed to the listener: the "you" of "thank you" does not count.
+    expect(splitRefrain("x\nRefrain: The house is finished, thank you.").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
+    expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
   });
 });
 

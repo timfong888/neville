@@ -19,7 +19,7 @@ A calm voice that reads you a short script about your wish as if it is already t
 | 2 | Script prompt paraphrases Lesson 1, plus a fixed-input eval | #78, PR (draft) | Approved by Tim. It changes what every new script says. | — |
 | 3 | Closing line: "It is done." (Tim, 2026-11-24) | #79, PR #80 | Tiny, and Tim found "And so it is." "chippy". | — |
 | 4 | Atomic voice: one request per script, pauses and pace inside it; Gemini is the default voice (Tim, 2026-11-24) | #76 | One failure point instead of 10 to 13. Pace and pauses only work on a Gemini voice. | — |
-| 5 | Programming mode: script, then the refrain looped in the app with an optional bell, then the closing | #77 | Tim's chosen technique for the short script. Needs the refrain from step 2. | Minutes defaults are assumptions (Off; 1/3/5/10/20) |
+| 5 | Programming mode: script, then the refrain looped in the app with an optional bell, then the closing | #77 | Tim's chosen technique for the short script. Needs the refrain from step 2. | Minutes: Off (default), 1, 3, 5 or 10. Tim set 10 as the maximum on every device (2026-11-24) |
 | 6 | Sign-in inside the iOS shell | #70 | Saving and playlists need an account on the phone. | — |
 | 7 | Native app: one UI codebase. `native/` (Expo Router) serves iOS and web, Next stays as the API (Tim, 2026-11-24) | #71; phases #89, #91, #92, #93; spec `native-ios.md` | Approved. Phase 0 is in progress (#83 to #86). The website is cut over at parity, end of Phase 2. | — |
 
