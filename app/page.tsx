@@ -9,6 +9,9 @@ import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
+import { REPEAT_MINUTES } from "@/lib/repetition";
+import { composeSession } from "@/lib/repetitionClient";
+import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
 import { lineStarts } from "@/lib/audio";
 import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
@@ -27,7 +30,17 @@ const EXAMPLES = [
   "a loving, easy relationship with my family",
 ];
 
-type Made = { lines: string[]; url: string; voiceId: string; voiceName: string; source: string; starts?: number[] };
+type Made = {
+  lines: string[];
+  url: string;
+  voiceId: string;
+  voiceName: string;
+  source: string;
+  starts?: number[];
+  /** Programming mode (#77): the script alone, without the loop, for Save. */
+  saveUrl?: string;
+  saveLines?: string[];
+};
 
 /** The server's line start times, if present and sound; null makes the page estimate instead. */
 function readStarts(header: string | null, count: number): number[] | undefined {
@@ -58,6 +71,13 @@ function writeCount(n: number) {
 export default function DemoPage() {
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
+  // Programming mode (#77): minutes of repetition after the script, and the bell between them.
+  const [repeatMin, setRepeatMin] = useState(0);
+  const [bellOn, setBellOn] = useState(true);
+  useEffect(() => {
+    setRepeatMin(readRepeatMinutes());
+    setBellOn(readBellOn());
+  }, []);
   const [name, setName] = useState("");
   const [variant, setVariant] = useState(0);
   const [step, setStep] = useState(0);
@@ -165,7 +185,13 @@ export default function DemoPage() {
     [],
   );
   // A recording lives only in this tab. Free its memory when it is replaced.
-  useEffect(() => () => void (made && URL.revokeObjectURL(made.url)), [made]);
+  useEffect(
+    () => () => {
+      if (made) URL.revokeObjectURL(made.url);
+      if (made?.saveUrl) URL.revokeObjectURL(made.saveUrl);
+    },
+    [made],
+  );
   useEffect(() => {
     speech.current = [];
     if (!made) return;
@@ -326,20 +352,35 @@ export default function DemoPage() {
           variant: v,
           pace: readPaceChoice(),
           tone: readToneChoice(),
+          repeat: repeatMin > 0,
         }),
       });
       if (res.ok) {
         const packed = atob(res.headers.get("X-Script") ?? "");
         const made = JSON.parse(new TextDecoder().decode(Uint8Array.from(packed, (c) => c.charCodeAt(0))));
         if (!Array.isArray(made) || !made.every((l) => typeof l === "string")) throw new Error("bad script");
-        next = {
-          lines: made,
-          url: URL.createObjectURL(await res.blob()),
+        const audio = await res.blob();
+        const base = {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: res.headers.get("X-Script-Source") ?? "",
-          starts: readStarts(res.headers.get("X-Line-Starts"), made.length),
         };
+        // Programming mode: the server recorded the refrain after the script.
+        const refrainB64 = res.headers.get("X-Refrain");
+        const refrain = refrainB64 ? new TextDecoder().decode(Uint8Array.from(atob(refrainB64), (c) => c.charCodeAt(0))) : "";
+        const allStarts = refrain ? readStarts(res.headers.get("X-Line-Starts"), made.length + 1) : undefined;
+        const session =
+          refrain && allStarts
+            ? await composeSession({ audio, scriptLines: made, starts: allStarts, refrain, minutes: repeatMin, bellOn }).catch(() => null)
+            : null;
+        next = session
+          ? { ...base, lines: session.lines, url: session.url, starts: session.starts, saveUrl: session.saveUrl, saveLines: made }
+          : {
+              ...base,
+              lines: refrain ? [...made, refrain] : made,
+              url: URL.createObjectURL(audio),
+              starts: allStarts ?? readStarts(res.headers.get("X-Line-Starts"), made.length),
+            };
       } else {
         const j = (await res.json().catch(() => null)) as { error?: string; lines?: unknown } | null;
         why = j?.error ?? "Recording is not available just now.";
@@ -350,6 +391,7 @@ export default function DemoPage() {
     }
     if (run.current !== mine) {
       if (next) URL.revokeObjectURL(next.url);
+      if (next?.saveUrl) URL.revokeObjectURL(next.saveUrl);
       return;
     }
     if (next && mixing) {
@@ -428,7 +470,7 @@ export default function DemoPage() {
     if (saving || savedId) return;
     setSaving(true);
     try {
-      const audio = made ? await (await fetch(made.url)).blob() : null;
+      const audio = made ? await (await fetch(made.saveUrl ?? made.url)).blob() : null;
       const now = Date.now();
       const id = newId();
       await (await resolveStore()).saveManifestation(
@@ -438,7 +480,7 @@ export default function DemoPage() {
           title: made ? titleFor(want) : "A moment of calm",
           want: want.trim(),
           firstName: name.trim(),
-          lines,
+          lines: made?.saveLines ?? lines,
           voiceId: made?.voiceId ?? "",
           voiceName: made?.voiceName ?? "Device voice",
           hasAudio: !!audio,
@@ -535,6 +577,46 @@ export default function DemoPage() {
             </span>
             <span className="change">Change</span>
           </Link>
+          <div className="row">
+            <div>
+              <label htmlFor="repeat">Repetition after the script</label>
+              <select
+                id="repeat"
+                value={repeatMin}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setRepeatMin(n);
+                  writeRepeatMinutes(n);
+                }}
+              >
+                {REPEAT_MINUTES.map((m) => (
+                  <option key={m} value={m}>
+                    {m === 0 ? "Off" : `${m} min`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={bellOn}
+                  disabled={repeatMin === 0}
+                  onChange={(e) => {
+                    setBellOn(e.target.checked);
+                    writeBellOn(e.target.checked);
+                  }}
+                />{" "}
+                A soft bell between repetitions
+              </label>
+            </div>
+          </div>
+          {repeatMin > 0 && (
+            <p className="small muted">
+              After the script, a short phrase from it repeats for {repeatMin} min, then it closes. Repetition helps the
+              new idea settle in, especially at first.
+            </p>
+          )}
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>

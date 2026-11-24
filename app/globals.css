@@ -376,3 +376,5 @@ label.volume.small { margin: 8px 0; }
 .volume select { width: auto; }
 .sample { margin-bottom: 14px; }
 .sample h2 { margin: 0 0 4px; }
+label.check { display: flex; gap: 8px; align-items: center; margin-top: 34px; color: var(--text, inherit); }
+label.check input { width: auto; }

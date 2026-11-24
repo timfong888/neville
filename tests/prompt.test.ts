@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { BANNED, CLOSING, METHOD_VERSION, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 
 const body = [
@@ -136,5 +136,24 @@ describe("stray labels", () => {
   it("drops one-word lines such as an echoed field name", () => {
     const out = cleanLines(["breath", ...body, "It is done."].join("\n"), 700)!;
     expect(out[0]).toBe(body[0]);
+  });
+});
+
+describe("refrain (#77)", () => {
+  it("asks for a refrain after the script and splits it off", () => {
+    expect(SYSTEM).toMatch(/Refrain: /);
+    const raw = [...body, "It is done.", "Refrain: The house by the sea is yours, thank you"].join("\n");
+    const { script, refrain } = splitRefrain(raw);
+    expect(refrain).toBe("The house by the sea is yours, thank you.");
+    expect(script).not.toMatch(/Refrain/);
+    expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
+  });
+  it("refuses a refrain that wants, waits or rambles", () => {
+    expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();
+    expect(splitRefrain("x\nRefrain: My house by the sea is mine").refrain).toBeNull();
+    expect(splitRefrain(`x\nRefrain: ${"word ".repeat(14)}`).refrain).toBeNull();
+    expect(splitRefrain("no refrain here").refrain).toBeNull();
+    expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
   });
 });

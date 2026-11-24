@@ -6,7 +6,7 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { neutralScript } from "@/lib/script";
-import { SYSTEM, cleanLines, wishMessage } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, splitRefrain, wishMessage } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -36,11 +36,17 @@ export async function scriptModel(): Promise<string> {
   return (await scriptModels())[0];
 }
 
-export type Script = { lines: string[]; source: "model" | "template"; model?: string };
+export type Script = {
+  lines: string[];
+  source: "model" | "template";
+  model?: string;
+  /** A short phrase to repeat in programming mode (#77); the default one for the template. */
+  refrain: string;
+};
 
 export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
   // The fallback never repeats the wish: see neutralScript.
-  const template = (): Script => ({ lines: neutralScript(opts.name), source: "template" });
+  const template = (): Script => ({ lines: neutralScript(opts.name), source: "template", refrain: DEFAULT_REFRAIN });
   try {
     const models = await scriptModels();
     // Up to two tries within the time box. A model that is rate-limited or down
@@ -85,8 +91,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
       const text = json.choices?.[0]?.message?.content;
-      const lines = typeof text === "string" ? cleanLines(text, limits.maxScriptChars) : null;
-      if (lines) return { lines, source: "model", model };
+      const parts = typeof text === "string" ? splitRefrain(text) : null;
+      const lines = parts ? cleanLines(parts.script, limits.maxScriptChars) : null;
+      if (lines) return { lines, source: "model", model, refrain: parts?.refrain ?? DEFAULT_REFRAIN };
     }
     return template();
   } catch {

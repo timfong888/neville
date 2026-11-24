@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
-  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown };
+  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown; repeat?: unknown };
   try {
     body = await req.json();
     if (!body || typeof body !== "object") throw new Error("not an object");
@@ -65,12 +65,17 @@ export async function POST(req: Request) {
   }
 
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+  // Programming mode (#77): the refrain is recorded once, as one more line at
+  // the end, and the app loops it. Only voices recorded as PCM with line starts
+  // can be cut apart in the browser.
+  const repeat = body.repeat === true && /^(?:heygen\/|google\/gemini)/.test(voice.model);
+  const recorded = repeat ? [...script.lines, script.refrain] : script.lines;
   // A blank line between lines is the pause we can ask of voices whose audio
   // cannot be stitched; the others get real silence between lines.
-  const text = script.lines.join("\n\n");
+  const text = recorded.join("\n\n");
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
-  const spoken = script.lines.join(" ").length;
+  const spoken = recorded.join(" ").length;
   if (script.source === "model") {
     // Text-model cost is not returned by the writer; at these prices it is a
     // few thousandths of a cent, so it is recorded as unpriced.
@@ -81,7 +86,7 @@ export async function POST(req: Request) {
     model: voice.model,
     voice: voice.voice,
     text,
-    lines: script.lines,
+    lines: recorded,
     pauseMs: pauseFor(pace, tone),
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
@@ -120,6 +125,8 @@ export async function POST(req: Request) {
       "Cache-Control": "no-store",
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
+      // When set, the last line start belongs to this refrain, recorded after the script.
+      ...(repeat ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,
