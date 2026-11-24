@@ -51,7 +51,7 @@ async function load() {
   return (await import("@/lib/server/tts")).synthesize;
 }
 
-const lines = ["Breathe in.", "You are calm.", "And so it is."];
+const lines = ["Breathe in.", "You are calm.", "It is done."];
 
 describe("synthesize with pauses", () => {
   it("records each line on its own and puts silence between them for PCM voices", async () => {

@@ -72,7 +72,7 @@ export const TONES: readonly Tone[] = [
     // Tim's pick (#45): the "bright, encouraging" style read as an ad; this is the coach prompt he approved.
     style:
       "like a steady, quietly confident coach walking beside one person: grounded, warm, low and even in pitch, at a natural conversational pace",
-    scriptNote: "Upbeat, confident and forward-moving. Short, strong lines about action and momentum. Still calm words, no exclamation marks.",
+    scriptNote: "Upbeat, confident and forward-moving. Short, strong lines about what you are already doing, as the person who has it. Still calm words, no exclamation marks.",
     energy: "lifted",
   },
   {
@@ -100,7 +100,7 @@ export const TONES: readonly Tone[] = [
     speedFactor: 0.92,
     pauseFactor: 1.5,
     style: "in a hushed, drowsy, very gentle voice, as if helping someone drift off to sleep, letting each phrase trail off and settle",
-    scriptNote: "Drowsy and restful. Lines about letting go, heaviness, warmth and safety.",
+    scriptNote: "Drowsy and restful. Lines about letting go, heaviness, warmth and rest.",
   },
 ];
 
