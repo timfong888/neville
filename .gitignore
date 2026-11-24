@@ -5,4 +5,5 @@ next-env.d.ts
 *.tsbuildinfo
 .env*
 __pycache__/
+evals/out/
 native/dist/

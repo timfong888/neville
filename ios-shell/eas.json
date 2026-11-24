@@ -1,0 +1,14 @@
+{
+  "cli": { "version": ">= 13.2.0", "appVersionSource": "remote" },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "node": "20.19.4",
+      "ios": { "image": "macos-sequoia-15.6-xcode-26.2" }
+    }
+  },
+  "submit": {
+    "production": { "ios": { "ascAppId": "6740147041" } }
+  }
+}

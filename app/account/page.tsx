@@ -54,9 +54,9 @@ export default function AccountPage() {
     }
   }, [signedIn, deviceItems, move]);
 
-  const signIn = async () => {
-    setBusy("Opening Google…");
-    const r = await authClient.signIn.social({ provider: "google", callbackURL: "/account" }).catch(() => null);
+  const signIn = async (provider: "google" | "apple") => {
+    setBusy(provider === "apple" ? "Opening Apple…" : "Opening Google…");
+    const r = await authClient.signIn.social({ provider, callbackURL: "/account" }).catch(() => null);
     if (!r || r.error) {
       setBusy("");
       setMsg("Sign-in could not start. Try again in a moment.");
@@ -148,9 +148,20 @@ export default function AccountPage() {
                 <span>✓ Delete it all, any time</span>
               </li>
             </ul>
-            <button className="btn primary block" onClick={signIn} disabled={!account.enabled || !!busy}>
+            <button className="btn primary block" onClick={() => signIn("google")} disabled={!account.enabled || !!busy}>
               Continue with Google
             </button>
+            {account.providers?.includes("apple") && (
+              <button className="btn block apple" onClick={() => signIn("apple")} disabled={!!busy}>
+                <svg aria-hidden="true" width="14" height="17" viewBox="0 0 814 1000" style={{ marginRight: 8, verticalAlign: "-2px" }}>
+                  <path
+                    fill="currentColor"
+                    d="M788 341c-6 4-108 62-108 190 0 148 130 200 134 202-1 3-21 72-69 142-43 62-88 124-156 124s-86-40-165-40c-77 0-104 41-166 41s-106-58-156-128C44 790 0 669 0 554c0-184 120-282 238-282 63 0 115 41 155 41 38 0 97-44 168-44 27 0 124 3 188 94zM554 157c30-35 51-84 51-133 0-7-1-14-2-19-48 2-105 32-140 72-27 31-53 80-53 130 0 8 1 15 2 18 3 1 9 2 14 2 43 0 97-29 128-70z"
+                  />
+                </svg>
+                Continue with Apple
+              </button>
+            )}
             {!account.enabled && (
               <p className="small muted" style={{ marginTop: 10 }}>
                 Sign-in is not switched on here yet, so for now your work is saved on this device and you can keep

@@ -342,6 +342,8 @@ pre code { background: none; padding: 0; }
   margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: 14px;
   background: var(--bg-2); border: 1px solid var(--line); color: var(--muted);
 }
+/* Apple's sign-in button guidelines: black or white, with the Apple logo. */
+.btn.apple { background: #fff; color: #000; border-color: #fff; margin-top: 10px; }
 
 /* Music volume slider */
 .volume { display: inline-flex; align-items: center; gap: 8px; }
