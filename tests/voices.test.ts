@@ -35,3 +35,15 @@ describe("voice descriptions", () => {
     }
   });
 });
+
+describe("atomic default (#76)", () => {
+  it("defaults to a Gemini voice recorded in one request", () => {
+    const v = resolveVoice(DEFAULT_VOICE_ID);
+    expect(v.id).toBe("gemini-sulafat");
+    expect(v.atomic).toBe(true);
+    expect(v.model).toMatch(/^google\/gemini/);
+  });
+  it("flags only Gemini voices as atomic", () => {
+    for (const v of ENABLED_VOICES) if (v.atomic) expect(v.model).toMatch(/^google\/gemini/);
+  });
+});

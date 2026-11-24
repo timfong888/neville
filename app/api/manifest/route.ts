@@ -87,11 +87,12 @@ export async function POST(req: Request) {
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     timeoutMs: 42_000,
+    atomic: voice.atomic === true,
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
-    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: spoken, estUsd: null, ok: false });
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
     return NextResponse.json(
@@ -111,8 +112,9 @@ export async function POST(req: Request) {
     kind: "speech",
     model: voice.model,
     voiceId: voice.id,
-    chars: spoken,
-    estUsd: await estimateSpeech(voice.model, spoken),
+    // What was sent, as billed: pause tags and any discarded first take included.
+    chars: speech.sentChars,
+    estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
   return new NextResponse(speech.audio, {
     headers: {
