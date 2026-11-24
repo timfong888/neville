@@ -87,6 +87,9 @@ export async function POST(req: Request) {
     voice: voice.voice,
     text,
     lines: recorded,
+    // The refrain follows the closing with no pause, and its length does not
+    // shorten the pauses between the script's lines.
+    tail: repeat ? 1 : 0,
     pauseMs: pauseFor(pace, tone),
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,

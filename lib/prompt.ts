@@ -112,7 +112,9 @@ export function bannedIn(lines: string[]): string | null {
 
 /** The refrain line the model writes after the script, for programming mode (#77). */
 /** A line that starts with the refrain label, and what follows the label on it. */
-const REFRAIN_LABEL = /^[ \t]*(?:[-*•][ \t]*)?\**(?:the[ \t]+)?refrain\b\**[ \t]*(?:\([^)\n]*\))?[ \t]*[:\-–—]?[ \t]*(.*)$/i;
+// Text after the label needs a separator, so a spoken line such as "The
+// refrain of birdsong fills the room" is never taken for the label.
+const REFRAIN_LABEL = /^[ \t]*(?:[-*•][ \t]*)?\**(?:the[ \t]+)?refrain\**[ \t]*(?:\([^)\n]*\))?[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
 
 /** A refrain spoken on a loop when the model gives none, or gives an unusable one. */
 export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
@@ -126,24 +128,24 @@ export function splitRefrain(raw: string): { script: string; refrain: string | n
   const lines = raw.split("\n");
   const drop = new Set<number>();
   let found = null as string | null;
-  lines.forEach((line, i) => {
+  // Every label line leaves the script; the refrain is read from the last
+  // one, where the prompt asks for it.
+  const labels = lines.flatMap((line, i) => {
     const m = REFRAIN_LABEL.exec(line);
-    if (!m) return;
-    // No line that starts with the label is ever left in the script.
-    drop.add(i);
-    if (found !== null) return;
-    if (m[1].trim()) {
-      found = m[1];
-      return;
-    }
+    return m ? [{ i, text: (m[1] ?? "").trim() }] : [];
+  });
+  for (const { i } of labels) drop.add(i);
+  const last = labels.at(-1);
+  if (last?.text) found = last.text;
+  else if (last) {
     // The label on a line of its own: the refrain is the next line with words,
     // and it leaves the script too, so it is not spoken twice.
-    const next = lines.findIndex((l, j) => j > i && l.trim());
+    const next = lines.findIndex((l, j) => j > last.i && l.trim());
     if (next > 0) {
       found = lines[next];
       drop.add(next);
     }
-  });
+  }
   const script = lines.filter((_, i) => !drop.has(i)).join("\n");
   const text: string | null = found;
   if (text === null) return { script, refrain: null };

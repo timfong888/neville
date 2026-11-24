@@ -150,6 +150,12 @@ export async function synthesize(opts: {
   instructions?: string;
   compact?: boolean;
   timeoutMs?: number;
+  /**
+   * How many of the last `lines` are extras the app cuts off (the refrain,
+   * #77): joined with no pause before them, and left out when the pauses
+   * between the script's lines are fitted to the size limit.
+   */
+  tail?: number;
 }): Promise<Speech> {
   const { key, model, voice, text, instructions } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
@@ -258,14 +264,17 @@ export async function synthesize(opts: {
     return { ok: true, audio: wav(pcmAll, rate), mime: "audio/wav", requests: parts.length, ids, speedApplied };
   }
   const sizes = chunks.map((c) => c.byteLength);
+  const tail = Math.min(Math.max(0, opts.tail ?? 0), chunks.length - 1);
+  const body = chunks.slice(0, chunks.length - tail);
   const pauseMs = fitPause({
     pauseMs: opts.pauseMs!,
-    gaps: chunks.length - 1,
+    gaps: body.length - 1,
     speechBytes: sizes.reduce((n, b) => n + b, 0),
     rate,
   });
   const gap = silenceBytes(pauseMs, rate);
-  const audio = wav(normalizePcm16(stitchPcm(chunks, gap), rate), rate);
+  const joined = tail ? join([stitchPcm(body, gap), ...chunks.slice(body.length)]) : stitchPcm(chunks, gap);
+  const audio = wav(normalizePcm16(joined, rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
     return { ok: false, status: 502, message: "The recording came out too long to send." };
@@ -277,7 +286,18 @@ export async function synthesize(opts: {
     requests: parts.length,
     ids,
     speedApplied,
-    starts: startShares(sizes, gap),
+    starts: tail ? tailStarts(sizes, body.length, gap) : startShares(sizes, gap),
     pauseMs,
   };
+}
+
+/** Line starts when the first `bodyCount` pieces have `gap` bytes between them and the rest follow directly. */
+function tailStarts(sizes: number[], bodyCount: number, gap: number): number[] {
+  const total = sizes.reduce((n, b) => n + b, 0) + Math.max(0, bodyCount - 1) * gap;
+  let at = 0;
+  return sizes.map((b, i) => {
+    const start = Math.round((at / total) * 10000) / 10000;
+    at += b + (i < bodyCount - 1 ? gap : 0);
+    return start;
+  });
 }

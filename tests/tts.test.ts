@@ -148,3 +148,21 @@ describe("synthesize with pauses", () => {
     expect(seen[0]).not.toHaveProperty("speed");
   });
 });
+
+describe("a refrain recorded after the script (#77)", () => {
+  it("follows the last line with no pause, and does not count as a gap", async () => {
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: "", lines: withRefrain, pauseMs: 1000, compact: true, tail: 1,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // 4 x 0.5 s of speech at 22.05 kHz, and pauses only between the 3 script lines.
+    expect(out.audio.byteLength).toBe(44 + 4 * 22050 + 2 * 44100);
+    expect(out.starts).toHaveLength(4);
+    const total = 4 * 22050 + 2 * 44100;
+    expect(out.starts![3]).toBeCloseTo((3 * 22050 + 2 * 44100) / total, 3);
+  });
+});

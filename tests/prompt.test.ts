@@ -162,6 +162,12 @@ describe("refrain (#77)", () => {
     expect(script).not.toMatch(/house is yours|refrain/i);
     expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
   });
+  it("never takes a spoken line that starts with the word refrain", () => {
+    const raw = ["You are home.", "The refrain of birdsong fills your quiet morning.", "You are calm.", "It is done.", "Refrain: The house is yours, thank you"].join("\n");
+    const { script, refrain } = splitRefrain(raw);
+    expect(refrain).toBe("The house is yours, thank you.");
+    expect(script).toContain("The refrain of birdsong fills your quiet morning.");
+  });
   it("refuses a refrain that wants, waits or rambles", () => {
     expect(splitRefrain("x\nRefrain: I will have the house").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: I want it").refrain).toBeNull();
