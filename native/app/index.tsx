@@ -18,7 +18,7 @@ export default function Home() {
       .then((a) => {
         setAccount(a);
         // Only the server's state here; a sign-in error stays until the next attempt.
-        if (!a.enabled) setNote("Accounts are off on this server.");
+        setNote((n) => (!a.enabled ? "Accounts are off on this server." : n === "Checking the server…" || n.startsWith("Could not reach") ? "" : n));
       })
       .catch((e: Error) => setNote(`Could not reach the server: ${e.message}`));
   }, []);
