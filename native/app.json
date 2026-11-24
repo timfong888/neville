@@ -13,7 +13,7 @@
       "expo-audio"
     ],
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "pckg.neville",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -21,7 +21,8 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "requireFullScreen": true
     },
     "extra": {
       "eas": {
