@@ -1,4 +1,4 @@
-import { File, Paths } from "expo-file-system";
+import { audio } from "./seams/audio";
 import { bell, renderRefrain, tone, wavFromPcm } from "@/lib/refrain";
 
 export const RATE = 22050;
@@ -17,24 +17,18 @@ export function refrain(): Int16Array {
   return out;
 }
 
-function save(name: string, pcm: Int16Array): string {
-  const f = new File(Paths.cache, name);
-  if (f.exists) f.delete();
-  f.create();
-  f.write(wavFromPcm(pcm, RATE));
-  return f.uri;
-}
+const save = (name: string, pcm: Int16Array) => audio.save(name, wavFromPcm(pcm, RATE), "audio/wav");
 
-/** The three ways to loop, as files on disk. */
-export function makeFiles(repeats: number, withBell: boolean) {
+/** The three ways to loop, as files the player can read. */
+export async function makeFiles(repeats: number, withBell: boolean) {
   const r = refrain();
   const b = bell(RATE);
   return {
     // One refrain. Looping is left to the player.
-    single: save("spike-refrain.wav", r),
+    single: await save("spike-refrain.wav", r),
     // The bell alone, for the playlist variant.
-    bell: save("spike-bell.wav", b),
+    bell: await save("spike-bell.wav", b),
     // Every repeat (and the bell, if asked) rendered into one file.
-    long: save(withBell ? "spike-long-bell.wav" : "spike-long.wav", renderRefrain({ refrain: r, rate: RATE, repeats, gapMs: 0, bell: withBell ? b : undefined })),
+    long: await save(withBell ? "spike-long-bell.wav" : "spike-long.wav", renderRefrain({ refrain: r, rate: RATE, repeats, gapMs: 0, bell: withBell ? b : undefined })),
   };
 }

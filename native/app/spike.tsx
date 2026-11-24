@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { type AudioPlayer, type AudioPlaylist, createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
+import { audio } from "../src/seams/audio";
+import type { PlayHandle } from "../src/seams/types";
 import { makeFiles } from "../src/spike";
 
 // Audio spike (#85). Three ways to loop a short refrain, with the screen locked.
@@ -13,13 +14,13 @@ export default function Spike() {
   const [bellOn, setBellOn] = useState(false);
   const [mode, setMode] = useState<Mode | null>(null);
   const [log, setLog] = useState<string[]>([]);
-  const player = useRef<AudioPlayer | null>(null);
-  const list = useRef<AudioPlaylist | null>(null);
+  const handle = useRef<PlayHandle | null>(null);
   const say = (m: string) => setLog((l) => [`${new Date().toLocaleTimeString()} ${m}`, ...l].slice(0, 12));
 
   useEffect(() => {
     // Background playback and lock-screen controls need this mode (doNotMix).
-    setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" })
+    audio
+      .configure()
       .then(() => say("audio mode set"))
       .catch((e) => say(`audio mode failed: ${e}`));
     return () => stop();
@@ -27,39 +28,22 @@ export default function Spike() {
 
   const stop = () => {
     try {
-      player.current?.pause();
-      player.current?.clearLockScreenControls();
-      player.current?.remove();
-      list.current?.pause();
-      list.current?.clearLockScreenControls();
-      list.current?.destroy();
+      handle.current?.stop();
     } catch {}
-    player.current = null;
-    list.current = null;
+    handle.current = null;
     setMode(null);
   };
 
-  const start = (m: Mode) => {
+  const start = async (m: Mode) => {
     stop();
     try {
-      const f = makeFiles(REPEATS, bellOn);
-      const meta = { title: `Spike: ${m}${bellOn ? " + bell" : ""}`, artist: "Neville" };
-      if (m === "playlist") {
-        // Native gapless sequencing: refrain, (bell), refrain, ... looping the whole list.
-        const l = createAudioPlaylist({ sources: bellOn ? [f.single, f.bell] : [f.single], loop: "all", updateInterval: 250 });
-        l.setActiveForLockScreen(true, meta);
-        l.play();
-        list.current = l;
-      } else {
-        const p = createAudioPlayer(m === "loop" ? f.single : f.long, { updateInterval: 250 });
-        p.loop = m === "loop";
-        p.setActiveForLockScreen(true, meta, { showSeekBackward: false, showSeekForward: false });
-        p.addListener("playbackStatusUpdate", (s) => {
-          if (s.didJustFinish) say("finished");
-        });
-        p.play();
-        player.current = p;
-      }
+      const f = await makeFiles(REPEATS, bellOn);
+      const title = `Spike: ${m}${bellOn ? " + bell" : ""}`;
+      // Native sequencing is gapless; the same list plays on the web with chained events.
+      handle.current =
+        m === "playlist"
+          ? audio.playSequence(bellOn ? [f.single, f.bell] : [f.single], { title })
+          : audio.play(m === "loop" ? f.single : f.long, { loop: m === "loop", title });
       setMode(m);
       say(`started: ${m}${bellOn ? " + bell" : ""}`);
     } catch (e) {

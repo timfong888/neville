@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Link } from "expo-router";
 import { PACES, TONES } from "@/lib/delivery";
 import type { AccountState } from "@/lib/api/client";
 import { api, API_URL, appVersion } from "../src/api";
-import { authClient, signInWithApple } from "../src/auth";
+import { auth } from "../src/seams/auth";
 
 // Phase 0 home: proves the app reaches the real API, runs shared lib/ code, and signs in.
 export default function Home() {
@@ -25,17 +25,18 @@ export default function Home() {
 
   useEffect(() => {
     refresh();
-    AppleAuthentication.isAvailableAsync().then(setAppleOk).catch(() => setAppleOk(false));
+    if (Platform.OS === "web") setAppleOk(true);
+    else AppleAuthentication.isAvailableAsync().then(setAppleOk).catch(() => setAppleOk(false));
   }, [refresh]);
 
   const apple = async () => {
-    const r = await signInWithApple();
+    const r = await auth.signInWithApple();
     if (!r.ok && !r.cancelled) setNote(r.message);
     else setNote("");
     refresh();
   };
   const signOut = async () => {
-    await authClient.signOut();
+    await auth.signOut();
     refresh();
   };
 
@@ -52,6 +53,10 @@ export default function Home() {
               <Text style={s.btnText}>Sign out</Text>
             </Pressable>
           </>
+        ) : account?.enabled && appleOk && Platform.OS === "web" ? (
+          <Pressable onPress={apple} style={s.btn}>
+            <Text style={s.btnText}>Sign in with Apple</Text>
+          </Pressable>
         ) : account?.enabled && appleOk ? (
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}

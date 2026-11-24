@@ -2,7 +2,8 @@ import * as SecureStore from "expo-secure-store";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
-import { API_URL } from "./config";
+import { API_URL } from "../config";
+import type { AppleResult, AuthSeam } from "./types";
 
 /** The URL scheme registered in app.json. The server trusts it as an origin. */
 export const SCHEME = "neville";
@@ -18,8 +19,6 @@ export async function sessionHeaders(): Promise<Record<string, string>> {
   const cookie = await authClient.getCookie();
   return { Origin: `${SCHEME}://`, ...(cookie ? { Cookie: cookie } : {}) };
 }
-
-export type AppleResult = { ok: true } | { ok: false; cancelled: boolean; message: string };
 
 /**
  * Sign in with Apple through the system sheet. Apple returns an identity token;
@@ -40,3 +39,11 @@ export async function signInWithApple(): Promise<AppleResult> {
     return { ok: false, cancelled: code === "ERR_REQUEST_CANCELED", message: e instanceof Error ? e.message : "Sign-in failed." };
   }
 }
+
+export const auth: AuthSeam = {
+  sessionHeaders,
+  signInWithApple,
+  async signOut() {
+    await authClient.signOut();
+  },
+};

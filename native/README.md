@@ -13,3 +13,17 @@ cd native && npm install
 npm run typecheck
 npm run export:ios
 ```
+
+## One client, iOS and web
+
+The same app builds for the web (`npm run export:web`, static export to `dist/`). Platform differences live in
+four seams under `src/seams/` (audio, key-value settings, library, auth), each a `.native.ts` and a `.web.ts`
+file. They are outside `app/` because Expo Router allows platform files inside the routes folder only
+when a plain version exists too. Screens import the seam (`./seams/audio`), never a platform file.
+
+### Two projects, one domain
+
+`vercel.json` here serves the web build and rewrites `/api/*` to the Next deployment, so the browser sees one
+origin and the session cookie is first-party. The rewrite destination is a literal URL; at cutover, point it at the
+Next project's own hostname when the shared domain moves to this project. Sign-in needs the shared domain:
+the Google and Apple redirect URIs are registered for it, so sign-in cannot be proven on a preview URL.
