@@ -78,10 +78,10 @@ export default function Spike() {
       <Text style={s.h1}>Audio spike</Text>
       <Text style={s.p}>Start one, lock the phone, listen for gaps, check the lock screen.</Text>
       <View style={s.row}>
-        <Text style={s.p}>Bell between repeats</Text>
-        <Switch value={bellOn} onValueChange={setBellOn} />
+        <Text style={s.p}>Bell between repeats{mode !== null ? " (stop to change)" : ""}</Text>
+        <Switch value={bellOn} onValueChange={setBellOn} disabled={mode !== null} />
       </View>
-      <Btn m="loop" label="1. Loop flag" note="One 1.5 s file, player.loop = true" />
+      <Btn m="loop" label="1. Loop flag" note={`One ${bellOn ? "3.3 s file (refrain + bell)" : "1.5 s file"}, player.loop = true`} />
       <Btn m="playlist" label="2. Playlist, loop all" note="Native gapless sequencing" />
       <Btn m="long" label="3. One long file" note={`${REPEATS} repeats rendered into one WAV`} />
       <Pressable style={s.btn} onPress={stop}>
