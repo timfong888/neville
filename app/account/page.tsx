@@ -9,6 +9,7 @@ import { EMPTY_LIBRARY, type Library } from "@/lib/library/model";
 import { getDeviceStore } from "@/lib/library/useLibrary";
 import { moveDeviceWork } from "@/lib/account/moveDeviceWork";
 import { clearDraft, hasDraft } from "@/lib/draftStore";
+import { deleteDevicePrompt, deviceDataSummary } from "@/lib/deviceDataCopy";
 
 export default function AccountPage() {
   const { account, ready } = useAccount();
@@ -88,7 +89,7 @@ export default function AccountPage() {
   };
 
   const clearDevice = async () => {
-    if (!window.confirm("Delete every manifestation and playlist saved on this device?")) return;
+    if (!window.confirm(deleteDevicePrompt(deviceCount, deviceLib.playlists.length, draftKept))) return;
     const d = getDeviceStore();
     for (const p of deviceLib.playlists) await d.deletePlaylist(p.id);
     for (const m of deviceLib.manifestations) await d.deleteManifestation(m.id);
@@ -210,9 +211,9 @@ export default function AccountPage() {
       ) : (
         <div className="card">
           <p className="muted">
-            {deviceCount} {deviceCount === 1 ? "manifestation" : "manifestations"} and {deviceLib.playlists.length}{" "}
-            {deviceLib.playlists.length === 1 ? "playlist" : "playlists"} saved in this browser. No one else can see
-            them, and they are lost if you clear this site&apos;s data.
+            {deviceDataSummary(deviceCount, deviceLib.playlists.length, draftKept)}
+            {(deviceCount > 0 || deviceLib.playlists.length > 0 || draftKept) &&
+              " Only you can see this, and clearing this site\u2019s data removes it."}
           </p>
           <button className="btn sm ghost danger" onClick={clearDevice} disabled={!deviceCount && !deviceLib.playlists.length && !draftKept}>
             Delete everything on this device
