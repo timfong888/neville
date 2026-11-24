@@ -1,6 +1,7 @@
 // Browser-only: turns a recording with a refrain into a programming-mode
 // session (#77): script, the refrain looped with an optional bell, closing.
 import { buildSession, parseWav, resample, toWav } from "@/lib/repetition";
+import { rmsFrames, speechSegments, type Segment } from "@/lib/music";
 
 let bellCache: Promise<{ rate: number; pcm: Int16Array } | null> | null = null;
 
@@ -20,7 +21,20 @@ export type Composed = {
   /** The script alone, without the refrain or the loop: what Save keeps. */
   saveUrl: string;
   repeats: number;
+  /**
+   * Where the voice speaks, measured from the session's own samples. The page
+   * uses this instead of decoding the whole session again, which for 20
+   * minutes would hold a few hundred MB in one tab.
+   */
+  speech: Segment[];
 };
+
+/** Speech segments from 16-bit PCM, on the same scale as the decoded audio speechOf reads. */
+export function speechOfPcm(pcm: Int16Array, rate: number, hop = 0.05): Segment[] {
+  const frames = rmsFrames(pcm, rate, hop);
+  for (let i = 0; i < frames.length; i++) frames[i] /= 32768;
+  return speechSegments(frames, hop);
+}
 
 /** Null when the recording cannot be cut apart (not 16-bit WAV, or starts that do not fit). */
 export async function composeSession(opts: {
@@ -50,6 +64,7 @@ export async function composeSession(opts: {
     starts: s.starts,
     saveUrl: URL.createObjectURL(new Blob([toWav(s.script, s.rate)], { type: "audio/wav" })),
     repeats: s.repeats,
+    speech: speechOfPcm(s.pcm, s.rate),
   };
 }
 

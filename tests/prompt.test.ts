@@ -149,7 +149,7 @@ describe("refrain (#77)", () => {
     expect(cleanLines(script, 700)?.at(-1)).toBe(CLOSING);
   });
   it("never leaves a refrain label in the spoken script", () => {
-    for (const label of ["Refrain — The house is yours.", "Refrain (for repeating): The house is yours.", "The refrain: The house is yours.", "**Refrain**: The house is yours.", "11. Refrain: The house is yours.", "## Refrain: The house is yours.", '"Refrain: The house is yours."', "'Refrain: The house is yours.'", "‘Refrain: The house is yours.’", "Refrain"]) {
+    for (const label of ["Refrain — The house is yours.", "Refrain (for repeating): The house is yours.", "The refrain: The house is yours.", "**Refrain**: The house is yours.", "11. Refrain: The house is yours.", "## Refrain: The house is yours.", '"Refrain: The house is yours."', "'Refrain: The house is yours.'", "‘Refrain: The house is yours.’", "Refrain for repeating: The house is yours.", "Refrain"]) {
       const { script, refrain } = splitRefrain([...body, "It is done.", label].join("\n"));
       expect(script.toLowerCase()).not.toContain("refrain");
       if (label !== "Refrain") expect(refrain).toBe("The house is yours.");

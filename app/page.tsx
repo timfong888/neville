@@ -40,6 +40,8 @@ type Made = {
   /** Programming mode (#77): the script alone, without the loop, for Save. */
   saveUrl?: string;
   saveLines?: string[];
+  /** Programming mode: where the voice speaks, so the long session is not decoded again. */
+  speech?: Segment[];
 };
 
 /** The server's line start times, if present and sound; null makes the page estimate instead. */
@@ -195,6 +197,10 @@ export default function DemoPage() {
   useEffect(() => {
     speech.current = [];
     if (!made) return;
+    if (made.speech) {
+      speech.current = made.speech;
+      return;
+    }
     let live = true;
     void fetch(made.url)
       .then((r) => r.blob())
@@ -382,7 +388,7 @@ export default function DemoPage() {
         const plain =
           !session && refrain && allStarts ? await scriptOnly(audio, allStarts[made.length]).catch(() => null) : null;
         next = session
-          ? { ...base, lines: session.lines, url: session.url, starts: session.starts, saveUrl: session.saveUrl, saveLines: made }
+          ? { ...base, lines: session.lines, url: session.url, starts: session.starts, saveUrl: session.saveUrl, saveLines: made, speech: session.speech }
           : {
               ...base,
               lines: made,

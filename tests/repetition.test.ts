@@ -130,3 +130,17 @@ describe("scriptOnly (when the loop cannot be built)", () => {
     expect(await scriptOnly(new Blob(["ID3 not a wav"]), 0.8)).toBeNull();
   });
 });
+
+describe("speechOfPcm", () => {
+  it("finds speech in 16-bit PCM on the scale speechOf uses", async () => {
+    const { speechOfPcm } = await import("@/lib/repetitionClient");
+    const rate = 8000;
+    const pcm = new Int16Array(rate * 3);
+    // 1 s of silence, 1 s of a tone, 1 s of silence.
+    for (let i = rate; i < 2 * rate; i++) pcm[i] = Math.round(8000 * Math.sin((2 * Math.PI * 220 * i) / rate));
+    const segs = speechOfPcm(pcm, rate);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].start).toBeCloseTo(1, 1);
+    expect(segs[0].end).toBeCloseTo(2, 1);
+  });
+});
