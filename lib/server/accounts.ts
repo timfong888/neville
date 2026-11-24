@@ -3,6 +3,7 @@
 // production build without them behaves exactly as before (device storage).
 import "server-only";
 import { del, get, put } from "@vercel/blob";
+import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { tryAppleClientSecret } from "@/lib/server/appleSecret";
@@ -38,6 +39,10 @@ export { withTx };
 export const PRIMARY_ORIGIN = "https://getneville.vercel.app";
 // The earlier production host; it now redirects to PRIMARY_ORIGIN but stays trusted.
 export const LEGACY_ORIGINS = ["https://neville-delta.vercel.app"];
+
+// The native iOS app's URL scheme (native/app.json), which Better Auth uses for
+// sign-in redirects and its Origin check. A browser cannot send it as an Origin.
+const NATIVE_TRUSTED = ["neville://"];
 
 function baseURL(): string | undefined {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
@@ -130,8 +135,9 @@ function makeAuth() {
       ...apple,
     },
     // Apple returns to the callback with a form POST from its own origin.
-    trustedOrigins: [PRIMARY_ORIGIN, ...LEGACY_ORIGINS, ...("apple" in apple ? ["https://appleid.apple.com"] : [])],
-    plugins: [nextCookies()],
+    trustedOrigins: [PRIMARY_ORIGIN, ...LEGACY_ORIGINS, ...NATIVE_TRUSTED, ...("apple" in apple ? ["https://appleid.apple.com"] : [])],
+    // expo() lets the native app sign in and carry its session; nextCookies() keeps the website's cookies.
+    plugins: [expo(), nextCookies()],
   });
 }
 

@@ -1,13 +1,13 @@
-import Constants from "expo-constants";
 import { createApi } from "@/lib/api/client";
+import { sessionHeaders } from "./auth";
+import { API_URL } from "./config";
 
-/** The site the app talks to. Override with EXPO_PUBLIC_API_URL for a preview deployment. */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://getneville.vercel.app";
+export { API_URL, appVersion } from "./config";
 
-/** Headers every request carries. Auth adds the session cookie here. */
-async function headers(): Promise<Record<string, string>> {
-  return {};
-}
-
-export const api = createApi({ baseUrl: API_URL, headers });
-export const appVersion = Constants.expoConfig?.version ?? "dev";
+export const api = createApi({
+  baseUrl: API_URL,
+  // The session cookie and Origin (src/auth.ts). The server refuses writes without an Origin (#62).
+  headers: () => sessionHeaders(),
+  // The cookie is sent by hand; the iOS cookie jar must not add a second one.
+  credentials: "omit",
+});

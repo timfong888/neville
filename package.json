@@ -12,8 +12,9 @@
     "eval:scripts": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts"
   },
   "dependencies": {
+    "@better-auth/expo": "^1.7.27",
     "@vercel/blob": "^2.9.0",
-    "better-auth": "^1.7.26",
+    "better-auth": "^1.7.27",
     "next": "16.4.6",
     "pg": "^8.23.1",
     "react": "19.3.1",
