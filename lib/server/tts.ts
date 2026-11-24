@@ -368,41 +368,68 @@ export function atomicText(lines: string[]): string {
 
 /**
  * An atomic voice with extra lines after the script (the refrain, #77). The
- * refrain is never cut out of the script's single take, whose line starts may
- * only be estimated: it is recorded in a request of its own, at the same
- * time, and joined after the closing with no pause. Its start is then exact.
+ * loop is built by cutting the recording at the closing's start and the
+ * refrain's start, so both must be exact; a single take's starts may only be
+ * estimated. So the script before the closing is recorded in one take, and
+ * the closing and the refrain each in a short request of their own, all at
+ * once. They are joined with the pace's pause before the closing and none
+ * before the refrain, and both cut points are then measured, never guessed.
  * If only the refrain fails, the script is kept without it (`tailDropped`).
  */
 async function withRecordedTail(opts: Parameters<typeof synthesize>[0], tail: number): Promise<Speech> {
   const lines = opts.lines!;
-  const body = lines.slice(0, lines.length - tail);
-  const extra = lines.slice(body.length).join(" ");
-  const [script, refrain] = await Promise.all([
+  const scriptLines = lines.slice(0, lines.length - tail);
+  const body = scriptLines.slice(0, -1);
+  // Too short for a take of its own: record every line on its own instead.
+  if (body.length < 2) return synthesize({ ...opts, atomic: false });
+  const closing = scriptLines[scriptLines.length - 1];
+  const extra = lines.slice(scriptLines.length).join(" ");
+  const single = (text: string) => synthesize({ ...opts, atomic: false, text, lines: undefined, pauseMs: 0, tail: 0 });
+  const [first, end, refrain] = await Promise.all([
     synthesize({ ...opts, lines: body, tail: 0 }),
-    synthesize({ ...opts, atomic: false, text: extra, lines: undefined, pauseMs: 0, tail: 0 }),
+    single(closing),
+    single(extra),
   ]);
-  const sent = (script.sentChars ?? 0) + (refrain.sentChars ?? 0);
-  if (!script.ok) return { ...script, sentChars: sent };
-  const scriptRate = new DataView(script.audio).getUint32(24, true);
-  const refrainRate = refrain.ok ? new DataView(refrain.audio).getUint32(24, true) : 0;
-  if (!refrain.ok || script.mime !== "audio/wav" || refrain.mime !== "audio/wav" || refrainRate !== scriptRate) {
-    return { ...script, requests: script.requests + (refrain.ok ? refrain.requests : 1), sentChars: sent, tailDropped: true };
+  const sent = (first.sentChars ?? 0) + (end.sentChars ?? 0) + (refrain.sentChars ?? 0);
+  if (!first.ok) return { ...first, sentChars: sent };
+  if (!end.ok) return { ...end, sentChars: sent };
+  const rate = new DataView(first.audio).getUint32(24, true);
+  const sameRate = (x: Extract<Speech, { ok: true }>) => x.mime === "audio/wav" && new DataView(x.audio).getUint32(24, true) === rate;
+  if (first.mime !== "audio/wav" || !sameRate(end)) {
+    return { ok: false, status: 502, message: "The recording could not be put together.", sentChars: sent };
   }
-  const a = script.audio.slice(44);
-  const b = refrain.audio.slice(44);
-  const audio = wav(join([a, b]), scriptRate);
+  const a = first.audio.slice(44);
+  const c = end.audio.slice(44);
+  const pauseMs = first.pauseMs ?? opts.pauseMs ?? 0;
+  const gap = new ArrayBuffer(silenceBytes(pauseMs, rate));
+  const useRefrain = refrain.ok && sameRate(refrain);
+  const r = useRefrain ? refrain.audio.slice(44) : new ArrayBuffer(0);
+  let audio = wav(join(useRefrain ? [a, gap, c, r] : [a, gap, c]), rate);
+  let dropped = !useRefrain;
+  if (audio.byteLength > MAX_AUDIO_BYTES && useRefrain) {
+    audio = wav(join([a, gap, c]), rate);
+    dropped = true;
+  }
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return { ...script, requests: script.requests + refrain.requests, sentChars: sent, tailDropped: true };
+    return { ok: false, status: 502, message: "The recording came out too long to send.", sentChars: sent };
   }
-  const share = a.byteLength / (a.byteLength + b.byteLength);
-  const starts = [...(script.starts ?? [0]).map((x) => Math.round(x * share * 10000) / 10000), Math.round(share * 10000) / 10000];
+  const total = a.byteLength + gap.byteLength + c.byteLength + (dropped ? 0 : r.byteLength);
+  const at = (bytes: number) => Math.round((bytes / total) * 10000) / 10000;
+  const starts = [
+    ...(first.starts ?? [0]).map((x) => at(x * a.byteLength)),
+    at(a.byteLength + gap.byteLength),
+    ...(dropped ? [] : [at(a.byteLength + gap.byteLength + c.byteLength)]),
+  ];
   return {
-    ...script,
+    ...first,
     audio,
-    requests: script.requests + refrain.requests,
-    ids: [...script.ids, ...refrain.ids],
+    requests: first.requests + end.requests + (refrain.ok ? refrain.requests : 1),
+    ids: [...first.ids, ...end.ids, ...(refrain.ok ? refrain.ids : [])],
     sentChars: sent,
     starts,
+    pauseMs,
+    startsEstimated: first.startsEstimated,
+    ...(dropped ? { tailDropped: true } : {}),
   };
 }
 

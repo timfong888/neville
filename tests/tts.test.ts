@@ -277,17 +277,20 @@ describe("atomic voices (#76)", () => {
     voicedAtomic = false;
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    // One request for the script, one for the refrain: never cut from the script's take.
-    expect(seen.map((b) => b.input).sort()).toEqual([lines.join(" [pause] "), "The house is yours."].sort());
-    expect(out.requests).toBe(2);
+    // One take for the script before the closing, then the closing and the refrain
+    // each on their own: the two places the loop cuts are never taken from a single take.
+    const body = lines.slice(0, -1).join(" [pause] ");
+    expect(seen.map((b) => b.input).sort()).toEqual([body, "It is done.", "The house is yours."].sort());
+    expect(out.requests).toBe(3);
     expect(out.tailDropped).toBeFalsy();
     const s = out.starts!;
     expect(s).toHaveLength(4);
     expect(s[3]).toBeGreaterThan(s[2]);
-    expect(out.sentChars).toBe(lines.join(" [pause] ").length + "The house is yours.".length);
+    expect(s[2]).toBeGreaterThan(s[1]);
+    expect(out.sentChars).toBe(body.length + "It is done.".length + "The house is yours.".length);
   });
 
-  it("gives the refrain an exact start even when the script's starts are estimated", async () => {
+  it("gives the closing and the refrain exact starts even when the take's starts are estimated", async () => {
     const synthesize = await load();
     const withRefrain = [...lines, "The house is yours."];
     const out = await synthesize({
@@ -296,13 +299,26 @@ describe("atomic voices (#76)", () => {
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    // The silent script take has no pauses to find, so its own starts are estimates,
-    // but the refrain starts exactly where the script's audio ends.
-    expect(seen).toHaveLength(2);
+    // The silent take has no pauses to find, so its own starts are estimates, but the
+    // closing and the refrain start exactly where the pieces are joined.
+    expect(seen).toHaveLength(3);
     const s = out.starts!;
     expect(s).toHaveLength(4);
-    // Both takes are 0.5 s of the mock's audio, so the refrain starts halfway.
-    expect(s[3]).toBeCloseTo(0.5, 3);
+    // 0.5 s take, 1.5 s pause, 0.5 s closing, 0.5 s refrain (44.1 kHz in the mock).
+    const take = 44100, gap = 44100 * 1.5 * 2, total = take + gap + take + take;
+    expect(s[2]).toBeCloseTo((take + gap) / total, 3);
+    expect(s[3]).toBeCloseTo((take + gap + take) / total, 3);
+  });
+
+  it("fails when the closing's own request fails, rather than play a script without it", async () => {
+    failOn = "It is done.";
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 1500, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    failOn = null;
+    expect(out.ok).toBe(false);
   });
 
   it("keeps the script without the refrain when only the refrain's request fails", async () => {
