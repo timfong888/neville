@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate": "node scripts/migrate.mjs --force"
+    "migrate": "node scripts/migrate.mjs --force",
+    "eval:scripts": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

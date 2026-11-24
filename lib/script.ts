@@ -120,7 +120,7 @@ export function neutralScript(name: string): string[] {
     "Good things come to you easily, and you welcome them.",
     "You are kind to yourself and to the people around you.",
     "You feel a quiet warmth in your chest.",
-    "You are grateful for this day and for who you are becoming.",
+    "You are grateful for this day and for who you are.",
     "And so it is.",
   ];
 }

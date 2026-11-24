@@ -24,10 +24,16 @@ async function available(): Promise<Set<string> | null> {
   }
 }
 
-/** The first configured model that OpenRouter lists; the first configured one if the list cannot be read. */
-export async function scriptModel(): Promise<string> {
+/** The configured models OpenRouter lists, in order; all of them if the list cannot be read. */
+export async function scriptModels(): Promise<string[]> {
   const ids = await available();
-  return limits.scriptModels.find((m) => !ids || ids.has(m)) ?? limits.scriptModels[0];
+  const listed = limits.scriptModels.filter((m) => !ids || ids.has(m));
+  return listed.length ? listed : limits.scriptModels;
+}
+
+/** The first configured model that OpenRouter lists. */
+export async function scriptModel(): Promise<string> {
+  return (await scriptModels())[0];
 }
 
 export type Script = { lines: string[]; source: "model" | "template"; model?: string };
@@ -36,29 +42,53 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   // The fallback never repeats the wish: see neutralScript.
   const template = (): Script => ({ lines: neutralScript(opts.name), source: "template" });
   try {
-    const model = await scriptModel();
-    const res = await fetch(`${OPENROUTER}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${opts.key}`, "Content-Type": "application/json", "X-Title": "Neville" },
-      body: JSON.stringify({
-        model,
-        max_tokens: 400,
-        temperature: 0.8,
-        messages: [
-          { role: "system", content: SYSTEM },
-          {
-            role: "user",
-            content: wishMessage(opts.want, opts.name, opts.variant, opts.toneNote),
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) return template();
-    const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
-    const text = json.choices?.[0]?.message?.content;
-    const lines = typeof text === "string" ? cleanLines(text, limits.maxScriptChars) : null;
-    return lines ? { lines, source: "model", model } : template();
+    const models = await scriptModels();
+    // Up to two tries within the time box. A model that is rate-limited or down
+    // (429, 5xx) hands over to the next configured model; a reply that is
+    // unusable (too thin, or a stock phrase) is asked again for fresh wording.
+    // The recording still needs most of the minute.
+    const deadline = Date.now() + 14_000;
+    let m = 0;
+    for (let attempt = 0; attempt < 2 && m < models.length; attempt++) {
+      const left = deadline - Date.now();
+      if (attempt > 0 && left < 4_000) break;
+      const model = models[m];
+      let res: Response;
+      try {
+        res = await fetch(`${OPENROUTER}/chat/completions`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${opts.key}`, "Content-Type": "application/json", "X-Title": "Neville" },
+          body: JSON.stringify({
+            model,
+            max_tokens: 400,
+            temperature: 0.8,
+            messages: [
+              { role: "system", content: SYSTEM },
+              {
+                role: "user",
+                content: wishMessage(opts.want, opts.name, opts.variant + attempt, opts.toneNote),
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(Math.min(12_000, left)),
+        });
+      } catch {
+        m++; // timed out or dropped: try the next model
+        continue;
+      }
+      if (!res.ok) {
+        if (res.status === 429 || res.status >= 500) {
+          m++;
+          continue;
+        }
+        return template();
+      }
+      const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
+      const text = json.choices?.[0]?.message?.content;
+      const lines = typeof text === "string" ? cleanLines(text, limits.maxScriptChars) : null;
+      if (lines) return { lines, source: "model", model };
+    }
+    return template();
   } catch {
     return template();
   }
