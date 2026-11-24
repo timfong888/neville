@@ -42,7 +42,7 @@ export default function Spike() {
       // Native sequencing is gapless; the same list plays on the web with chained events.
       handle.current =
         m === "playlist"
-          ? audio.playSequence(bellOn ? [f.single, f.bell] : [f.single], { title })
+          ? audio.playSequence(bellOn ? [f.refrainOnly, f.bell] : [f.single], { title })
           : audio.play(m === "loop" ? f.single : f.long, { loop: m === "loop", title });
       setMode(m);
       say(`started: ${m}${bellOn ? " + bell" : ""}`);

@@ -18,7 +18,7 @@ export default function Home() {
       .account()
       .then((a) => {
         setAccount(a);
-        setNote(a.enabled ? "" : "Accounts are off on this server.");
+        setNote((n) => (!a.enabled ? "Accounts are off on this server." : n === "Checking the server…" || n.startsWith("Could not reach") ? "" : n));
       })
       .catch((e: Error) => setNote(`Could not reach the server: ${e.message}`));
   }, []);
@@ -31,8 +31,7 @@ export default function Home() {
 
   const apple = async () => {
     const r = await auth.signInWithApple();
-    if (!r.ok && !r.cancelled) setNote(r.message);
-    else setNote("");
+    setNote(!r.ok && !r.cancelled ? r.message : "");
     refresh();
   };
   const signOut = async () => {
