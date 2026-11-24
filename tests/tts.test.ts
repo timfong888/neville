@@ -197,6 +197,10 @@ describe("atomic voices (#76)", () => {
     expect(out.ok).toBe(true);
     // One atomic request, then one per line.
     expect(seen.map((b) => b.input)).toEqual([lines.join(" [pause] "), ...lines]);
+    // Both takes were billed: the thrown-away one is reported for the ledger.
+    if (!out.ok) return;
+    expect(out.requests).toBe(lines.length + 1);
+    expect(out.discardedChars).toBe(lines.join(" [pause] ").length);
   });
 
   it("leaves voices without the flag line by line", async () => {

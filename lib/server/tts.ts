@@ -95,6 +95,12 @@ export type Speech =
       starts?: number[];
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
+      /**
+       * Characters sent in a take that was billed and then thrown away: the
+       * one-request recording that came back too long before the line by line
+       * fallback (#76). The cost ledger adds them to what it prices.
+       */
+      discardedChars?: number;
     }
   | { ok: false; status: number; message: string };
 
@@ -161,7 +167,11 @@ export async function synthesize(opts: {
     // found and shortened and it is still too long, the speech alone is too
     // long, and line by line would fail the same way: no second recording.)
     if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
-      return synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
+      const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
+      // The first take was recorded and billed in full, so the ledger counts it too.
+      return again.ok
+        ? { ...again, requests: again.requests + 1, discardedChars: atomicText(opts.lines).length }
+        : again;
     }
     return one;
   }

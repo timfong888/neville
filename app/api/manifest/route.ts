@@ -112,8 +112,9 @@ export async function POST(req: Request) {
     kind: "speech",
     model: voice.model,
     voiceId: voice.id,
-    chars: spoken,
-    estUsd: await estimateSpeech(voice.model, spoken),
+    // A discarded first take (too long for one response) was billed as well.
+    chars: spoken + (speech.discardedChars ?? 0),
+    estUsd: await estimateSpeech(voice.model, spoken + (speech.discardedChars ?? 0)),
   });
   return new NextResponse(speech.audio, {
     headers: {
