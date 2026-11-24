@@ -208,9 +208,15 @@ export async function synthesize(opts: {
       const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
       // The first take was recorded and billed in full, so the ledger counts it too.
       const discarded = one.sentChars ?? atomicText(opts.lines).length;
-      return again.ok
-        ? { ...again, requests: again.requests + 1, sentChars: again.sentChars + discarded }
-        : { ...again, sentChars: discarded + (again.sentChars ?? 0) };
+      if (again.ok) return { ...again, requests: again.requests + 1, sentChars: again.sentChars + discarded };
+      const spent = discarded + (again.sentChars ?? 0);
+      // The line by line retry failed, but the atomic take is still playable:
+      // keep its script without the refrain rather than lose the recording.
+      if (mustCut && one.ok) {
+        const kept = dropTail(one, opts.lines.length - (opts.tail ?? 0));
+        return { ...kept, sentChars: spent };
+      }
+      return { ...again, sentChars: spent };
     }
     return one;
   }
@@ -374,9 +380,8 @@ export function atomicText(lines: string[]): string {
 
 /**
  * The script without its last lines (the refrain), from a take whose line
- * starts are only estimated. Cut only in a measured silence: one after the
- * closing has begun, the nearest to the refrain's estimated start, keeping
- * 120 ms of it so no word of the closing is lost. With no such silence the
+ * starts are only estimated. Cut only in a measured silence: the longest one
+ * after the closing's estimated start, keeping 120 ms of it. With no such silence the
  * estimate is not trusted for cutting, and the recording fails as before.
  */
 function dropTail(take: Extract<Speech, { ok: true }>, keep: number): Speech {
@@ -384,10 +389,12 @@ function dropTail(take: Extract<Speech, { ok: true }>, keep: number): Speech {
   const rate = new DataView(take.audio).getUint32(24, true) || 24000;
   const pcm = new Int16Array(take.audio.slice(44));
   const closingAt = Math.round((starts[keep - 1] ?? 0) * pcm.length);
-  const guess = Math.round((starts[keep] ?? 1) * pcm.length);
+  // The pause written before the refrain is the longest silence after the
+  // closing begins; a breath inside the refrain is shorter. On a tie the later
+  // one is taken, since the closing comes before the refrain.
   const near = silentRuns(pcm, rate)
     .filter(([a, b]) => a > closingAt && b < pcm.length)
-    .sort((x, y) => Math.abs((x[0] + x[1]) / 2 - guess) - Math.abs((y[0] + y[1]) / 2 - guess))[0];
+    .reduce<[number, number] | null>((best, r) => (!best || r[1] - r[0] >= best[1] - best[0] ? r : best), null);
   if (!near) {
     return { ok: false, status: 502, message: "The recording could not be cut into lines in time.", sentChars: take.sentChars };
   }
