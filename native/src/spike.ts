@@ -31,8 +31,10 @@ export function makeFiles(repeats: number, withBell: boolean) {
   const b = bell(RATE);
   return {
     // One refrain. Looping is left to the player.
-    single: save("spike-refrain.wav", r),
-    // The bell alone, for the playlist variant.
+    // With the bell on, the bell follows the refrain inside the file, so the loop flag repeats both.
+    single: save(withBell ? "spike-refrain-bell.wav" : "spike-refrain.wav", withBell ? renderRefrain({ refrain: r, rate: RATE, repeats: 2, gapMs: 0, bell: b }).slice(0, r.length + b.length) : r),
+    // The refrain alone, and the bell alone, for the playlist variant.
+    refrainOnly: save("spike-refrain.wav", r),
     bell: save("spike-bell.wav", b),
     // Every repeat (and the bell, if asked) rendered into one file.
     long: save(withBell ? "spike-long-bell.wav" : "spike-long.wav", renderRefrain({ refrain: r, rate: RATE, repeats, gapMs: 0, bell: withBell ? b : undefined })),
