@@ -96,6 +96,12 @@ export type Speech =
       /** The pause actually used between lines, in ms. */
       pauseMs?: number;
       /**
+       * True when `starts` are estimated from the text, not measured (an atomic
+       * take whose pauses could not be found). Good enough for the read-along,
+       * never for cutting the audio.
+       */
+      startsEstimated?: boolean;
+      /**
        * Characters in every request sent for this recording: the inline pause
        * tags of a one-request take, a too-long take thrown away before the line
        * by line fallback (#76), and requests retried after a provider error or
@@ -184,7 +190,16 @@ export async function synthesize(opts: {
     // record line by line instead, where they can be. (When the pauses were
     // found and shortened and it is still too long, the speech alone is too
     // long, and line by line would fail the same way: no second recording.)
-    if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
+    // The refrain (#77) is cut from the end of the recording, so its start
+    // must be measured. If the atomic take's pauses could not be found, record
+    // line by line instead, where every line's start is exact.
+    const mustCut = one.ok && one.startsEstimated === true && (opts.tail ?? 0) > 0;
+    if (mustCut || (!one.ok && one.status === 413)) {
+      if (Date.now() - started >= (opts.timeoutMs ?? 55_000) / 2) {
+        return mustCut
+          ? { ok: false, status: 502, message: "The recording could not be cut into lines in time.", sentChars: one.sentChars }
+          : one;
+      }
       const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
       // The first take was recorded and billed in full, so the ledger counts it too.
       const discarded = one.sentChars ?? atomicText(opts.lines).length;
@@ -389,7 +404,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
     if (out.audio.byteLength > MAX_AUDIO_BYTES) {
       return { ok: false, status: 413, message: "The recording came out too long to send in one piece.", sentChars: out.sentChars };
     }
-    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate) };
+    return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate), startsEstimated: true };
   }
   const sizes = pieces.map((p) => p.byteLength);
   // The refrain (#77) follows the closing with no pause, and is left out of
