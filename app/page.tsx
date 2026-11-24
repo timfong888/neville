@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { hashOf, neutralScript, titleFor, VARIANT_COUNT } from "@/lib/script";
+import { hashOf, neutralScript, scriptLines, titleFor, VARIANT_COUNT } from "@/lib/script";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
@@ -10,6 +10,7 @@ import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { lineStarts } from "@/lib/audio";
+import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
@@ -63,6 +64,8 @@ export default function DemoPage() {
   // A recording made by the server for this wish. Null means the free
   // fallback: a template script read by the device's own voice.
   const [made, setMade] = useState<Made | null>(null);
+  // The server's own script when only the voice failed: read by the device voice.
+  const [fallback, setFallback] = useState<string[] | null>(null);
   const [note, setNote] = useState("");
   const audio = useRef<HTMLAudioElement | null>(null);
   const [used, setUsed] = useState(0);
@@ -111,9 +114,10 @@ export default function DemoPage() {
     prefetchMusic(choice);
   }, []);
 
-  // Without a server recording the device reads a general script. It never
-  // reads the typed wish back: only the server's text model vets a wish.
-  const lines = useMemo(() => made?.lines ?? neutralScript(name.trim()), [made, name]);
+  // Without a server recording the device reads the script the server wrote,
+  // when it sent one, else a general script. It never reads the typed wish back:
+  // only the server's text model vets a wish.
+  const lines = useMemo(() => made?.lines ?? fallback ?? neutralScript(name.trim()), [made, fallback, name]);
   const hue = useMemo(() => hashOf(want + variant) % 360, [want, variant]);
   // Voices, free counter, and shared links.
   useEffect(() => {
@@ -305,6 +309,7 @@ export default function DemoPage() {
     setNote("");
     setIdx(-1);
     let next: Made | null = null;
+    let written: string[] | null = null;
     let why = "";
     // Mix voices on: each new recording takes the next voice in the set.
     const mixing = readMixOn();
@@ -336,8 +341,9 @@ export default function DemoPage() {
           starts: readStarts(res.headers.get("X-Line-Starts"), made.length),
         };
       } else {
-        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        const j = (await res.json().catch(() => null)) as { error?: string; lines?: unknown } | null;
         why = j?.error ?? "Recording is not available just now.";
+        written = scriptLines(j?.lines);
       }
     } catch {
       why = "The recording could not be made just now.";
@@ -351,10 +357,13 @@ export default function DemoPage() {
       refreshNextVoice();
     }
     setMade(next);
+    setFallback(next ? null : written);
     setSavedId("");
     setNote(
       !next
-        ? `${why} Here is a general version in your device's own voice.`
+        ? written
+          ? `${why} Here is your script in your device's own voice.`
+          : `${why} Here is a general version in your device's own voice.`
         : next.source === "template"
           ? "A personal script could not be written just now, so this is a general one."
           : "",
@@ -451,6 +460,7 @@ export default function DemoPage() {
     stop();
     run.current++;
     setMade(null);
+    setFallback(null);
     setNote("");
     writeCount(0);
     setUsed(0);
@@ -588,7 +598,7 @@ export default function DemoPage() {
       >
         <div className="blob" />
         <div className="line" aria-live="polite">
-          {current ?? (idx >= lines.length ? "And so it is." : "")}
+          {current ?? (idx >= lines.length ? CLOSING : "")}
         </div>
       </div>
 

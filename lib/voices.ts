@@ -27,6 +27,11 @@ export type Voice = {
   enabled: boolean;
   /** May new audio be recorded in this voice? False means sample only. */
   generate: boolean;
+  /**
+   * Record the whole script in one request, with pauses written into the text
+   * (#76). Only for models that honour inline pauses and a style instruction.
+   */
+  atomic?: boolean;
   tier: Tier;
 };
 
@@ -49,6 +54,7 @@ function load(): { all: Voice[]; defaultId: string } {
     if (v.desc !== undefined && (typeof v.desc !== "string" || !v.desc)) {
       throw new Error(`config/voices.json: "${v.id}" has an empty or invalid "desc".`);
     }
+    if (v.atomic !== undefined && typeof v.atomic !== "boolean") throw new Error(`config/voices.json: "${v.id}" has "atomic" that is not true or false.`);
     if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);

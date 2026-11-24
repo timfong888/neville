@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sameSiteRequest } from "@/lib/server/origin";
-import { accountsEnabled, currentUser, missingVars, purgeAudio, withTx } from "@/lib/server/accounts";
+import { accountsEnabled, currentUser, missingVars, purgeAudio, signInProviders, withTx } from "@/lib/server/accounts";
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   const user = enabled ? await currentUser(req).catch(() => null) : null;
   // Variable names only, never values, and only off production.
   const missing = !enabled && process.env.VERCEL_ENV !== "production" ? missingVars() : undefined;
-  return NextResponse.json({ enabled, user, missing }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ enabled, user, missing, providers: enabled ? signInProviders() : [] }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /**
