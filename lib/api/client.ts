@@ -96,15 +96,16 @@ export function createApi(opts: ApiOptions) {
     body: JSON.stringify(body),
   });
 
-  async function recording(res: Response): Promise<Recording> {
-    const lines = readScript(res.headers.get("X-Script"));
+  /** `lines` is the script already known to the caller; `/api/rerecord` does not send `X-Script` back. */
+  async function recording(res: Response, lines?: string[]): Promise<Recording> {
+    const script = lines ?? readScript(res.headers.get("X-Script"));
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
-      lines,
+      lines: script,
       voiceId: res.headers.get("X-Voice-Id") ?? "",
       source: res.headers.get("X-Script-Source") ?? "",
-      starts: readStarts(res.headers.get("X-Line-Starts"), lines.length),
+      starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
     };
   }
 
@@ -124,7 +125,7 @@ export function createApi(opts: ApiOptions) {
     },
     /** Records an existing script again, in one voice. */
     async rerecord(lines: string[], voiceId: string): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId })));
+      return recording(await call("/api/rerecord", json({ lines, voiceId })), lines);
     },
 
     async voices(): Promise<unknown> {
@@ -141,10 +142,10 @@ export function createApi(opts: ApiOptions) {
       /** `audio` undefined keeps the stored recording; null removes it. */
       async putManifestation(m: Manifestation, audio?: FileLike | null): Promise<void> {
         const form = new FormData();
-        form.set("meta", JSON.stringify(m));
-        // React Native's FormData takes { uri, name, type } where the web takes a Blob.
-        if (audio) form.set("audio", audio as Blob, "audio");
-        if (audio === null) form.set("removeAudio", "1");
+        // `append`, not `set`: React Native's FormData has no `set`. It takes { uri, name, type } where the web takes a Blob.
+        form.append("meta", JSON.stringify(m));
+        if (audio) (form as { append(k: string, v: unknown, name?: string): void }).append("audio", audio, "audio");
+        if (audio === null) form.append("removeAudio", "1");
         await call(`/api/library/manifestations/${encodeURIComponent(m.id)}`, { method: "PUT", body: form });
       },
       async deleteManifestation(id: string): Promise<void> {
