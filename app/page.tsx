@@ -12,6 +12,7 @@ import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
+import { startingDraft, writeDraft } from "@/lib/draftStore";
 import { lineStarts } from "@/lib/audio";
 import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
@@ -81,6 +82,16 @@ export default function DemoPage() {
     setBellOn(readBellOn());
   }, []);
   const [name, setName] = useState("");
+  // Typing saves the draft, so a trip to Settings or a reload keeps it (#100).
+  // Only edits save: a shared link fills the form without replacing the draft.
+  const editWant = (v: string) => {
+    setWant(v);
+    writeDraft({ want: v, name });
+  };
+  const editName = (v: string) => {
+    setName(v);
+    writeDraft({ want, name: v });
+  };
   const [variant, setVariant] = useState(0);
   const [step, setStep] = useState(0);
   // A recording made by the server for this wish. Null means the free
@@ -144,14 +155,12 @@ export default function DemoPage() {
   // Voices, free counter, and shared links.
   useEffect(() => {
     setUsed(readCount());
-    const p = new URLSearchParams(window.location.search);
-    const w = p.get("w");
-    if (w) {
-      setWant(w.slice(0, 280));
-      setName((p.get("n") ?? "").slice(0, 40));
-      // A shared link only fills in the form. Nothing plays until Create.
-      setShared(true);
-    }
+    // A shared link only fills in the form; nothing plays until Create.
+    // Otherwise restore what the listener typed before visiting Settings (#100).
+    const d = startingDraft(window.location.search);
+    setWant(d.want);
+    setName(d.name);
+    if (d.shared) setShared(true);
     if (!("speechSynthesis" in window)) {
       setCanSpeak(false);
       return;
@@ -553,11 +562,11 @@ export default function DemoPage() {
             value={want}
             maxLength={280}
             placeholder="I want to be calm and confident when I speak"
-            onChange={(e) => setWant(e.target.value)}
+            onChange={(e) => editWant(e.target.value)}
           />
           <div className="chips" aria-label="Examples">
             {EXAMPLES.map((e) => (
-              <button key={e} type="button" className="chip" onClick={() => setWant(e)}>
+              <button key={e} type="button" className="chip" onClick={() => editWant(e)}>
                 {e}
               </button>
             ))}
@@ -572,7 +581,7 @@ export default function DemoPage() {
                 maxLength={40}
                 autoComplete="given-name"
                 placeholder="Tim"
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => editName(e.target.value)}
               />
             </div>
             <div>
