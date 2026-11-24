@@ -124,3 +124,13 @@ export function neutralScript(name: string): string[] {
     "And so it is.",
   ];
 }
+
+/**
+ * Script lines the server sent with a failed recording, or null when the value
+ * is not a short list of short strings. Guards what the device voice reads.
+ */
+export function scriptLines(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length < 3 || value.length > 20) return null;
+  if (!value.every((l) => typeof l === "string" && l.trim().length > 0 && l.length <= 200)) return null;
+  return value as string[];
+}
