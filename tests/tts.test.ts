@@ -327,6 +327,23 @@ describe("atomic voices (#76)", () => {
     expect(out.audio.byteLength).toBeLessThanOrEqual(4_000_000);
   });
 
+  it("leaves the same room when the body take falls back to line by line", async () => {
+    // The body's single take is too long to keep, so it is recorded line by line,
+    // and those pauses too leave room for the pause, closing and refrain after it.
+    bigOn = lines.slice(0, -1).join(" [pause] ");
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines: [...lines, "The house is yours."], pauseMs: 60_000, atomic: true, tail: 1, timeoutMs: 20_000,
+    });
+    bigOn = null;
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.tailDropped).toBeFalsy();
+    expect(out.starts).toHaveLength(4);
+    expect(out.audio.byteLength).toBeLessThanOrEqual(4_000_000);
+  });
+
   it("fails when the closing's own request fails, rather than play a script without it", async () => {
     failOn = "It is done.";
     const synthesize = await load();

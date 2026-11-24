@@ -331,6 +331,7 @@ export async function synthesize(opts: {
     gaps: body.length - 1,
     speechBytes: sizes.reduce((n, b) => n + b, 0),
     rate,
+    maxBytes: MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0),
   });
   const gap = silenceBytes(pauseMs, rate);
   const joined = tail ? join([stitchPcm(body, gap), ...chunks.slice(body.length)]) : stitchPcm(chunks, gap);
@@ -480,7 +481,9 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   const pcm = out.audio.slice(44);
   const pieces = splitAtPauses(pcm, rate, lines.length, lines.map((l) => l.length));
   if (!pieces) {
-    if (out.audio.byteLength > MAX_AUDIO_BYTES) {
+    // Kept with its own pauses, it must also leave the room reserved for what
+    // is joined after it; if not, line by line can shorten the pauses.
+    if (out.audio.byteLength > MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0)) {
       return { ok: false, status: 413, message: "The recording came out too long to send in one piece.", sentChars: out.sentChars };
     }
     return { ...out, starts: estimateStarts(lines, (out.audio.byteLength - 44) / 2 / rate), startsEstimated: true };
