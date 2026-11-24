@@ -1,7 +1,7 @@
 // One place that turns text into audio through OpenRouter. Used by the voice
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
-import { MAX_AUDIO_BYTES, fitPause, silenceBytes, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
+import { MAX_AUDIO_BYTES, fitPause, silenceBytes, silentRuns, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
 import { normalizePcm16 } from "@/lib/loudness";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
@@ -102,6 +102,12 @@ export type Speech =
        */
       startsEstimated?: boolean;
       /**
+       * True when the `tail` lines (the refrain) were cut off and are not in
+       * the audio or `starts`: there was no time to record them where their
+       * start could be measured. The listener gets the script without the loop.
+       */
+      tailDropped?: boolean;
+      /**
        * Characters in every request sent for this recording: the inline pause
        * tags of a one-request take, a too-long take thrown away before the line
        * by line fallback (#76), and requests retried after a provider error or
@@ -196,9 +202,8 @@ export async function synthesize(opts: {
     const mustCut = one.ok && one.startsEstimated === true && (opts.tail ?? 0) > 0;
     if (mustCut || (!one.ok && one.status === 413)) {
       if (Date.now() - started >= (opts.timeoutMs ?? 55_000) / 2) {
-        return mustCut
-          ? { ok: false, status: 502, message: "The recording could not be cut into lines in time.", sentChars: one.sentChars }
-          : one;
+        // No time to record line by line: keep the script, drop the refrain.
+        return mustCut && one.ok ? dropTail(one, opts.lines.length - (opts.tail ?? 0)) : one;
       }
       const again = await synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
       // The first take was recorded and billed in full, so the ledger counts it too.
@@ -365,6 +370,29 @@ export const INLINE_PAUSE = "[pause]";
 /** The text of an atomic request: every line, with a pause written between them. */
 export function atomicText(lines: string[]): string {
   return lines.map((l) => l.trim()).join(` ${INLINE_PAUSE} `);
+}
+
+/**
+ * The script without its last lines (the refrain), from a take whose line
+ * starts are only estimated. Cut in the silence nearest the refrain's
+ * estimated start, keeping 120 ms of it, so no word of the closing is lost.
+ * With no silence to cut in, the cut falls at the estimate itself.
+ */
+function dropTail(take: Extract<Speech, { ok: true }>, keep: number): Speech {
+  const starts = take.starts ?? [];
+  const rate = new DataView(take.audio).getUint32(24, true) || 24000;
+  const pcm = new Int16Array(take.audio.slice(44));
+  const guess = Math.round((starts[keep] ?? 1) * pcm.length);
+  const runs = silentRuns(pcm, rate).filter(([a, b]) => a > 0 && b < pcm.length);
+  const near = runs.sort((x, y) => Math.abs((x[0] + x[1]) / 2 - guess) - Math.abs((y[0] + y[1]) / 2 - guess))[0];
+  const cut = Math.min(pcm.length, near ? near[0] + Math.round(rate * 0.12) : guess);
+  const scale = pcm.length / Math.max(1, cut);
+  return {
+    ...take,
+    audio: wav(pcm.slice(0, cut).buffer, rate),
+    starts: starts.slice(0, keep).map((x) => Math.min(1, Math.round(x * scale * 10000) / 10000)),
+    tailDropped: true,
+  };
 }
 
 /**

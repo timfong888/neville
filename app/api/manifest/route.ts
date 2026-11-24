@@ -131,9 +131,12 @@ export async function POST(req: Request) {
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
       // When set, the last line start belongs to this refrain, recorded after the script.
-      ...(repeat ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
-      // Repetition was asked for, but this voice's audio cannot be cut apart to loop.
+      ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
+      // Repetition was asked for, but this voice's audio cannot be cut apart to
+      // loop ("unsupported"), or this take's refrain could not be cut cleanly
+      // and was left out ("skipped").
       ...(body.repeat === true && !repeat ? { "X-Repeat": "unsupported" } : {}),
+      ...(repeat && speech.tailDropped ? { "X-Repeat": "skipped" } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,

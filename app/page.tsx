@@ -382,7 +382,9 @@ export default function DemoPage() {
           refrain && allStarts
             ? await composeSession({ audio, scriptLines: made, starts: allStarts, refrain, minutes: repeatMin, bellOn }).catch(() => null)
             : null;
-        noLoop = repeatMin > 0 && !session ? (refrain ? "build" : "voice") : "";
+        // "skipped": the voice can loop, but this take's refrain was left out.
+        const skipped = res.headers.get("X-Repeat") === "skipped";
+        noLoop = repeatMin > 0 && !session ? (refrain || skipped ? "build" : "voice") : "";
         // The loop could not be built from a recording that has the refrain at
         // its end: play and keep the script alone, without that last line.
         const plain =
