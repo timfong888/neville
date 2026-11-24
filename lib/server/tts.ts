@@ -108,7 +108,11 @@ export type Speech =
       ok: false;
       status: number;
       message: string;
-      /** Set when a take known to be billed was thrown away before the failure. */
+      /**
+       * As on success: characters in every request sent before the failure,
+       * retries included, as an upper bound. Unset only when the failure came
+       * before any request was sent.
+       */
       sentChars?: number;
     };
 
