@@ -10,6 +10,7 @@
     "backgroundColor": "#151820",
     "plugins": [
       "expo-router",
+      "expo-audio",
       "expo-secure-store",
       "expo-apple-authentication"
     ],
