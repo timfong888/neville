@@ -43,6 +43,33 @@ describe("api client", () => {
     expect(new Uint8Array(r.audio)).toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it("re-records without an X-Script header, using the lines sent", async () => {
+    const { f } = fake(() => new Response(new Uint8Array([9]), { headers: { "Content-Type": "audio/mpeg", "X-Voice-Id": "v2" } }));
+    const r = await createApi({ baseUrl: "https://x.test", fetch: f }).rerecord(["A.", "B."], "v2");
+    expect(r.lines).toEqual(["A.", "B."]);
+    expect(r.voiceId).toBe("v2");
+  });
+
+  it("builds the upload with FormData.append only (React Native has no set)", async () => {
+    const parts: string[] = [];
+    const real = globalThis.FormData;
+    globalThis.FormData = class {
+      append(k: string) {
+        parts.push(k);
+      }
+    } as unknown as typeof FormData;
+    try {
+      const { f } = fake(() => new Response("{}"));
+      await createApi({ baseUrl: "https://x.test", fetch: f }).library.putManifestation(
+        { id: "i", title: "t", want: "w", firstName: "", lines: ["a"], voiceId: "v", voiceName: "n", hasAudio: false, createdAt: 1, updatedAt: 1 },
+        null,
+      );
+    } finally {
+      globalThis.FormData = real;
+    }
+    expect(parts).toEqual(["meta", "removeAudio"]);
+  });
+
   it("raises ApiError with the server's message and any written script", async () => {
     const { f } = fake(() => Response.json({ code: "voice_failed", error: "No voice.", lines: ["A."] }, { status: 502 }));
     const err = await createApi({ baseUrl: "https://x.test", fetch: f }).manifest({ want: "x" }).catch((e) => e);
