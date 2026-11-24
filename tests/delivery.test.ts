@@ -12,6 +12,7 @@ import {
   silenceBytes,
   silentRuns,
   splitAtPauses,
+  piecesFitLines,
   speedFor,
   startShares,
   stitchPcm,
@@ -127,6 +128,27 @@ describe("splitAtPauses (#76)", () => {
     expect(ms[2]).toBeGreaterThanOrEqual(700);
     // The long pauses are mostly gone, ready to be set to the pace's length.
     expect(ms.reduce((a, b) => a + b, 0)).toBeLessThan(4700 - 1500);
+  });
+
+  it("does not trust cuts that land mid-sentence", () => {
+    // Line 1 has a long breath inside it; the pause after line 2 was under-honoured.
+    const pcm = signal([[true, 400], [false, 1500], [true, 400], [false, 900], [true, 1200], [false, 400], [true, 1200]]);
+    // The two longest silences would split line 1 and join lines 2 and 3.
+    const naive = splitAtPauses(pcm, rate, 3)!.map((p) => (p.byteLength / 2 / rate) * 1000);
+    expect(naive[2]).toBeGreaterThan(2500);
+    // With the words per line, the cuts fall at the real line ends: the breath stays in line 1.
+    const ms = splitAtPauses(pcm, rate, 3, [30, 30, 30])!.map((p) => (p.byteLength / 2 / rate) * 1000);
+    expect(ms[0]).toBeGreaterThanOrEqual(2300);
+    expect(ms[1]).toBeGreaterThanOrEqual(1200);
+    expect(ms[1]).toBeLessThan(1500);
+    expect(ms[2]).toBeGreaterThanOrEqual(1200);
+    expect(ms[2]).toBeLessThan(1400);
+  });
+
+  it("checks each piece against its line's share of the words", () => {
+    expect(piecesFitLines([100, 100, 30], [30, 30, 10])).toBe(true);
+    expect(piecesFitLines([100, 100, 5], [30, 30, 30])).toBe(false);
+    expect(piecesFitLines([52, 58, 271], [30, 30, 30])).toBe(false);
   });
 
   it("gives null when there are too few pauses to cut at", () => {

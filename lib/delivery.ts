@@ -231,7 +231,13 @@ export function silentRuns(pcm: Int16Array, rate: number, minMs = 250, threshold
  * Each cut keeps a little of the silence on both sides so no word is clipped.
  * Null when there are not enough silences to cut at.
  */
-export function splitAtPauses(pcm: ArrayBuffer, rate: number, lines: number): ArrayBuffer[] | null {
+export function splitAtPauses(
+  pcm: ArrayBuffer,
+  rate: number,
+  lines: number,
+  /** Characters per line, to check the cuts; leave out to skip the check. */
+  lineChars?: number[],
+): ArrayBuffer[] | null {
   const gaps = lines - 1;
   if (gaps <= 0) return [pcm];
   const samples = new Int16Array(pcm, 0, Math.floor(pcm.byteLength / 2));
@@ -239,7 +245,21 @@ export function splitAtPauses(pcm: ArrayBuffer, rate: number, lines: number): Ar
     // Ignore leading and trailing silence: they are not between lines.
     .filter(([a, b]) => a > 0 && b < samples.length);
   if (runs.length < gaps) return null;
-  const cuts = [...runs].sort((x, y) => y[1] - y[0] - (x[1] - x[0])).slice(0, gaps).sort((x, y) => x[0] - y[0]);
+  const longest = [...runs].sort((x, y) => y[1] - y[0] - (x[1] - x[0])).slice(0, gaps).sort((x, y) => x[0] - y[0]);
+  const first = cutAt(pcm, rate, longest);
+  if (!lineChars || lineChars.length !== lines) return first;
+  if (piecesFitLines(first.map((p) => p.byteLength), lineChars)) return first;
+  // A long breath inside a line can outlast a pause the voice under-honoured,
+  // so a cut landed mid-sentence. Try again: for each line end, the longest
+  // silence near where the words say that line should end.
+  const guided = guidedCuts(runs, samples.length, lineChars);
+  if (!guided) return null;
+  const second = cutAt(pcm, rate, guided);
+  return piecesFitLines(second.map((p) => p.byteLength), lineChars) ? second : null;
+}
+
+/** Cuts `pcm` at the given silences, keeping a little silence on both sides of each cut. */
+function cutAt(pcm: ArrayBuffer, rate: number, cuts: Array<[number, number]>): ArrayBuffer[] {
   const tail = Math.floor(rate * 0.12);
   const lead = Math.floor(rate * 0.06);
   const pieces: ArrayBuffer[] = [];
@@ -250,4 +270,51 @@ export function splitAtPauses(pcm: ArrayBuffer, rate: number, lines: number): Ar
   }
   pieces.push(pcm.slice(from * 2));
   return pieces;
+}
+
+/**
+ * One silence per line end: the silence nearest to where that line should end
+ * by its share of the characters, counted in speech time (silences left out),
+ * so breaths inside a line do not move the estimate.
+ */
+function guidedCuts(runs: Array<[number, number]>, total: number, lineChars: number[]): Array<[number, number]> | null {
+  const silent = runs.reduce((n, [a, b]) => n + (b - a), 0);
+  const speech = total - silent;
+  if (speech <= 0) return null;
+  // The sample at which `t` samples of speech have been heard.
+  const sampleAt = (t: number): number => {
+    let pos = 0;
+    let heard = 0;
+    for (const [a, b] of runs) {
+      if (heard + (a - pos) >= t) return pos + (t - heard);
+      heard += a - pos;
+      pos = b;
+    }
+    return pos + (t - heard);
+  };
+  const chars = lineChars.reduce((n, c) => n + c, 0);
+  const out: Array<[number, number]> = [];
+  let acc = 0;
+  let after = 0;
+  for (let i = 0; i < lineChars.length - 1; i++) {
+    acc += lineChars[i];
+    const expect = sampleAt((acc / chars) * speech);
+    const left = runs.filter(([a]) => a >= after);
+    if (!left.length) return null;
+    const pick = left.reduce((x, y) => (Math.abs((y[0] + y[1]) / 2 - expect) < Math.abs((x[0] + x[1]) / 2 - expect) ? y : x));
+    out.push(pick);
+    after = pick[1];
+  }
+  return out;
+}
+
+/** True when each piece's share of the audio is roughly its line's share of the characters (0.45x to 2.2x). */
+export function piecesFitLines(pieceBytes: number[], lineChars: number[]): boolean {
+  const bytes = pieceBytes.reduce((n, b) => n + b, 0);
+  const chars = lineChars.reduce((n, c) => n + c, 0);
+  if (bytes <= 0 || chars <= 0) return false;
+  return pieceBytes.every((b, i) => {
+    const ratio = b / bytes / (Math.max(1, lineChars[i]) / chars);
+    return ratio >= 0.45 && ratio <= 2.2;
+  });
 }

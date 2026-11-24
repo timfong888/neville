@@ -156,8 +156,10 @@ export async function synthesize(opts: {
   if (opts.atomic && opts.lines && opts.lines.length > 1 && PCM_ONLY.test(opts.model)) {
     const started = Date.now();
     const one = await synthesizeAtomic(opts);
-    // Too long for one response (a very slow read): record line by line instead,
-    // where the pauses can be shortened to fit.
+    // Too long for one response, and the pauses could not be found to shorten:
+    // record line by line instead, where they can be. (When the pauses were
+    // found and shortened and it is still too long, the speech alone is too
+    // long, and line by line would fail the same way: no second recording.)
     if (!one.ok && one.status === 413 && Date.now() - started < (opts.timeoutMs ?? 55_000) / 2) {
       return synthesize({ ...opts, atomic: false, timeoutMs: (opts.timeoutMs ?? 55_000) - (Date.now() - started) });
     }
@@ -334,7 +336,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   // WAV: 44-byte header, 16-bit mono.
   const rate = new DataView(out.audio).getUint32(24, true) || 24000;
   const pcm = out.audio.slice(44);
-  const pieces = splitAtPauses(pcm, rate, lines.length);
+  const pieces = splitAtPauses(pcm, rate, lines.length, lines.map((l) => l.length));
   if (!pieces) {
     if (out.audio.byteLength > MAX_AUDIO_BYTES) {
       return { ok: false, status: 413, message: "The recording came out too long to send in one piece." };
@@ -351,7 +353,7 @@ async function synthesizeAtomic(opts: Parameters<typeof synthesize>[0]): Promise
   const gap = silenceBytes(pauseMs, rate);
   const audio = wav(stitchPcm(pieces, gap), rate);
   if (audio.byteLength > MAX_AUDIO_BYTES) {
-    return { ok: false, status: 413, message: "The recording came out too long to send in one piece." };
+    return { ok: false, status: 502, message: "The recording came out too long to send." };
   }
   return { ...out, audio, starts: startShares(sizes, gap), pauseMs };
 }

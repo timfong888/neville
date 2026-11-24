@@ -12,6 +12,8 @@ let failOn: string | null = null;
 /** How many more times a request for `failOn` gets a 500 before it succeeds. */
 let failTimes = Infinity;
 let failStatus = 500;
+/** A request for this input gets 4.2 MB of silence back: too long for one response. */
+let bigOn: string | null = null;
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -27,6 +29,10 @@ beforeAll(async () => {
       }
       if (refuseSpeed && "speed" in body) {
         res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "unknown field speed" } }));
+        return;
+      }
+      if (bigOn && body.input === bigOn) {
+        res.writeHead(200, { "Content-Type": "audio/pcm;rate=24000" }).end(Buffer.alloc(4_200_000));
         return;
       }
       // 0.5 s of 44.1 kHz 16-bit mono PCM for PCM requests; a few bytes for MP3.
@@ -178,6 +184,19 @@ describe("atomic voices (#76)", () => {
     failTimes = Infinity;
     expect(out.ok).toBe(true);
     expect(seen).toHaveLength(2);
+  });
+
+  it("records line by line when one piece is too long and its pauses cannot be found", async () => {
+    bigOn = lines.join(" [pause] ");
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "google/gemini-3.8-flash-lite-tts", voice: "Sulafat",
+      text: "", lines, pauseMs: 1500, atomic: true, timeoutMs: 20_000,
+    });
+    bigOn = null;
+    expect(out.ok).toBe(true);
+    // One atomic request, then one per line.
+    expect(seen.map((b) => b.input)).toEqual([lines.join(" [pause] "), ...lines]);
   });
 
   it("leaves voices without the flag line by line", async () => {
