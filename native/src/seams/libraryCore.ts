@@ -6,10 +6,14 @@ import type { AudioBytes, DeviceLibrary } from "./library.types";
 /** What the store needs from the device. Audio files are found by item id. */
 export type LibraryFiles = {
   readRecords(): Promise<string | null>;
-  /** Throws when the device is full; callers show the error. */
+  /** Replaces the records in one step: a failure must leave the earlier records readable. Throws when the device is full. */
   writeRecords(json: string): Promise<void>;
-  /** Replaces any earlier recording for the id. If it throws, the earlier recording must still be there. */
-  writeAudio(id: string, audio: AudioBytes): Promise<void>;
+  /** Writes a new recording beside the current one, without touching it. Throws when the device is full. */
+  stageAudio(id: string, audio: AudioBytes): Promise<void>;
+  /** Makes the staged recording the current one. */
+  commitAudio(id: string): Promise<void>;
+  /** Drops a staged recording that will not be used. */
+  discardStaged(id: string): Promise<void>;
   deleteAudio(id: string): Promise<void>;
   audioUri(id: string): Promise<string | null>;
 };
@@ -24,14 +28,21 @@ export function extFor(mime: string): (typeof AUDIO_EXTS)[number] {
 
 export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
   const listeners = new Set<() => void>();
-  const read = async (): Promise<Library> => {
+  // Records that exist but cannot be read are an error, never "empty": a change built on an
+  // empty library would overwrite every other item.
+  const readStrict = async (): Promise<Library> => {
+    let raw: string | null;
+    let parsed: unknown = null;
     try {
-      const raw = await files.readRecords();
-      return parseLibrary(raw ? JSON.parse(raw) : null);
+      raw = await files.readRecords();
+      if (raw) parsed = JSON.parse(raw);
     } catch {
-      return parseLibrary(null);
+      throw new Error("Your library could not be read, so nothing was changed. Try again.");
     }
+    return parseLibrary(parsed);
   };
+  // For showing the list only: an unreadable library shows as empty and is left untouched.
+  const read = (): Promise<Library> => readStrict().catch(() => parseLibrary(null));
   const write = async (lib: Library) => {
     await files.writeRecords(JSON.stringify(lib));
     listeners.forEach((fn) => fn());
@@ -54,22 +65,25 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     },
     save: (m: Manifestation, audio?: AudioBytes | null) => inTurn(async () => {
       check(m.id);
-      const lib = await read();
+      const lib = await readStrict();
       const old = lib.manifestations.find((x) => x.id === m.id);
-      let hasAudio = old?.hasAudio ?? false;
-      if (audio === null) {
-        await files.deleteAudio(m.id).catch(() => undefined);
-        hasAudio = false;
-      } else if (audio) {
-        await files.writeAudio(m.id, audio);
-        hasAudio = true;
+      const next = { ...m, hasAudio: audio === null ? false : audio ? true : (old?.hasAudio ?? false) };
+      const records = { ...lib, manifestations: old ? lib.manifestations.map((x) => (x.id === m.id ? next : x)) : [next, ...lib.manifestations] };
+      // Order matters. The new recording is staged, the records are written, and only then is the
+      // old recording replaced or removed. A failure at any step leaves the old item whole.
+      if (audio) await files.stageAudio(m.id, audio);
+      try {
+        await write(records);
+      } catch (e) {
+        if (audio) await files.discardStaged(m.id).catch(() => undefined);
+        throw e;
       }
-      const next = { ...m, hasAudio };
-      await write({ ...lib, manifestations: old ? lib.manifestations.map((x) => (x.id === m.id ? next : x)) : [next, ...lib.manifestations] });
+      if (audio) await files.commitAudio(m.id);
+      else if (audio === null) await files.deleteAudio(m.id).catch(() => undefined);
     }),
     remove: (id) => inTurn(async () => {
+      await write(withoutManifestation(await readStrict(), id));
       if (isUuid(id)) await files.deleteAudio(id).catch(() => undefined);
-      await write(withoutManifestation(await read(), id));
     }),
     async audioUri(id) {
       return isUuid(id) ? files.audioUri(id) : null;

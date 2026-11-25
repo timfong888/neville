@@ -2,21 +2,32 @@ import { describe, expect, it } from "vitest";
 import { type Manifestation, newId } from "@/lib/library/model";
 import { type LibraryFiles, extFor, makeFileLibrary } from "@/native/src/seams/libraryCore";
 
-function disk(): LibraryFiles & { files: Map<string, Uint8Array | string> } {
+function disk(): LibraryFiles & { files: Map<string, Uint8Array | string>; failRecords: boolean } {
   const files = new Map<string, Uint8Array | string>();
-  const find = (id: string) => [...files.keys()].find((k) => k.startsWith(`${id}.`));
-  return {
+  const find = (id: string, staged = false) => [...files.keys()].find((k) => k.startsWith(`${id}.`) && k.endsWith(".new") === staged);
+  const d = {
     files,
+    failRecords: false,
     readRecords: async () => (files.get("library.json") as string | undefined) ?? null,
-    writeRecords: async (json) => void files.set("library.json", json),
-    writeAudio: async (id, a) => {
-      if (a.bytes.length === 0) throw new Error("disk full");
-      if (find(id)) files.delete(find(id)!);
-      files.set(`${id}.${extFor(a.mime)}`, a.bytes);
+    writeRecords: async (json: string) => {
+      if (d.failRecords) throw new Error("disk full");
+      files.set("library.json", json);
     },
-    deleteAudio: async (id) => void (find(id) && files.delete(find(id)!)),
-    audioUri: async (id) => (find(id) ? `file:///library/${find(id)}` : null),
+    stageAudio: async (id: string, a: { bytes: Uint8Array; mime: string }) => {
+      if (a.bytes.length === 0) throw new Error("disk full");
+      files.set(`${id}.${extFor(a.mime)}.new`, a.bytes);
+    },
+    commitAudio: async (id: string) => {
+      const s = find(id, true)!;
+      if (find(id)) files.delete(find(id)!);
+      files.set(s.slice(0, -4), files.get(s)!);
+      files.delete(s);
+    },
+    discardStaged: async (id: string) => void (find(id, true) && files.delete(find(id, true)!)),
+    deleteAudio: async (id: string) => void (find(id) && files.delete(find(id)!)),
+    audioUri: async (id: string) => (find(id) ? `file:///library/${find(id)}` : null),
   };
+  return d;
 }
 
 const item = (over: Partial<Manifestation> = {}): Manifestation => ({
@@ -74,6 +85,29 @@ describe("native library store", () => {
     await expect(lib.save(m, { bytes: new Uint8Array(0), mime: "audio/wav" })).rejects.toThrow("disk full");
     expect(await lib.audioUri(m.id)).toBe(`file:///library/${m.id}.mp3`);
     expect((await lib.get(m.id))?.hasAudio).toBe(true);
+  });
+
+  it("keeps the old recording and leaves no stray file when the records cannot be written", async () => {
+    const d = disk();
+    const lib = makeFileLibrary(d);
+    const m = item();
+    await lib.save(m, mp3);
+    d.failRecords = true;
+    await expect(lib.save({ ...m, title: "New" }, { bytes: new Uint8Array([9]), mime: "audio/wav" })).rejects.toThrow("disk full");
+    await expect(lib.remove(m.id)).rejects.toThrow("disk full");
+    d.failRecords = false;
+    expect(await lib.audioUri(m.id)).toBe(`file:///library/${m.id}.mp3`);
+    expect(await lib.get(m.id)).toEqual({ ...m, hasAudio: true });
+    expect([...d.files.keys()].sort()).toEqual([`${m.id}.mp3`, "library.json"].sort());
+  });
+
+  it("refuses to change a library it cannot read, so nothing is overwritten", async () => {
+    const d = disk();
+    d.files.set("library.json", '{"manifestations":[{"id":');
+    const lib = makeFileLibrary(d);
+    await expect(lib.save(item(), mp3)).rejects.toThrow(/could not be read/);
+    await expect(lib.remove(newId())).rejects.toThrow(/could not be read/);
+    expect([...d.files.entries()]).toEqual([["library.json", '{"manifestations":[{"id":']]);
   });
 
   it("keeps every item when saves and deletes overlap", async () => {

@@ -11,31 +11,46 @@ function dir(): Directory {
   return d;
 }
 const records = () => new File(dir(), "library.json");
+const recordsNew = () => new File(dir(), "library.json.new");
 const audioFile = (id: string) => AUDIO_EXTS.map((e) => new File(dir(), `${id}.${e}`)).find((f) => f.exists) ?? null;
+const staged = (id: string) => AUDIO_EXTS.map((e) => ({ ext: e, file: new File(dir(), `${id}.${e}.new`) })).find((s) => s.file.exists) ?? null;
+
+/** Writes the whole file under a spare name first, so a full disk never leaves a half-written file in place. */
+function writeWhole(f: File, data: string | Uint8Array) {
+  if (f.exists) f.delete();
+  f.create();
+  try {
+    f.write(data);
+  } catch (e) {
+    if (f.exists) f.delete();
+    throw e;
+  }
+}
 
 export const library = makeFileLibrary({
   async readRecords() {
-    const f = records();
-    return f.exists ? f.text() : null;
+    // library.json is removed only after library.json.new is complete, so if it is missing the new file is the library.
+    const f = records().exists ? records() : recordsNew().exists ? recordsNew() : null;
+    return f ? f.text() : null;
   },
   async writeRecords(json) {
-    const f = records();
-    if (!f.exists) f.create();
-    f.write(json);
+    const next = recordsNew();
+    writeWhole(next, json);
+    if (records().exists) records().delete();
+    next.move(records());
   },
-  async writeAudio(id, audio) {
-    // Write beside the old recording first, so a full disk leaves the old one playable.
-    const tmp = new File(dir(), `${id}.tmp`);
-    if (tmp.exists) tmp.delete();
-    tmp.create();
-    try {
-      tmp.write(audio.bytes);
-    } catch (e) {
-      if (tmp.exists) tmp.delete();
-      throw e;
-    }
+  async stageAudio(id, audio) {
+    await this.discardStaged(id);
+    writeWhole(new File(dir(), `${id}.${extFor(audio.mime)}.new`), audio.bytes);
+  },
+  async commitAudio(id) {
+    const s = staged(id);
+    if (!s) return;
     audioFile(id)?.delete();
-    tmp.move(new File(dir(), `${id}.${extFor(audio.mime)}`));
+    s.file.move(new File(dir(), `${id}.${s.ext}`));
+  },
+  async discardStaged(id) {
+    staged(id)?.file.delete();
   },
   async deleteAudio(id) {
     audioFile(id)?.delete();
