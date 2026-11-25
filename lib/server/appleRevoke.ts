@@ -61,32 +61,47 @@ export function readAppleCode(body: unknown): string | undefined {
   return typeof c === "string" && c.length > 0 && c.length <= MAX_CODE_LENGTH ? c : undefined;
 }
 
+/** A token that can revoke a grant, and the client id it must be sent with. */
+export type RevocableToken = { clientId: string; token: string; hint: "refresh_token" | "access_token" };
+
+type Clients = { web?: AppleClient | null; app?: AppleClient | null };
+
 /**
- * Revokes what can be revoked for one account: the app's grant through a fresh authorization code
- * (only when the code belongs to the same Apple user as the account), and the website's grant
- * through its stored token. "failed" means at least one attempt did not go through, or that the
- * account has an Apple sign-in but neither a stored token nor a code to revoke it with (an account
+ * Gathers the tokens that can revoke one account's grants, without revoking anything: the stored
+ * website token, and the refresh token from the app's authorization code (only when the code
+ * belongs to the same Apple user as the account). `unreachable` is true when a grant exists that no
+ * token here can revoke: an Apple sign-in with neither a stored token nor a usable code (an account
  * made in the app and deleted from the website, or from an app build that sends no code).
  */
-export async function revokeAppleGrants(opts: {
-  links: AppleLink[];
-  code?: string;
-  web?: AppleClient | null;
-  app?: AppleClient | null;
-  fetch?: typeof fetch;
-}): Promise<RevokeOutcome> {
-  const doFetch = opts.fetch ?? fetch;
-  if (!opts.links.length) return "nothing-to-revoke";
-  const results: boolean[] = [];
+export async function collectAppleTokens(opts: Clients & { links: AppleLink[]; code?: string; fetch?: typeof fetch }): Promise<{ tokens: RevocableToken[]; unreachable: boolean }> {
+  const tokens: RevocableToken[] = [];
+  if (!opts.links.length) return { tokens, unreachable: false };
+  let unreachable = false;
   if (opts.code) {
-    const got = opts.app ? await exchangeAppleCode(opts.app, opts.code, doFetch) : null;
-    const mine = !!got && opts.links.some((l) => l.accountId === got.subject);
-    results.push(mine && (await revokeAppleToken(opts.app!, got!.refreshToken, "refresh_token", doFetch)));
+    const got = opts.app ? await exchangeAppleCode(opts.app, opts.code, opts.fetch ?? fetch) : null;
+    if (got && opts.links.some((l) => l.accountId === got.subject)) tokens.push({ clientId: opts.app!.clientId, token: got.refreshToken, hint: "refresh_token" });
+    else unreachable = true;
   }
   for (const l of opts.links) {
     const token = l.refreshToken ?? l.accessToken;
     if (!token) continue;
-    results.push(!!opts.web && (await revokeAppleToken(opts.web, token, l.refreshToken ? "refresh_token" : "access_token", doFetch)));
+    if (opts.web) tokens.push({ clientId: opts.web.clientId, token, hint: l.refreshToken ? "refresh_token" : "access_token" });
+    else unreachable = true;
   }
-  return results.length > 0 && results.every(Boolean) ? "revoked" : "failed";
+  return { tokens, unreachable: unreachable || tokens.length === 0 };
+}
+
+/** Sends one stored token to Apple, with the client it was issued to. False when that client is not configured. */
+export async function revokeStoredToken(t: RevocableToken, clients: Clients, doFetch: typeof fetch = fetch): Promise<boolean> {
+  const client = [clients.web, clients.app].find((c) => c?.clientId === t.clientId);
+  return !!client && (await revokeAppleToken(client, t.token, t.hint, doFetch));
+}
+
+/** Gathers and revokes in one go, with nothing stored. "failed" means at least one grant was left in place. */
+export async function revokeAppleGrants(opts: Clients & { links: AppleLink[]; code?: string; fetch?: typeof fetch }): Promise<RevokeOutcome> {
+  if (!opts.links.length) return "nothing-to-revoke";
+  const { tokens, unreachable } = await collectAppleTokens(opts);
+  let ok = !unreachable;
+  for (const t of tokens) ok = (await revokeStoredToken(t, opts, opts.fetch ?? fetch)) && ok;
+  return ok ? "revoked" : "failed";
 }
