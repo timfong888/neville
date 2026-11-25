@@ -21,7 +21,11 @@ export type PlaySession = { play(): void; pause(): void; stop(): void };
 export interface AudioSeam {
   /** Background playback and lock-screen mode. A no-op on the web. */
   configure(): Promise<void>;
-  /** Writes audio bytes somewhere the player can read; returns its address. */
+  /**
+   * Writes audio bytes somewhere the player can read; returns its address.
+   * Saving a name again replaces it. On the web an open session keeps the clip it was given.
+   * On a phone the file itself is replaced, so stop a session before saving a name it uses.
+   */
   save(name: string, bytes: Uint8Array, mime: string): Promise<string>;
   /** Length of a clip in seconds; 0 when it cannot be read. */
   duration(src: string): Promise<number>;
