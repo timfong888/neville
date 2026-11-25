@@ -71,12 +71,17 @@ describe("Sign in with Apple revocation (#98)", () => {
     expect(calls.map((c) => `${c.form.client_id} ${c.form.token} ${c.form.token_type_hint}`)).toEqual(["com.example.web rt refresh_token", "com.example.web at access_token"]);
   });
 
-  it("says failed when Apple refuses or no client is configured, and nothing-to-revoke when there is nothing", async () => {
+  it("says failed when Apple refuses or no client is configured, and nothing-to-revoke without an Apple sign-in", async () => {
     const refuse = apple(() => new Response("{}", { status: 400 })).f;
     const links = [{ accountId: "a", refreshToken: "rt", accessToken: null }];
     expect(await revokeAppleGrants({ links, web, app, fetch: refuse })).toBe("failed");
     expect(await revokeAppleGrants({ links, web: null, app: null, fetch: apple(ok).f })).toBe("failed");
     expect(await revokeAppleGrants({ links: [], code: "c", web, app, fetch: apple(ok).f })).toBe("nothing-to-revoke");
-    expect(await revokeAppleGrants({ links: [{ accountId: "a", refreshToken: null, accessToken: null }], web, app, fetch: apple(ok).f })).toBe("nothing-to-revoke");
+  });
+
+  it("says failed, not nothing-to-revoke, for an app sign-in deleted without a code: the grant is still there", async () => {
+    const { calls, f } = apple(ok);
+    expect(await revokeAppleGrants({ links: [{ accountId: "a", refreshToken: null, accessToken: null }], web, app, fetch: f })).toBe("failed");
+    expect(calls).toEqual([]);
   });
 });

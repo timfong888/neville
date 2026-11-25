@@ -1,5 +1,5 @@
-// DELETE /api/account: the Apple grant is revoked before the rows go, and a failure to revoke
-// never stops the deletion (#98).
+// DELETE /api/account: the Apple sign-ins are read before the rows go, Apple is called only after
+// the deletion commits, and a failure to revoke never stops the deletion (#98).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -7,6 +7,7 @@ vi.mock("server-only", () => ({}));
 const steps: string[] = [];
 let revoke: (o: { code?: string }) => Promise<string>;
 let user: { id: string } | null;
+let deleteFails = false;
 
 vi.mock("@/lib/server/accounts", () => ({
   PRIMARY_ORIGIN: "https://getneville.vercel.app",
@@ -21,7 +22,11 @@ vi.mock("@/lib/server/accounts", () => ({
   purgeAudio: async () => (steps.push("purge"), 0),
 }));
 vi.mock("@/lib/server/libraryDb", () => ({
-  deleteAccount: async () => (steps.push("delete"), ["audio/k"]),
+  deleteAccount: async () => {
+    steps.push("delete");
+    if (deleteFails) throw new Error("database down");
+    return ["audio/k"];
+  },
   addTombstones: async () => undefined,
 }));
 vi.mock("@/lib/server/appleRevoke", async (orig) => ({
@@ -40,15 +45,23 @@ beforeEach(() => {
   steps.length = 0;
   user = { id: "u1" };
   revoke = async () => "revoked";
+  deleteFails = false;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
 describe("DELETE /api/account with Sign in with Apple revocation", () => {
-  it("revokes with the app's code first, then deletes", async () => {
+  it("reads the Apple sign-ins, deletes, then revokes with the app's code", async () => {
     const { DELETE } = await import("@/app/api/account/route");
     const res = await DELETE(del("neville://", { appleAuthorizationCode: "c.1" }));
     expect(await res.json()).toEqual({ ok: true, audioPending: 0, apple: "revoked" });
-    expect(steps).toEqual(["links", "revoke:c.1", "delete", "purge"]);
+    expect(steps).toEqual(["links", "delete", "revoke:c.1", "purge"]);
+  });
+
+  it("does not call Apple when the deletion fails", async () => {
+    const { DELETE } = await import("@/app/api/account/route");
+    deleteFails = true;
+    await expect(DELETE(del("neville://", { appleAuthorizationCode: "c.1" }))).rejects.toThrow("database down");
+    expect(steps).toEqual(["links", "delete"]);
   });
 
   it("still deletes when Apple cannot be reached, and when the lookup throws", async () => {

@@ -11,6 +11,7 @@ export type AppleClient = { clientId: string; clientSecret: string };
 /** One Apple sign-in on the account: Apple's user id and whatever tokens the web flow stored. */
 export type AppleLink = { accountId: string; refreshToken: string | null; accessToken: string | null };
 
+/** "nothing-to-revoke" means the account has no Apple sign-in at all; a grant that could not be reached is "failed". */
 export type RevokeOutcome = "revoked" | "failed" | "nothing-to-revoke";
 
 const APPLE = "https://appleid.apple.com";
@@ -63,7 +64,9 @@ export function readAppleCode(body: unknown): string | undefined {
 /**
  * Revokes what can be revoked for one account: the app's grant through a fresh authorization code
  * (only when the code belongs to the same Apple user as the account), and the website's grant
- * through its stored token. "failed" means at least one attempt did not go through.
+ * through its stored token. "failed" means at least one attempt did not go through, or that the
+ * account has an Apple sign-in but neither a stored token nor a code to revoke it with (an account
+ * made in the app and deleted from the website, or from an app build that sends no code).
  */
 export async function revokeAppleGrants(opts: {
   links: AppleLink[];
@@ -85,6 +88,5 @@ export async function revokeAppleGrants(opts: {
     if (!token) continue;
     results.push(!!opts.web && (await revokeAppleToken(opts.web, token, l.refreshToken ? "refresh_token" : "access_token", doFetch)));
   }
-  if (!results.length) return "nothing-to-revoke";
-  return results.every(Boolean) ? "revoked" : "failed";
+  return results.length > 0 && results.every(Boolean) ? "revoked" : "failed";
 }
