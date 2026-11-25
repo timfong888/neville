@@ -17,7 +17,7 @@ set -uo pipefail
 : "${NEON_API_KEY:?NEON_API_KEY is not set}"
 : "${NEON_PROJECT_ID:?NEON_PROJECT_ID is not set}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
-DRY_RUN="${DRY_RUN:-true}"
+DRY_RUN="${DRY_RUN:-true}"; DRY_RUN="${DRY_RUN,,}"
 API="${NEON_API_BASE:-https://console.neon.tech/api/v2}/projects/${NEON_PROJECT_ID}"
 PREFIX="preview/"
 ISSUE_TITLE="Neon branch count near the limit"
@@ -29,8 +29,9 @@ neon() { # neon METHOD PATH
 }
 
 list_branches() { # prints one JSON object per line
-  local cursor="" page next
+  local cursor="" page next pages=0
   while :; do
+    pages=$((pages + 1)); [ "$pages" -le 50 ] || return 1   # page limit: never loop forever
     page=$(neon GET "/branches?limit=100${cursor:+&cursor=$cursor}") || return 1
     jq -c '.branches[]' <<<"$page"
     next=$(jq -r '.pagination.next // empty' <<<"$page")
@@ -39,11 +40,23 @@ list_branches() { # prints one JSON object per line
   done
 }
 
+# True (keep) unless default, primary and protected are all present and false.
+keep_flags() { [ "$(jq -r '[.default, .primary, .protected] | all(. == false)' <<<"$1")" != "true" ]; }
+
+# Canary: the default git branch must resolve with HTTP 200. If it does not, a 404 on any
+# other ref is not trustworthy (token or permission problem), so nothing may be called "gone".
+canary() {
+  local def status
+  def=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch 2>/dev/null) && [ -n "$def" ] || return 1
+  status=$(gh api -i "repos/${GITHUB_REPOSITORY}/git/ref/heads/${def}" 2>/dev/null | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
+  [ "$status" = "200" ]
+}
+
 delete_branch() { # delete_branch <neon-branch-json> <reason>
   local json="$1" reason="$2" id name
   id=$(jq -r .id <<<"$json"); name=$(jq -r .name <<<"$json")
   if [[ "$name" != "$PREFIX"* ]]; then echo "SKIP   $name (not a preview/ branch)"; return; fi
-  if [ "$(jq -r '.default or .primary or .protected' <<<"$json")" = "true" ]; then
+  if keep_flags "$json"; then
     echo "SKIP   $name (default/primary/protected)"; return
   fi
   if [ "$DRY_RUN" = "true" ]; then
@@ -76,7 +89,8 @@ decide() {
 
   status=$(gh api -i "repos/${GITHUB_REPOSITORY}/git/ref/heads/${ref}" 2>/dev/null | sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p')
   case "$status" in
-    404) echo "delete:git branch $ref is gone"; return ;;
+    404) canary || { echo "keep:canary failed, cannot trust 404"; return; }
+         echo "delete:git branch $ref is gone"; return ;;
     200) ;;
     *)   echo "keep:could not check git branch (HTTP ${status:-?})"; return ;;
   esac
@@ -138,12 +152,13 @@ case "${1:-}" in
     ;;
   sweep)
     echo "Neon preview sweep on ${GITHUB_REPOSITORY} (dry-run=$DRY_RUN)"
+    canary || { echo "ERROR default branch ref did not resolve (HTTP 200); deleting nothing"; exit 1; }
     all=$(list_branches) || { echo "ERROR listing Neon branches"; exit 1; }
     while IFS= read -r json; do
       [ -z "$json" ] && continue
       name=$(jq -r .name <<<"$json")
       if [[ "$name" != "$PREFIX"* ]]; then echo "KEEP   $name (not a preview/ branch)"; continue; fi
-      if [ "$(jq -r '.default or .primary or .protected' <<<"$json")" = "true" ]; then
+      if keep_flags "$json"; then
         echo "KEEP   $name (default/primary/protected)"; continue
       fi
       verdict=$(decide "${name#"$PREFIX"}")

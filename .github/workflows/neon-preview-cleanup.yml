@@ -34,6 +34,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Delete this PR's Neon preview branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -59,6 +61,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Sweep first if Neon branches are at or above 80% of the limit
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -75,6 +79,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Dry-run sweep (logs only)
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -102,6 +107,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Sweep stale Neon preview branches
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
