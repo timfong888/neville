@@ -126,6 +126,16 @@ describe("share links in Postgres", () => {
     expect(await S.createShare(db, "u-a", input("not-a-uuid"))).toEqual({ ok: false, reason: "not_found" });
     expect(await S.reserveShareAttempt(db, "u-a", "not-a-uuid", 1000)).toEqual({ ok: false, reason: "not_found" });
   });
+  it("an attempt given back no longer counts; only the owner's own attempt can be given back", async () => {
+    const count = async (u: string): Promise<number> => Number((await db.query(`select count(*)::int as n from share_attempt where user_id = $1`, [u])).rows[0].n);
+    const r = await S.reserveShareAttempt(db, "u-a", MA, 1000);
+    if (!r.ok) throw new Error("expected a slot");
+    const before = await count("u-a");
+    await S.releaseShareAttempt(db, "u-b", r.attemptId); // someone else's id: nothing happens
+    expect(await count("u-a")).toBe(before);
+    await S.releaseShareAttempt(db, "u-a", r.attemptId);
+    expect(await count("u-a")).toBe(before - 1);
+  });
 });
 
 describe("share requests", () => {
@@ -151,7 +161,7 @@ describe("the frozen copy comes from the account, not the request", () => {
     const MD = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     await putManifestation(db, pd, { ...m(MD), title: "Saved", lines: ["Saved line."], voiceName: "Nadine" }, null);
     const r = await S.reserveShareAttempt(db, "u-d", MD, 1000);
-    expect(r).toEqual({ ok: true, copy: { manifestationId: MD, title: "Saved", lines: ["Saved line."], voiceName: "" } });
+    expect(r).toEqual({ ok: true, copy: { manifestationId: MD, title: "Saved", lines: ["Saved line."], voiceName: "" }, attemptId: expect.any(String) });
     await putManifestation(db, pd, { ...m(MD), title: "Edited", lines: ["New line."], voiceName: "Nadine" }, { key: "audio/u-d/1.mp3", mime: "audio/mpeg", bytes: 10 });
     const r2 = await S.reserveShareAttempt(db, "u-d", MD, 1000);
     expect(r2).toMatchObject({ ok: true, copy: { title: "Edited", lines: ["New line."], voiceName: "Nadine" } });

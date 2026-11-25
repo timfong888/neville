@@ -21,7 +21,7 @@ async function ownsAndLock(db: Db, userId: string, manifestationId: string): Pro
 }
 
 export type ReserveResult =
-  | { ok: true; copy: ShareInput }
+  | { ok: true; copy: ShareInput; attemptId: string }
   | { ok: false; reason: "not_found" | "daily_limit" }
   | { ok: false; reason: "not_shareable"; error: string };
 
@@ -30,9 +30,10 @@ export type ReserveResult =
  * returns the copy to freeze: the title and script saved in the account (the
  * newest rendition), never text from the request. Refuses a manifestation the
  * account does not own, one whose saved copy cannot be shared (no attempt is
- * used), and a 21st attempt in 24 hours. Attempts count whatever happens next
- * (rejected, failed, later revoked), so an over-quota caller cannot keep
- * spending on moderation. Runs under a lock on the account's profile row, so
+ * used), and a 21st attempt in 24 hours. Attempts count whatever the check
+ * decides (rejected, or made and later revoked), so an over-quota caller
+ * cannot keep spending on moderation; only a check that never reached the
+ * model gives its attempt back (releaseShareAttempt). Runs under a lock on the account's profile row, so
  * parallel requests cannot pass the cap together. Run inside a transaction.
  */
 export async function reserveShareAttempt(db: Db, userId: string, manifestationId: string, maxChars: number): Promise<ReserveResult> {
@@ -51,8 +52,17 @@ export async function reserveShareAttempt(db: Db, userId: string, manifestationI
   await db.query(`delete from share_attempt where user_id = $1 and created_at <= now() - interval '24 hours'`, [userId]);
   const made = await db.query(`select count(*)::int as n from share_attempt where user_id = $1`, [userId]);
   if (Number(made.rows[0]?.n ?? 0) >= MAX_LINKS_PER_DAY) return { ok: false, reason: "daily_limit" };
-  await db.query(`insert into share_attempt (user_id) values ($1)`, [userId]);
-  return { ok: true, copy: { manifestationId, title: copy.title, lines: copy.lines, voiceName: copy.voiceName } };
+  const slot = await db.query(`insert into share_attempt (user_id) values ($1) returning id`, [userId]);
+  return {
+    ok: true,
+    copy: { manifestationId, title: copy.title, lines: copy.lines, voiceName: copy.voiceName },
+    attemptId: String(slot.rows[0].id),
+  };
+}
+
+/** Gives back an attempt whose content check never reached the model, so an outage does not use up the day's links. */
+export async function releaseShareAttempt(db: Db, userId: string, attemptId: string): Promise<void> {
+  await db.query(`delete from share_attempt where id = $1::bigint and user_id = $2`, [attemptId, userId]);
 }
 
 export type CreateResult = { ok: true; id: string } | { ok: false; reason: "not_found" };

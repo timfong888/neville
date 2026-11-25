@@ -3,17 +3,13 @@ import { LIMITS, generationEnabled, underCeiling } from "@/lib/server/limits";
 import { apiKey } from "@/lib/server/openrouter";
 import { accountsEnabled, currentUser, type SignedIn } from "@/lib/server/accounts";
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
-import { createShare, listShares, MAX_LINKS_PER_DAY, reserveShareAttempt } from "@/lib/server/shareDb";
+import { createShare, listShares, MAX_LINKS_PER_DAY, releaseShareAttempt, reserveShareAttempt } from "@/lib/server/shareDb";
 import { vetScript } from "@/lib/server/vet";
 import { record } from "@/lib/server/ledger";
 import { parseShare, type ShareInput, UUID } from "@/lib/share";
+import { sameSiteRequest } from "@/lib/server/origin";
 
 export const dynamic = "force-dynamic";
-
-const wrongOrigin = (req: Request) => {
-  const origin = req.headers.get("origin");
-  return !!origin && origin !== new URL(req.url).origin;
-};
 
 /**
  * Managing links (listing and revoking your own) needs the database and
@@ -60,7 +56,7 @@ export async function GET(req: Request) {
 // re-recording): a public page on this domain must not carry text the model
 // has not seen.
 export async function POST(req: Request) {
-  if (wrongOrigin(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
+  if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   const key = apiKey();
   if (!canCreate() || !key) {
     return NextResponse.json({ code: "off", error: "Public links are not switched on yet." }, { status: 503 });
@@ -80,10 +76,15 @@ export async function POST(req: Request) {
   const parsed = parseShare(body);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
 
+  // The spend ceiling first: a refusal there uses none of the day's links.
+  const budget = await underCeiling(key);
+  if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
+
   // Ownership and the daily cap are checked, and the attempt recorded, before
   // anything is spent on the content check. The copy shared is the one saved
   // in the account, never text from this request.
   let copy: ShareInput;
+  let attemptId: string;
   try {
     const slot = await withTx((db) => reserveShareAttempt(db, user.id, parsed.manifestationId, LIMITS.maxScriptChars));
     if (!slot.ok) {
@@ -95,12 +96,10 @@ export async function POST(req: Request) {
         : NextResponse.json({ code: "not_found", error: "Save it in your account first." }, { status: 404 });
     }
     copy = slot.copy;
+    attemptId = slot.attemptId;
   } catch {
     return NextResponse.json({ code: "db_failed", error: "The link could not be made just now." }, { status: 503 });
   }
-
-  const budget = await underCeiling(key);
-  if (!budget.ok) return NextResponse.json(budget.refusal, { status: budget.refusal.status });
 
   const vetted = [copy.title, ...copy.lines];
   const vet = await vetScript(key, vetted);
@@ -108,6 +107,11 @@ export async function POST(req: Request) {
   // check that never reached the model is left out.
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "share", kind: "vet", model: vet.model, chars: vetted.join(" ").length, estUsd: vet.costUsd });
+  }
+  if (!vet.ok && vet.reason === "unavailable") {
+    // Nothing was spent, so the attempt is given back. If that fails, the
+    // attempt simply counts; the caller still gets the same answer.
+    await withTx((db) => releaseShareAttempt(db, user.id, attemptId)).catch(() => {});
   }
   if (!vet.ok) {
     return vet.reason === "rejected"

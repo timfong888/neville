@@ -2,16 +2,14 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/server/accounts";
 import { dbConfigured, getPool } from "@/lib/server/db";
 import { revokeShare } from "@/lib/server/shareDb";
+import { sameSiteRequest } from "@/lib/server/origin";
 
 export const dynamic = "force-dynamic";
 
 // Revokes a link, for the signed-in account that made it, from any device.
 // Deleting the row is the revocation; the public page is a 404 from then on.
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const origin = req.headers.get("origin");
-  if (origin && origin !== new URL(req.url).origin) {
-    return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
-  }
+  if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
   if (!dbConfigured()) {
     return NextResponse.json({ code: "off", error: "Public links are not switched on." }, { status: 503 });
   }
