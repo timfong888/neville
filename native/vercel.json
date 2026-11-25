@@ -10,6 +10,10 @@
       "destination": "https://getneville.vercel.app/api/:path*"
     },
     {
+      "source": "/voice-samples/:path*",
+      "destination": "https://getneville.vercel.app/voice-samples/:path*"
+    },
+    {
       "source": "/((?!_expo|assets|.*\\..*).*)",
       "destination": "/"
     }
