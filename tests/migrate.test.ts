@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs script, no type declarations
-import { checksum, MigrationChanged, runMigrations } from "../scripts/migrate-core.mjs";
+import { checksum, MIGRATE_LOCK, MigrationChanged, runMigrations } from "../scripts/migrate-core.mjs";
 
 let pg: PGlite;
 let dir: string;
@@ -86,6 +86,21 @@ describe("runMigrations", () => {
     await expect(run()).rejects.toThrow();
     expect(await rows()).toEqual([]);
     expect((await pg.query("select to_regclass('public.a') as t")).rows[0]).toEqual({ t: null });
+  });
+
+  it("holds an advisory lock for the whole run, and releases it when a run fails", async () => {
+    const seen: string[] = [];
+    const spy = { query: (t: string, p?: unknown[]) => (seen.push(t), client.query(t, p)) };
+    write("001_a.sql", "select 1;");
+    await runMigrations(spy, dir, () => {});
+    expect(seen[0]).toBe("select pg_advisory_lock($1)");
+    expect(seen.at(-1)).toBe("select pg_advisory_unlock($1)");
+    write("001_a.sql", "select 2;");
+    seen.length = 0;
+    await expect(runMigrations(spy, dir, () => {})).rejects.toBeInstanceOf(MigrationChanged);
+    expect(seen.at(-1)).toBe("select pg_advisory_unlock($1)");
+    const held = await pg.query("select count(*)::int as n from pg_locks where locktype = 'advisory' and objid = $1", [MIGRATE_LOCK]);
+    expect(held.rows[0]).toEqual({ n: 0 });
   });
 
   it("runs this repo's migrations cleanly", async () => {

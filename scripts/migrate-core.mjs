@@ -32,7 +32,20 @@ export class MigrationChanged extends Error {
   }
 }
 
+/** Key for the session-level advisory lock that serialises concurrent runs (two builds deploying at once). */
+export const MIGRATE_LOCK = 811027001;
+
 export async function runMigrations(client, dir, log = console.log) {
+  // Held across the column add, backfill and applies; a second build waits here.
+  await client.query("select pg_advisory_lock($1)", [MIGRATE_LOCK]);
+  try {
+    await migrateLocked(client, dir, log);
+  } finally {
+    await client.query("select pg_advisory_unlock($1)", [MIGRATE_LOCK]);
+  }
+}
+
+async function migrateLocked(client, dir, log) {
   const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
   const sql = new Map();
   for (const f of files) sql.set(f, await readFile(path.join(dir, f), "utf8"));
