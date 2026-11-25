@@ -91,10 +91,24 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
   const tidy = () =>
     (swept ??= inTurn(async () => {
       const doc = await readStrict();
-      // No records at all can mean they were lost, not that the library is empty. Nothing is removed then.
-      if (!doc.found) return;
+      const found = (await files.list()).filter((n) => AUDIO_NAME.test(n));
+      if (!doc.found) {
+        // No records at all, yet recordings exist: the records were lost. The recordings are put
+        // back in the library under a plain title, so a later save cannot orphan them.
+        const audio: Record<string, string> = {};
+        for (const n of found) audio[n.slice(0, 36)] = n;
+        const ids = Object.keys(audio);
+        if (ids.length === 0) return;
+        const now = Date.now();
+        const manifestations = ids.map((id): Manifestation => ({
+          id, title: "Recovered recording", want: "", firstName: "", lines: ["The words of this recording were lost. The recording is safe."],
+          voiceId: "", voiceName: "Unknown", hasAudio: true, createdAt: now, updatedAt: now,
+        }));
+        await write({ lib: { manifestations, playlists: [] }, audio });
+        return;
+      }
       const keep = new Set(Object.values(doc.audio));
-      for (const n of await files.list()) if (AUDIO_NAME.test(n) && !keep.has(n)) await drop(n);
+      for (const n of found) if (!keep.has(n)) await drop(n);
     }).catch(() => undefined));
   const change = <T>(fn: () => Promise<T>) => tidy().then(() => inTurn(fn));
   const load = async () => (await tidy(), (await read()).lib);

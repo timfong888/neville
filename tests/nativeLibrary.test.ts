@@ -197,22 +197,45 @@ describe("native library store", () => {
     expect(d.audio()).toHaveLength(1);
   });
 
-  it("removes no recording at start when the device holds no readable records at all", async () => {
+  it("puts recordings back in the library when the records are lost, and keeps them after later saves", async () => {
     const d = disk();
     const m = item();
     await makeFileLibrary(d).save(m, mp3);
     const [file] = d.audio();
     d.files.delete("library.json");
     d.files.set("library.json.new", '{"manif'); // lost records and a half-written replacement
+    const lib = makeFileLibrary(d);
+    const got = await lib.get(m.id);
+    expect(got).toMatchObject({ id: m.id, title: "Recovered recording", hasAudio: true });
+    expect(bytesAt(d, await lib.audioUri(m.id))).toEqual(mp3.bytes);
+    // A save in the same session, then two restarts: the old recording must survive both.
+    await lib.save(item({ title: "New" }), wav);
     await makeFileLibrary(d).load();
+    const again = makeFileLibrary(d);
+    expect((await again.load()).manifestations.map((x) => x.title)).toEqual(["New", "Recovered recording"]);
+    expect(bytesAt(d, await again.audioUri(m.id))).toEqual(mp3.bytes);
+    expect(d.audio()).toContain(file);
+  });
+
+  it("removes no recording when a leftover records file is valid JSON but not a library", async () => {
+    const d = disk();
+    const m = item();
+    await makeFileLibrary(d).save(m, mp3);
+    const [file] = d.audio();
     for (const leftover of ["null", "{}", "7"]) {
-      d.files.set("library.json.new", leftover); // valid JSON that is not a library
-      await makeFileLibrary(d).load();
+      d.files.delete("library.json");
+      d.files.set("library.json.new", leftover);
+      const lib = makeFileLibrary(d);
+      await lib.load();
       expect(d.audio()).toEqual([file]);
+      expect(bytesAt(d, await lib.audioUri(m.id))).toEqual(mp3.bytes);
     }
-    d.files.delete("library.json.new");
-    await makeFileLibrary(d).load();
-    expect(d.audio()).toEqual([file]);
+  });
+
+  it("starts empty with no records and no recordings, and writes nothing", async () => {
+    const d = disk();
+    expect((await makeFileLibrary(d).load()).manifestations).toEqual([]);
+    expect([...d.files.keys()]).toEqual([]);
   });
 
   it("treats only UUIDs as recording ids in audioUri and remove", async () => {
