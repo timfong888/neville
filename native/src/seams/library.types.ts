@@ -14,7 +14,7 @@ export interface DeviceLibrary {
   save(m: Manifestation, audio?: AudioBytes | null): Promise<void>;
   remove(id: string): Promise<void>;
   /** An address a player can open: a file URI on a phone, an object URL on the web. Null with no recording. */
-  audioSrc(id: string): Promise<string | null>;
+  audioUri(id: string): Promise<string | null>;
   /** Calls `fn` after every change. Returns the unsubscribe. */
   subscribe(fn: () => void): () => void;
 }

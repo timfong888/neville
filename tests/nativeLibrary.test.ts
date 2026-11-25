@@ -35,7 +35,7 @@ describe("native library store", () => {
     await makeFileLibrary(d).save(m, mp3);
     const again = makeFileLibrary(d); // a new store over the same files: a force-quit and reopen
     expect(await again.get(m.id)).toEqual({ ...m, hasAudio: true });
-    expect(await again.audioSrc(m.id)).toBe(`file:///library/${m.id}.mp3`);
+    expect(await again.audioUri(m.id)).toBe(`file:///library/${m.id}.mp3`);
   });
 
   it("puts new items first, replaces by id, and keeps the recording on a title edit", async () => {
@@ -59,7 +59,7 @@ describe("native library store", () => {
     await lib.save(m, { bytes: new Uint8Array([9]), mime: "audio/wav" });
     expect([...d.files.keys()].sort()).toEqual([`${m.id}.wav`, "library.json"].sort());
     await lib.save(m, null);
-    expect(await lib.audioSrc(m.id)).toBeNull();
+    expect(await lib.audioUri(m.id)).toBeNull();
     expect((await lib.get(m.id))?.hasAudio).toBe(false);
   });
 
@@ -79,7 +79,7 @@ describe("native library store", () => {
   it("refuses an id that is not a UUID, so an id can never be a path", async () => {
     const lib = makeFileLibrary(disk());
     await expect(lib.save(item({ id: "../../etc" }), mp3)).rejects.toThrow();
-    expect(await lib.audioSrc("../x")).toBeNull();
+    expect(await lib.audioUri("../x")).toBeNull();
   });
 
   it("names files by format", () => {

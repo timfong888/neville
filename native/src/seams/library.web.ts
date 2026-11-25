@@ -19,7 +19,7 @@ export const library: DeviceLibrary = {
     return store.updateManifestation({ ...m, hasAudio: old.hasAudio }, audio ? blob(audio) : audio);
   },
   remove: (id) => store.deleteManifestation(id),
-  async audioSrc(id) {
+  async audioUri(id) {
     const b = await store.getAudio(id);
     return b ? URL.createObjectURL(b) : null;
   },

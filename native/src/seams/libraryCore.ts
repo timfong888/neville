@@ -65,7 +65,7 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
       if (isUuid(id)) await files.deleteAudio(id).catch(() => undefined);
       await write(withoutManifestation(await read(), id));
     },
-    async audioSrc(id) {
+    async audioUri(id) {
       return isUuid(id) ? files.audioUri(id) : null;
     },
     subscribe(fn) {
