@@ -13,6 +13,9 @@ import { Screen } from "../../src/ui/Screen";
 
 type Phase = "idle" | "playing" | "paused";
 
+// Copies are made one at a time and in order, so an old load can never replace a newer load's copy.
+let copying: Promise<unknown> = Promise.resolve();
+
 // The Player (#122): one saved item, opened by id. It plays the recording, then
 // plays it again for the chosen minutes with an optional bell between plays.
 // All audio goes through the audio seam, so this screen is the same on iOS and web.
@@ -50,7 +53,11 @@ export default function Player() {
       const demo = String(id) === DEMO_ID;
       const it = demo ? demoItem : await library.get(String(id)).catch(() => null);
       // The library owns its address and may free it at any time, so the Player plays its own copy.
-      const own = (u: string | null) => (u ? audio.keep("player-voice", u) : null);
+      const own = (u: string | null) => {
+        const copy = copying.then(() => (u && live ? audio.keep("player-voice", u) : null));
+        copying = copy.catch(() => {});
+        return copy;
+      };
       const src = !it?.hasAudio ? null : await (demo ? demoAudioUri() : library.audioUri(it.id).then(own)).catch(() => null);
       if (src) {
         // The length is read now, so Play does not wait and the browser still counts it as a tap.
