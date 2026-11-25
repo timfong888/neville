@@ -4,7 +4,8 @@ import { Link, useLocalSearchParams } from "expo-router";
 import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
-import { type PlayerItem, loadPlayerItem } from "../../src/seams/playerItem";
+import type { Manifestation } from "@/lib/library/model";
+import { library } from "../../src/player/libraryStub";
 import type { PlaySession } from "../../src/seams/types";
 
 type Phase = "idle" | "playing" | "paused";
@@ -14,7 +15,7 @@ type Phase = "idle" | "playing" | "paused";
 // All audio goes through the audio seam, so this screen is the same on iOS and web.
 export default function Player() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [loaded, setLoaded] = useState<PlayerItem | null | undefined>(undefined);
+  const [loaded, setLoaded] = useState<Manifestation | null | undefined>(undefined);
   const [minutes, setMinutes] = useState<number>(DEFAULT_REPEAT_MINUTES);
   const [bellOn, setBellOn] = useState(true);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -39,11 +40,11 @@ export default function Player() {
     setLoaded(undefined);
     audio.configure().catch(() => {});
     (async () => {
-      const it = await loadPlayerItem(String(id)).catch(() => null);
-      if (it?.audio) {
-        // The length is read now, so Play does not wait and the browser still counts it as a tap.
-        const src = typeof it.audio === "string" ? it.audio : await audio.save(`player-${it.item.id}.wav`, it.audio.bytes, it.audio.mime);
+      const it = await library.get(String(id)).catch(() => null);
+      const src = it?.hasAudio ? await library.audioUri(it.id).catch(() => null) : null;
+      if (src) {
         made = src;
+        // The length is read now, so Play does not wait and the browser still counts it as a tap.
         const seconds = await audio.duration(src);
         if (live) voice.current = { src, seconds };
       }
@@ -67,7 +68,7 @@ export default function Player() {
       setPlays(repeats + 1);
       setNote("");
       const s = audio.open(buildQueue(v.src, gap, repeats), {
-        title: loaded.item.title || "Neville",
+        title: loaded.title || "Neville",
         onState: (st) => {
           if (session.current !== s) return;
           if (st.ended) return stop("Finished.");
@@ -86,7 +87,7 @@ export default function Player() {
   if (loaded === undefined) return <Shell><Text style={s.p}>Loading…</Text></Shell>;
   if (loaded === null) return <Shell><Text style={s.p}>This item is not saved on this device.</Text></Shell>;
 
-  const { item } = loaded;
+  const item = loaded;
   const active = phase !== "idle";
   const at = roundAt(index);
   return (
