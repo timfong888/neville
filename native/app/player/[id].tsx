@@ -71,6 +71,7 @@ export default function Player() {
         title: loaded.title || "Neville",
         onState: (st) => {
           if (session.current !== s) return;
+          if (st.failed) return stop("This recording could not be played.");
           if (st.ended) return stop("Finished.");
           setIndex(st.index);
           setPhase(st.playing ? "playing" : "paused");
