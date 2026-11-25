@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { sameSiteRequest } from "@/lib/server/origin";
 import { accountsEnabled, appleClients, appleLinks, currentUser, missingVars, purgeAudio, signInProviders, withTx } from "@/lib/server/accounts";
-import { type AppleLink, type RevokeOutcome, readAppleCode, revokeAppleGrants } from "@/lib/server/appleRevoke";
+import { addPendingRevocations, settleAppleRevocations } from "@/lib/server/appleRevokeDb";
+import { type Db, getPool } from "@/lib/server/db";
+import { type RevokeOutcome, collectAppleTokens, readAppleCode } from "@/lib/server/appleRevoke";
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +24,9 @@ export async function GET(req: Request) {
  *
  * The Sign in with Apple grant is revoked too (App Review 5.1.1(v), #98): with the token the
  * website's sign-in stored, and with the fresh authorization code the iOS app sends as
- * `appleAuthorizationCode`. The tokens are read before the rows go, but Apple is called only after
- * the deletion has committed, so a deletion that fails leaves the grant alone. Deletion never
+ * `appleAuthorizationCode`. The tokens are gathered before the rows go and written to
+ * apple_revocation_pending in the deleting transaction. Apple is called only after that commits,
+ * and a token Apple does not accept stays recorded for a later deletion to retry. Deletion never
  * depends on Apple; `apple` reports the result.
  */
 export async function DELETE(req: Request) {
@@ -31,21 +34,20 @@ export async function DELETE(req: Request) {
   const user = await currentUser(req);
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const body = await req.json().catch(() => null);
-  const links = await appleLinks(user.id).catch(() => null);
-  const keys = await withTx(async (db) => {
-    const k = await deleteAccount(db, user.id);
-    await addTombstones(db, k);
-    return k;
+  const clients = appleClients();
+  // Null when the Apple sign-ins could not be read: the deletion goes ahead and reports "failed".
+  const found = await appleLinks(user.id)
+    .then(async (links) => ({ links: links.length, ...(await collectAppleTokens({ links, code: readAppleCode(body), ...clients })) }))
+    .catch(() => null);
+  const { keys, pending } = await withTx(async (db) => {
+    const keys = await deleteAccount(db, user.id);
+    await addTombstones(db, keys);
+    return { keys, pending: found ? await addPendingRevocations(db, found.tokens) : [] };
   });
-  const apple = await revokeApple(links, readAppleCode(body));
+  const left = await settleAppleRevocations(getPool() as unknown as Db, clients, pending).catch(() => pending.length);
+  const apple: RevokeOutcome = found?.links === 0 ? "nothing-to-revoke" : found && !found.unreachable && left === 0 ? "revoked" : "failed";
+  // No ids or tokens in the log: only that a grant was left behind for a retry or for someone to follow up.
+  if (apple === "failed") console.error("Account deletion: the Sign in with Apple grant could not be revoked.");
   const audioPending = await purgeAudio(keys);
   return NextResponse.json({ ok: true, audioPending, apple });
-}
-
-/** `links` is null when the account's Apple sign-ins could not be read before it was deleted. */
-async function revokeApple(links: AppleLink[] | null, code: string | undefined): Promise<RevokeOutcome> {
-  const outcome = links ? await revokeAppleGrants({ links, code, ...appleClients() }).catch(() => "failed" as const) : "failed";
-  // No ids or tokens in the log: only that a grant was left behind for someone to follow up.
-  if (outcome === "failed") console.error("Account deletion: the Sign in with Apple grant could not be revoked.");
-  return outcome;
 }
