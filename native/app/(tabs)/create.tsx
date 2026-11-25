@@ -54,9 +54,12 @@ export default function Wish() {
           placeholderTextColor={colors.muted}
           onChangeText={(name) => edit({ name })}
         />
-        <Text style={s.muted}>
-          Voice: <Text style={s.p}>{c.voiceName}</Text>
-        </Text>
+        <View style={s.row}>
+          <Text style={s.muted}>
+            Voice: <Text style={s.p}>{c.voiceName}</Text>
+          </Text>
+          <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
+        </View>
         <Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />
         <View style={s.row}>
           <Text style={s.muted}>{freeBanner(c.used)}</Text>

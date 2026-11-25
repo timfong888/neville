@@ -36,6 +36,14 @@ export const nextVariant = (v: number): number => (v + 1) % VARIANT_COUNT;
 /** The title when there is no recording. It is not about the wish, as on the website's Save. */
 export const FALLBACK_TITLE = "A moment of calm";
 
+/**
+ * The voice for the next recording: the one picked on the Create page when it may be
+ * recorded, else the Settings choice. Picking on Create does not change Settings (#150).
+ */
+export function voiceFor(picked: string | null | undefined, settingsVoiceId: string | null | undefined): string {
+  return picked && resolveVoice(picked).id === picked ? picked : resolveVoice(settingsVoiceId).id;
+}
+
 /** The wish as typed, and the choices from Settings. */
 export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
 

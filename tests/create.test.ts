@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, toManifestation, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
 
 const LINES = ["Tim, breathe in.", "You speak with calm.", "It is done."];
 const rec = (over: Partial<Recording> = {}): Recording => ({ audio: new ArrayBuffer(4), mime: "audio/wav", lines: LINES, voiceId: DEFAULT_VOICE_ID, source: "model", ...over });
@@ -86,5 +86,19 @@ describe("the Create flow (#120)", () => {
     });
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
+  });
+  it("uses the voice picked on Create, else the Settings voice (#150)", async () => {
+    const other = ENABLED_VOICES.find((v) => v.generate && v.id !== DEFAULT_VOICE_ID)!;
+    const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
+    expect(voiceFor(other.id, DEFAULT_VOICE_ID)).toBe(other.id);
+    expect(voiceFor(null, other.id)).toBe(other.id);
+    expect(voiceFor("gone", "also-gone")).toBe(DEFAULT_VOICE_ID);
+    if (sampleOnly) expect(voiceFor(sampleOnly.id, other.id)).toBe(other.id);
+    // The pick reaches the request body and the Library item.
+    let body: WishRequest | undefined;
+    const w = { want: "to be calm", name: "Tim", voiceId: voiceFor(other.id, DEFAULT_VOICE_ID) };
+    const made = await makeManifestation({ manifest: async (b) => ((body = b), rec({ voiceId: b.voiceId })) }, w, false);
+    expect(body?.voiceId).toBe(other.id);
+    expect(toManifestation(made, w, "id-3", 5)).toMatchObject({ voiceId: other.id, voiceName: other.name });
   });
 });
