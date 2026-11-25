@@ -3,6 +3,8 @@ import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-
 import type { AudioSeam } from "./types";
 
 const ARTIST = "Neville";
+/** How long a local clip may take to load before the session is reported as failed. */
+const LOAD_TIMEOUT_MS = 8000;
 
 // expo-audio, as proved in the spike (#85): background playback and lock-screen
 // controls need `doNotMix`, and the playlist sequences clips natively.
@@ -31,16 +33,32 @@ export const audio: AudioSeam = {
   open(srcs, o) {
     const list = createAudioPlaylist({ sources: srcs, loop: "none", updateInterval: 500 });
     list.setActiveForLockScreen(true, { title: o.title, artist: ARTIST }, { showSeekBackward: false, showSeekForward: false });
-    const sub = list.addListener("playlistStatusUpdate", (s) =>
-      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1 }),
-    );
+    // The playlist status has no error field. A clip that cannot be loaded or decoded
+    // never reports isLoaded, so a session that has not loaded this long after Play has failed.
+    let loaded = false;
+    let watch: ReturnType<typeof setTimeout> | null = null;
+    const sub = list.addListener("playlistStatusUpdate", (s) => {
+      if (s.isLoaded || s.playing) loaded = true;
+      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1 });
+    });
     let open = true;
+    const guard = () => {
+      if (loaded || watch) return;
+      watch = setTimeout(() => {
+        if (open && !loaded) o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
+      }, LOAD_TIMEOUT_MS);
+    };
     return {
-      play: () => open && list.play(),
+      play() {
+        if (!open) return;
+        list.play();
+        guard();
+      },
       pause: () => open && list.pause(),
       stop() {
         if (!open) return;
         open = false;
+        if (watch) clearTimeout(watch);
         sub.remove();
         try {
           list.pause();
