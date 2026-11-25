@@ -22,7 +22,6 @@ export default function Layout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="player/[id]" options={{ title: "Player" }} />
         <Stack.Screen name="library/[id]" options={{ title: "Library" }} />
-        <Stack.Screen name="phase0" options={{ title: "Phase 0" }} />
         <Stack.Screen name="spike" options={{ title: "Audio spike" }} />
       </Stack>
     </>
