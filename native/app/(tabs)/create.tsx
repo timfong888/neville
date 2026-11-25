@@ -22,7 +22,8 @@ export default function Wish() {
   };
 
   return (
-    <Screen title="Type what you want. Hear it as already yours.">
+    // The Create button is the footer: it stays in sight and sits just above the keyboard (#149).
+    <Screen title="Type what you want. Hear it as already yours." footer={<Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />}>
       <Text style={s.muted}>No sign-up. One tap. A short affirmation written and recorded for you.</Text>
       <View style={s.card}>
         <Text nativeID="want" style={s.muted}>What do you want?</Text>
@@ -31,6 +32,9 @@ export default function Wish() {
           aria-labelledby="want"
           style={[s.input, s.area]}
           multiline
+          // Return ends typing and puts the keyboard away; a wish is one thought, not paragraphs.
+          returnKeyType="done"
+          submitBehavior="blurAndSubmit"
           value={c.want}
           maxLength={MAX_WANT}
           placeholder={EXAMPLES[0]}
@@ -50,6 +54,7 @@ export default function Wish() {
           value={c.name}
           maxLength={MAX_NAME}
           autoComplete="given-name"
+          returnKeyType="done"
           placeholder="Tim"
           placeholderTextColor={colors.muted}
           onChangeText={(name) => edit({ name })}
@@ -57,7 +62,6 @@ export default function Wish() {
         <Text style={s.muted}>
           Voice: <Text style={s.p}>{c.voiceName}</Text>
         </Text>
-        <Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />
         <View style={s.row}>
           <Text style={s.muted}>{freeBanner(c.used)}</Text>
           {c.used > 0 ? <Button small label="Reset demo" onPress={reset} /> : null}
