@@ -32,3 +32,18 @@ describe("native delete-account prompt (#121)", () => {
     expect(deleteAccountPrompt().endsWith("Anything saved on this phone stays on this phone.")).toBe(true);
   });
 });
+
+describe("delete-account prompt counts from the device library (#121)", () => {
+  it("names the saved manifestations and playlists that stay on the phone", async () => {
+    const { deleteAccountPrompt, deviceDataFromLibrary } = await import("@/lib/deviceDataCopy");
+    const data = deviceDataFromLibrary({ manifestations: [{}, {}, {}], playlists: [{}] });
+    expect(data).toEqual({ manifestations: 3, playlists: 1, draft: false });
+    expect(deleteAccountPrompt(data).endsWith("Staying on this phone: 3 manifestations and 1 playlist.")).toBe(true);
+  });
+  it("does not claim the phone is empty when the library is: a typed wish cannot be seen yet", async () => {
+    const { deleteAccountPrompt, deviceDataFromLibrary } = await import("@/lib/deviceDataCopy");
+    const data = deviceDataFromLibrary({ manifestations: [], playlists: [] });
+    expect(data).toBeUndefined();
+    expect(deleteAccountPrompt(data).endsWith("Anything saved on this phone stays on this phone.")).toBe(true);
+  });
+});
