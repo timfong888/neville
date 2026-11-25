@@ -86,7 +86,9 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
     return run;
   };
   // Once per start: removes recordings the records do not name. A save or delete that was cut
-  // short leaves one behind. Nothing is removed while the records cannot be read.
+  // short leaves one behind. Nothing is removed while the records cannot be read. A start that
+  // fails is tried again, and no change is made until one succeeds: a change made after a failed
+  // recovery would write records that leave the old recordings unnamed.
   let swept: Promise<void> | null = null;
   const tidy = () =>
     (swept ??= inTurn(async () => {
@@ -109,9 +111,12 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
       }
       const keep = new Set(Object.values(doc.audio));
       for (const n of found) if (!keep.has(n)) await drop(n);
-    }).catch(() => undefined));
+    }).catch((e) => {
+      swept = null;
+      throw e;
+    }));
   const change = <T>(fn: () => Promise<T>) => tidy().then(() => inTurn(fn));
-  const load = async () => (await tidy(), (await read()).lib);
+  const load = async () => (await tidy().catch(() => undefined), (await read()).lib);
   return {
     load,
     get: async (id) => (await load()).manifestations.find((m) => m.id === id) ?? null,
@@ -155,7 +160,7 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
       await drop(old);
     }),
     async audioUri(id) {
-      await tidy();
+      await tidy().catch(() => undefined);
       const name = isUuid(id) ? (await read()).audio[id] : undefined;
       return name ? files.uri(name) : null;
     },

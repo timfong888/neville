@@ -197,6 +197,23 @@ describe("native library store", () => {
     expect(d.audio()).toHaveLength(1);
   });
 
+  it("makes no change until a failed recovery has succeeded, so the old recording is kept", async () => {
+    const d = disk();
+    const m = item();
+    await makeFileLibrary(d).save(m, mp3);
+    d.files.delete("library.json"); // lost records
+    d.fail = (op, name) => op === "write" && name === "library.json.new"; // the disk is full
+    const lib = makeFileLibrary(d);
+    expect((await lib.load()).manifestations).toEqual([]);
+    await expect(lib.save(item({ title: "New" }), wav)).rejects.toThrow("disk full");
+    expect(d.audio()).toHaveLength(1);
+    d.fail = () => false; // space is freed: the same store recovers, then saves
+    await lib.save(item({ title: "New" }), wav);
+    const again = makeFileLibrary(d);
+    expect((await again.load()).manifestations.map((x) => x.title)).toEqual(["New", "Recovered recording"]);
+    expect(bytesAt(d, await makeFileLibrary(d).audioUri(m.id))).toEqual(mp3.bytes);
+  });
+
   it("puts recordings back in the library when the records are lost, and keeps them after later saves", async () => {
     const d = disk();
     const m = item();
