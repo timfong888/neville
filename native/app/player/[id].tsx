@@ -31,6 +31,8 @@ export default function Player() {
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const session = useRef<PlaySession | null>(null);
   const starting = useRef(false);
+  // Counts the items this screen has shown, so a start that began for an old item can tell.
+  const shown = useRef(0);
 
   const stop = (message = "") => {
     session.current?.stop();
@@ -69,6 +71,7 @@ export default function Player() {
     })();
     return () => {
       live = false;
+      shown.current++;
       session.current?.stop();
       session.current = null;
     };
@@ -80,9 +83,12 @@ export default function Player() {
     // A second tap while the first is still starting must not open a second session.
     if (!v || !loaded || starting.current) return;
     starting.current = true;
+    const mine = shown.current;
     try {
       const repeats = repeatsFor(v.seconds, minutes);
       const gap = repeats ? await audio.save(bellOn ? "player-gap-bell.wav" : "player-gap.wav", gapClip(bellOn), "audio/wav") : "";
+      // The screen closed or moved to another item while the gap clip was being made.
+      if (shown.current !== mine) return;
       setPlays(repeats + 1);
       setNote("");
       const s = audio.open(buildQueue(v.src, gap, repeats), {
