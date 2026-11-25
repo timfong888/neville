@@ -1,0 +1,82 @@
+import { File, Paths } from "expo-file-system";
+import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
+import type { AudioSeam } from "./types";
+
+const ARTIST = "Neville";
+/** How long a local clip may take to load before the session is reported as failed. */
+const LOAD_TIMEOUT_MS = 8000;
+
+// expo-audio, as proved in the spike (#85): background playback and lock-screen
+// controls need `doNotMix`, and the playlist sequences clips natively.
+export const audio: AudioSeam = {
+  async configure() {
+    await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" });
+  },
+  async save(name, bytes) {
+    const f = new File(Paths.cache, name);
+    if (f.exists) f.delete();
+    f.create();
+    f.write(bytes);
+    return f.uri;
+  },
+  // A recording on the phone is a file that stays readable while the Player is open, so no copy is made.
+  async keep(_name, src) {
+    return src;
+  },
+  async duration(src) {
+    const p = createAudioPlayer(src);
+    try {
+      for (let i = 0; i < 40 && !p.isLoaded; i++) await new Promise((r) => setTimeout(r, 50));
+      return Number.isFinite(p.duration) ? p.duration : 0;
+    } catch {
+      return 0;
+    } finally {
+      p.remove();
+    }
+  },
+  open(srcs, o) {
+    const list = createAudioPlaylist({ sources: srcs, loop: "none", updateInterval: 500 });
+    list.setActiveForLockScreen(true, { title: o.title, artist: ARTIST }, { showSeekBackward: false, showSeekForward: false });
+    // The playlist status has no error field. A clip that cannot be loaded or decoded
+    // never reports isLoaded, so a session that has not loaded this long after Play has failed.
+    let loaded = false;
+    let watch: ReturnType<typeof setTimeout> | null = null;
+    const sub = list.addListener("playlistStatusUpdate", (s) => {
+      if (s.isLoaded || s.playing) loaded = true;
+      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1 });
+    });
+    let open = true;
+    const guard = () => {
+      if (loaded || watch) return;
+      watch = setTimeout(() => {
+        // Cleared so a second Play on the same session is watched again.
+        watch = null;
+        if (!open || loaded) return;
+        // Paused first, so a clip that loads late cannot start after the failure was reported.
+        try {
+          list.pause();
+        } catch {}
+        o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
+      }, LOAD_TIMEOUT_MS);
+    };
+    return {
+      play() {
+        if (!open) return;
+        list.play();
+        guard();
+      },
+      pause: () => open && list.pause(),
+      stop() {
+        if (!open) return;
+        open = false;
+        if (watch) clearTimeout(watch);
+        sub.remove();
+        try {
+          list.pause();
+          list.clearLockScreenControls();
+          list.destroy();
+        } catch {}
+      },
+    };
+  },
+};
