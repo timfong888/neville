@@ -22,6 +22,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 11, lineHeight: 14 },
       }}
     >
+      <Tabs.Screen name="index" options={{ href: null }} />
       {TABS.map((t) => (
         <Tabs.Screen
           key={t.name}
