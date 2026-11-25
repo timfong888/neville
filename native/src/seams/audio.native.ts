@@ -45,7 +45,14 @@ export const audio: AudioSeam = {
     const guard = () => {
       if (loaded || watch) return;
       watch = setTimeout(() => {
-        if (open && !loaded) o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
+        // Cleared so a second Play on the same session is watched again.
+        watch = null;
+        if (!open || loaded) return;
+        // Paused first, so a clip that loads late cannot start after the failure was reported.
+        try {
+          list.pause();
+        } catch {}
+        o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
       }, LOAD_TIMEOUT_MS);
     };
     return {

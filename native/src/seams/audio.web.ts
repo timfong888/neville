@@ -3,6 +3,9 @@ import type { AudioSeam } from "./types";
 const ARTIST = "Neville";
 // One address per saved name. Saving a name again frees the clip it held before.
 const saved = new Map<string, string>();
+// Addresses an open session may still load, and replaced ones waiting for that session to stop.
+const inUse = new Map<string, number>();
+const stale = new Set<string>();
 const media = () => (typeof navigator !== "undefined" && "mediaSession" in navigator ? navigator.mediaSession : null);
 
 // The web audio seam: one <audio> element carries the whole session, as the
@@ -11,7 +14,7 @@ export const audio: AudioSeam = {
   async configure() {},
   async save(name, bytes, mime) {
     const old = saved.get(name);
-    if (old) URL.revokeObjectURL(old);
+    if (old) inUse.get(old) ? stale.add(old) : URL.revokeObjectURL(old);
     const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
     saved.set(name, url);
     return url;
@@ -29,6 +32,8 @@ export const audio: AudioSeam = {
   },
   open(srcs, o) {
     const a = new Audio();
+    const mine = [...new Set(srcs)];
+    for (const u of mine) inUse.set(u, (inUse.get(u) ?? 0) + 1);
     let index = 0;
     let open = true;
     // What the listener asked for. The element also pauses by itself at the end of each clip.
@@ -68,6 +73,14 @@ export const audio: AudioSeam = {
         a.onended = a.onpause = a.onplay = a.onerror = null;
         a.pause();
         a.removeAttribute("src");
+        for (const u of mine) {
+          const n = (inUse.get(u) ?? 1) - 1;
+          if (n > 0) inUse.set(u, n);
+          else {
+            inUse.delete(u);
+            if (stale.delete(u)) URL.revokeObjectURL(u);
+          }
+        }
       },
     };
     a.onended = () => {
