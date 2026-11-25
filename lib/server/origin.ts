@@ -8,6 +8,8 @@
 //   PUT    /api/library/manifestations/[id]  first line (uploads and tombstones follow it)
 //   DELETE /api/library/manifestations/[id]  via asOwner, which checks first
 //   PUT, DELETE /api/library/playlists/[id]  PUT first line; DELETE via asOwner
+//   POST   /api/share                        first line
+//   DELETE /api/share/[id]                   first line
 // GET routes (/api/library, .../audio, /api/account) are reads and are not guarded.
 import { LEGACY_ORIGINS, PRIMARY_ORIGIN } from "@/lib/server/accounts";
 
