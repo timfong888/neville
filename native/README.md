@@ -13,3 +13,18 @@ cd native && npm install
 npm run typecheck
 npm run export:ios
 ```
+
+## Routes (Phase 1)
+
+| Route | Screen | File |
+| --- | --- | --- |
+| `/create` | Create (tab) | `app/(tabs)/create.tsx` |
+| `/library` | Library list (tab) | `app/(tabs)/library.tsx` |
+| `/library/[id]` | Library detail | `app/library/[id].tsx` |
+| `/player/[id]` | Player, by Library item id | `app/player/[id].tsx` |
+| `/settings` | Settings (tab) | `app/(tabs)/settings.tsx` |
+| `/account` | Account (tab) | `app/(tabs)/account.tsx` |
+
+- Colours and type come from `src/theme.ts`. Wrap a screen in `Screen` from `src/ui/Screen.tsx`.
+- The web build is a single-page app (`web.output: "single"`), because screens read device storage.
+- `/phase0` and `/spike` are the Phase 0 pages, kept until Account and Player replace them.
