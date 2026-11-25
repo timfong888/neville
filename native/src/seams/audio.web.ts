@@ -1,14 +1,20 @@
 import type { AudioSeam } from "./types";
 
 const ARTIST = "Neville";
+// One address per saved name. Saving a name again frees the clip it held before.
+const saved = new Map<string, string>();
 const media = () => (typeof navigator !== "undefined" && "mediaSession" in navigator ? navigator.mediaSession : null);
 
 // The web audio seam: one <audio> element carries the whole session, as the
 // website's player does, and Media Session gives the lock-screen controls.
 export const audio: AudioSeam = {
   async configure() {},
-  async save(_name, bytes, mime) {
-    return URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+  async save(name, bytes, mime) {
+    const old = saved.get(name);
+    if (old) URL.revokeObjectURL(old);
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+    saved.set(name, url);
+    return url;
   },
   duration(src) {
     return new Promise((resolve) => {
