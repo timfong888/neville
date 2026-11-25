@@ -1,5 +1,7 @@
-// Single source for the numbers shown on /architecture and in the demo's cost meter.
-// Keep in step with docs/specs/architecture.md.
+// The vendor and cost numbers behind docs/specs/architecture.md and the demo's cost meter.
+// The /architecture page that showed them was removed (#112); its content is kept as text in
+// docs/specs/architecture-site-page.md. Several figures here predate the corrections listed at the
+// top of docs/specs/architecture.md; keep in step with that document.
 
 /**
  * Free creations before the sign-up gate (variations count). SOFT MVP CAP: it
