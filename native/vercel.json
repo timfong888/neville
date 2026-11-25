@@ -11,7 +11,7 @@
     },
     {
       "source": "/((?!_expo|assets|.*\\..*).*)",
-      "destination": "/index.html"
+      "destination": "/"
     }
   ],
   "cleanUrls": true
