@@ -5,7 +5,8 @@ import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
-import { library } from "../../src/player/libraryStub";
+import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
+import { library } from "../../src/seams/library";
 import type { PlaySession } from "../../src/seams/types";
 import { colors } from "../../src/theme";
 import { Screen } from "../../src/ui/Screen";
@@ -37,7 +38,6 @@ export default function Player() {
 
   useEffect(() => {
     let live = true;
-    let made = "";
     voice.current = null;
     setLoaded(undefined);
     // A new item starts idle, whatever the last one was doing.
@@ -46,10 +46,12 @@ export default function Player() {
     setNote("");
     audio.configure().catch(() => {});
     (async () => {
-      const it = await library.get(String(id)).catch(() => null);
-      const src = it?.hasAudio ? await library.audioUri(it.id).catch(() => null) : null;
+      // `/player/demo` is a built-in test tone. Every other id comes from the library seam.
+      const demo = String(id) === DEMO_ID;
+      const it = demo ? demoItem : await library.get(String(id)).catch(() => null);
+      // The address is asked for on every open. The seam owns it and may replace it, so it is not kept or freed here.
+      const src = !it?.hasAudio ? null : await (demo ? demoAudioUri() : library.audioUri(it.id)).catch(() => null);
       if (src) {
-        made = src;
         // The length is read now, so Play does not wait and the browser still counts it as a tap.
         const seconds = await audio.duration(src);
         if (live) voice.current = { src, seconds };
@@ -60,8 +62,6 @@ export default function Player() {
       live = false;
       session.current?.stop();
       session.current = null;
-      // The stub hands over a fresh address for a saved recording, so it is freed here.
-      if (made.startsWith("blob:") && id !== "demo") URL.revokeObjectURL(made);
     };
   }, [id]);
 
