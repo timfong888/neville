@@ -23,6 +23,16 @@ describe("api client", () => {
     expect(calls[0].init.headers).toMatchObject({ Cookie: "a=b", Origin: "neville://" });
   });
 
+  it("deletes the account, sending the Apple authorization code only when there is one", async () => {
+    const { calls, f } = fake(() => Response.json({ ok: true }));
+    const api = createApi({ baseUrl: "https://x.test", fetch: f });
+    await api.deleteAccount();
+    await api.deleteAccount({ appleAuthorizationCode: "c.123" });
+    expect(calls[0].init).toMatchObject({ method: "DELETE" });
+    expect(calls[0].init.body).toBeUndefined();
+    expect(calls[1].init).toMatchObject({ method: "DELETE", body: JSON.stringify({ appleAuthorizationCode: "c.123" }) });
+  });
+
   it("reads a manifest recording from the response headers", async () => {
     const { f } = fake(
       () =>

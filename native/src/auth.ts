@@ -55,3 +55,25 @@ export async function signInWithApple(): Promise<AppleResult> {
     return { ok: false, cancelled: code === "ERR_REQUEST_CANCELED", message: e instanceof Error ? e.message : "Sign-in failed." };
   }
 }
+
+/**
+ * A fresh Apple authorization code, asked for just before the account is deleted. The server
+ * exchanges it and revokes the Apple grant (App Review 5.1.1(v), #98). `code` is null where the
+ * system sheet does not exist (the web) or Apple returned none; deletion still goes ahead then.
+ */
+export async function appleCodeForDeletion(): Promise<{ cancelled: boolean; code: string | null }> {
+  if (Platform.OS !== "ios") return { cancelled: false, code: null };
+  try {
+    const cred = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+    return { cancelled: false, code: cred.authorizationCode ?? null };
+  } catch (e) {
+    return { cancelled: (e as { code?: string }).code === "ERR_REQUEST_CANCELED", code: null };
+  }
+}
+
+/** On the web there is no system sheet: Apple sign-in is Better Auth's redirect, returning to `/account`. */
+export async function signInWithAppleOnWeb(): Promise<AppleResult> {
+  const res = await authClient.signIn.social({ provider: "apple", callbackURL: "/account" }).catch(() => null);
+  if (!res || res.error) return { ok: false, cancelled: false, message: res?.error?.message ?? "Sign-in could not start. Try again in a moment." };
+  return { ok: true };
+}
