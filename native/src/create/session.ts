@@ -2,13 +2,11 @@
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
 import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount } from "@/lib/create";
-import { resolvePace, resolveTone } from "@/lib/delivery";
-import { PACE_STORAGE_KEY, TONE_STORAGE_KEY } from "@/lib/deliveryStore";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
-import { VOICE_STORAGE_KEY } from "@/lib/voiceStore";
 import { resolveVoice } from "@/lib/voices";
 import { api } from "../api";
-import { kv } from "./kv";
+import { kv } from "../seams/kv";
+import { settings } from "../seams/settings";
 
 export type CreateState = {
   want: string;
@@ -44,9 +42,9 @@ export const canSpeak = (): boolean => typeof (globalThis as { speechSynthesis?:
 let typed = false;
 /** Reads what the device keeps: the draft, the count and the chosen voice. Run when the wish step shows. */
 export async function load(): Promise<void> {
-  const [draft, used, voice] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), read(VOICE_STORAGE_KEY)]);
+  const [draft, used, chosen] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read()]);
   // Typing that began before storage answered wins over the stored draft.
-  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), voiceName: resolveVoice(voice).name });
+  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), voiceName: resolveVoice(chosen.voiceId).name });
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
@@ -60,10 +58,9 @@ let run = 0;
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
   set({ making: true, made: null, variant });
-  const [voiceId, pace, tone] = await Promise.all([read(VOICE_STORAGE_KEY), read(PACE_STORAGE_KEY), read(TONE_STORAGE_KEY)]);
-  set({ voiceName: resolveVoice(voiceId).name });
-  const wish = { want: state.want, name: state.name, voiceId, variant, pace: resolvePace(pace).id, tone: resolveTone(tone).id };
-  const made = await makeManifestation(api, wish, canSpeak());
+  const chosen = await settings.read();
+  set({ voiceName: resolveVoice(chosen.voiceId).name });
+  const made = await makeManifestation(api, { want: state.want, name: state.name, variant, ...chosen }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run === mine) set({ making: false, made });
 }
