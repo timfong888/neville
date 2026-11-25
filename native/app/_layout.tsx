@@ -2,6 +2,9 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { colors } from "../src/theme";
 
+// A screen opened cold (a deep link, a browser refresh) still gets the tabs underneath, so Back works.
+export const unstable_settings = { initialRouteName: "(tabs)" };
+
 // The root stack. The four tabs live in (tabs); Player and Library detail push on top of them.
 export default function Layout() {
   return (
