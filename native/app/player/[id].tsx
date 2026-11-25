@@ -38,6 +38,10 @@ export default function Player() {
     let made = "";
     voice.current = null;
     setLoaded(undefined);
+    // A new item starts idle, whatever the last one was doing.
+    setPhase("idle");
+    setIndex(0);
+    setNote("");
     audio.configure().catch(() => {});
     (async () => {
       const it = await library.get(String(id)).catch(() => null);
@@ -54,7 +58,8 @@ export default function Player() {
       live = false;
       session.current?.stop();
       session.current = null;
-      if (made.startsWith("blob:")) URL.revokeObjectURL(made);
+      // The stub hands over a fresh address for a saved recording, so it is freed here.
+      if (made.startsWith("blob:") && id !== "demo") URL.revokeObjectURL(made);
     };
   }, [id]);
 
