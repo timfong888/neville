@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { createApi } from "@/lib/api/client";
 import { sessionHeaders } from "./auth";
 import { API_URL } from "./config";
@@ -8,6 +9,6 @@ export const api = createApi({
   baseUrl: API_URL,
   // The session cookie and Origin (src/auth.ts). The server refuses writes without an Origin (#62).
   headers: () => sessionHeaders(),
-  // The cookie is sent by hand; the iOS cookie jar must not add a second one.
-  credentials: "omit",
+  // On a phone the cookie is sent by hand, so the cookie jar must not add a second one. On the web the jar is the cookie.
+  credentials: Platform.OS === "web" ? "same-origin" : "omit",
 });

@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { createAuthClient } from "better-auth/react";
@@ -17,6 +18,8 @@ export const authClient = createAuthClient({
 
 /** What our own API calls must carry: the stored session cookie, and an Origin the server accepts. */
 export async function sessionHeaders(): Promise<Record<string, string>> {
+  // On the web the browser adds its own cookie and Origin, and SecureStore does not exist there.
+  if (Platform.OS === "web") return {};
   const cookie = await authClient.getCookie();
   return { Origin: `${SCHEME}://`, ...(cookie ? { Cookie: cookie } : {}) };
 }
