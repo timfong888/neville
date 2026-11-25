@@ -1,6 +1,6 @@
 // The retry record (#98): a revocation Apple does not accept stays in apple_revocation_pending and
 // a later account deletion retries it.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addPendingRevocations, RETRY_BATCH, RETRY_BUDGET_MS, settleAppleRevocations, tryAddPendingRevocations } from "@/lib/server/appleRevokeDb";
@@ -25,8 +25,8 @@ const rows = async () => (await db.query(`select token, attempts from apple_revo
 
 beforeEach(async () => {
   const pg = new PGlite();
-  await pg.exec(readFileSync("db/migrations/001_accounts_and_library.sql", "utf8"));
-  await pg.exec(readFileSync("db/migrations/003_apple_revocation_pending.sql", "utf8"));
+  // Every migration in name order, as scripts/migrate.mjs applies them: 003 runs after 002.
+  for (const f of readdirSync("db/migrations").filter((n) => n.endsWith(".sql")).sort()) await pg.exec(readFileSync(`db/migrations/${f}`, "utf8"));
   db = { query: (t, p) => pg.query(t, p) as Promise<{ rows: Record<string, unknown>[] }> };
   sent = [];
 });
