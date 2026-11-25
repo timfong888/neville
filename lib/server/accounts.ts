@@ -10,6 +10,7 @@ import { nextCookies } from "better-auth/next-js";
 import { appleAudience, appleNonceProblem } from "@/lib/appleSignIn";
 import { googleConfigured, missingAccountVars, providersFor } from "@/lib/server/providers";
 import { tryAppleClientSecret } from "@/lib/server/appleSecret";
+import type { AppleClient, AppleLink } from "@/lib/server/appleRevoke";
 import { getPool, withTx } from "@/lib/server/db";
 import { sniffAudio } from "@/lib/server/audioSniff";
 import { randomUUID } from "node:crypto";
@@ -81,6 +82,30 @@ function appleSecret(): string | null {
   }
   appleCache = { secret, at: Date.now() };
   return secret;
+}
+
+/**
+ * The client ids Apple issues tokens to, each with a secret signed for it: the web Services ID and,
+ * when APPLE_APP_BUNDLE_ID is set, the iOS app. Used to revoke a grant when an account is deleted (#98).
+ */
+export function appleClients(): { web: AppleClient | null; app: AppleClient | null } {
+  if (!APPLE_VARS.every((k) => appleVar(k))) return { web: null, app: null };
+  const signed = (clientId: string): AppleClient | null => {
+    const clientSecret = clientId
+      ? tryAppleClientSecret({ teamId: appleVar("APPLE_TEAM_ID"), keyId: appleVar("APPLE_KEY_ID"), clientId, privateKey: appleVar("APPLE_PRIVATE_KEY") })
+      : null;
+    return clientSecret ? { clientId, clientSecret } : null;
+  };
+  return { web: signed(appleVar("APPLE_CLIENT_ID")), app: signed(process.env.APPLE_APP_BUNDLE_ID?.trim() ?? "") };
+}
+
+/** The account's Apple sign-ins, with the tokens the website's sign-in flow stored (the app's flow stores none). */
+export async function appleLinks(userId: string): Promise<AppleLink[]> {
+  const { rows } = await getPool().query(
+    `select "accountId", "refreshToken", "accessToken" from "account" where "userId" = $1 and "providerId" = 'apple'`,
+    [userId],
+  );
+  return rows.map((r) => ({ accountId: String(r.accountId), refreshToken: r.refreshToken ?? null, accessToken: r.accessToken ?? null }));
 }
 
 /** Sign in with Apple is offered only when all four Apple variables are set and the key is usable. */
