@@ -10,16 +10,20 @@ export type Events = { onLine(i: number): void; onEnd(): void; onError(message: 
 /** Starts playback; the returned function stops it. No event fires after a stop. */
 export function play(made: Made, ev: Events): () => void {
   let live = true;
+  // Set before the player starts: a player that fails at once reports through `guard` straight away.
+  let end: () => void = () => undefined;
+  const stop = () => {
+    live = false;
+    end();
+  };
   const guard: Events = {
     onLine: (i) => live && ev.onLine(i),
     onEnd: () => live && (stop(), ev.onEnd()),
     onError: (m) => live && (stop(), ev.onError(m)),
   };
-  const end = made.recording ? playFile(made.recording, guard) : readAloud(made.lines, guard);
-  const stop = () => {
-    live = false;
-    end();
-  };
+  end = made.recording ? playFile(made.recording, guard) : readAloud(made.lines, guard);
+  // A start that already failed or ended has stopped; release what it made.
+  if (!live) end();
   return stop;
 }
 
