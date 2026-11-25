@@ -27,6 +27,11 @@ export interface AudioSeam {
    * On a phone the file itself is replaced, so stop a session before saving a name it uses.
    */
   save(name: string, bytes: Uint8Array, mime: string): Promise<string>;
+  /**
+   * Takes a copy of a clip that someone else owns, such as a library recording,
+   * so a session can keep playing it if the owner replaces or frees it. Returns the copy's address.
+   */
+  keep(name: string, src: string): Promise<string>;
   /** Length of a clip in seconds; 0 when it cannot be read. */
   duration(src: string): Promise<number>;
   /**
