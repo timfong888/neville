@@ -1,7 +1,7 @@
-// The vendor and cost numbers behind docs/specs/architecture.md and the demo's cost meter.
-// The /architecture page that showed them was removed (#112); its content is kept as text in
-// docs/specs/architecture-site-page.md. Several figures here predate the corrections listed at the
-// top of docs/specs/architecture.md; keep in step with that document.
+// Live: FREE_ANON_GENERATIONS, the free-creation cap used by app/page.tsx.
+// Everything else here is archived data from the /architecture page removed in #112, kept as text in
+// docs/specs/architecture-site-page.md. Nothing imports it and it is not shown to users. Several
+// figures predate the corrections at the top of docs/specs/architecture.md; do not treat them as current.
 
 /**
  * Free creations before the sign-up gate (variations count). SOFT MVP CAP: it

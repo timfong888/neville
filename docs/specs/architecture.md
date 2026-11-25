@@ -84,7 +84,7 @@ Monthly cost per service:
 | **Total, mid voice** | **$32** | **$94** | **$731** |
 | Total, premium voice ($80 per 1M) | $53 | $304 | $2,829 |
 
-**[corrected 2026-11-25]** The Scripts and "Voice, cheap tier" rows and the totals below use the old prices (correction 1 to 3). The cheap-voice and mid-voice totals are not valid for the default voice; read this table as the 2026-11-17 estimate, not the current cost.
+**[corrected 2026-11-25]** The Scripts and "Voice, cheap tier" rows and the totals above use the old prices (corrections 1 to 3). The Neon row ($5 / $5 / $19) and the Blob "plus transfer" are stale too (corrections 7 and 8: Neon is on the Free plan today, about $15 on Launch, and Blob transfer is inside the flat rate). The cheap-voice and mid-voice totals are not valid for the default voice; read this table as the 2026-11-17 estimate, not the current cost.
 
 What the table says:
 
