@@ -23,7 +23,16 @@ export default function Wish() {
 
   return (
     // The Create button is the footer: it stays in sight and sits just above the keyboard (#149).
-    <Screen title="Type what you want. Hear it as already yours." footer={<Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />}>
+    // The gate shows with it, so a tap that is refused is answered where the tap was.
+    <Screen
+      title="Type what you want. Hear it as already yours."
+      footer={
+        <>
+          {c.gate ? <Gate /> : null}
+          <Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />
+        </>
+      }
+    >
       <Text style={s.muted}>No sign-up. One tap. A short affirmation written and recorded for you.</Text>
       <View style={s.card}>
         <Text nativeID="want" style={s.muted}>What do you want?</Text>
@@ -66,7 +75,6 @@ export default function Wish() {
           <Text style={s.muted}>{freeBanner(c.used)}</Text>
           {c.used > 0 ? <Button small label="Reset demo" onPress={reset} /> : null}
         </View>
-        {c.gate ? <Gate /> : null}
       </View>
     </Screen>
   );
