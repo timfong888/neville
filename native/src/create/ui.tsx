@@ -39,4 +39,6 @@ export const s = StyleSheet.create({
   link: { color: C.accentText, fontSize: 16 },
   line: { color: C.muted, fontSize: 17, lineHeight: 26 },
   now: { color: C.text, fontWeight: "600" },
+  stage: { minHeight: 150, justifyContent: "center", alignItems: "center" },
+  spoken: { color: C.text, fontSize: 22, lineHeight: 30, textAlign: "center" },
 });

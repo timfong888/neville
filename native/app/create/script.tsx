@@ -56,6 +56,7 @@ export default function Script() {
         {c.made.recording ? `Recorded in the voice of ${c.made.recording.voiceName}. Not kept: saving comes with the Library.` : "Nothing was recorded."}
       </Text>
       <View style={s.row}>
+        <Button label={c.made.recording ? "▶ Listen" : "▶ Read along"} onPress={() => router.push("/create/recording")} />
         <Button small label="New variation" onPress={newVariation} />
         <Button small label="← Create another" onPress={back} />
       </View>
