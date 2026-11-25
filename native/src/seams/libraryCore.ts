@@ -34,9 +34,12 @@ const isJson = (s: string | null): s is string => {
   }
 };
 
-type Doc = { lib: Library; audio: Record<string, string> };
+/** `found` is false when the device holds no records at all. */
+type Doc = { lib: Library; audio: Record<string, string>; found?: boolean };
+const randomTag = () => newId().slice(0, 8);
 
-export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
+/** `tag` makes the part of a file name that differs between recordings of one item. Tests pass their own. */
+export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomTag): DeviceLibrary {
   const listeners = new Set<() => void>();
   // library.json is removed only once library.json.new is complete, so with no library.json a
   // complete .new file is the library. A half-written .new is a first save that never finished.
@@ -58,7 +61,7 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
         // A name becomes a path, so only names this store makes are accepted.
         if (isUuid(id) && typeof name === "string" && AUDIO_NAME.test(name) && name.startsWith(`${id}.`)) audio[id] = name;
       }
-      return { lib: parseLibrary(parsed), audio };
+      return { lib: parseLibrary(parsed), audio, found: raw !== null };
     } catch {
       throw new Error("Your library could not be read, so nothing was changed. Try again.");
     }
@@ -86,7 +89,10 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
   let swept: Promise<void> | null = null;
   const tidy = () =>
     (swept ??= inTurn(async () => {
-      const keep = new Set(Object.values((await readStrict()).audio));
+      const doc = await readStrict();
+      // No records at all can mean they were lost, not that the library is empty. Nothing is removed then.
+      if (!doc.found) return;
+      const keep = new Set(Object.values(doc.audio));
       for (const n of await files.list()) if (AUDIO_NAME.test(n) && !keep.has(n)) await drop(n);
     }).catch(() => undefined));
   const change = <T>(fn: () => Promise<T>) => tidy().then(() => inTurn(fn));
@@ -103,7 +109,11 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
       // Order matters. The new recording is written under a new name, then the records are written
       // to name it, and only then is the old file removed. Stopping at any step leaves the records
       // naming a whole recording.
-      const fresh = audio ? `${m.id}.${newId().slice(0, 8)}.${extFor(audio.mime)}` : undefined;
+      const name = (t: string) => `${m.id}.${t}.${extFor(audio?.mime ?? "")}`;
+      // A file is never rewritten: a name equal to the current one would replace the live recording early.
+      const t = tag();
+      const other = ((parseInt(t, 16) + 1) >>> 0).toString(16).padStart(8, "0").slice(-8);
+      const fresh = audio ? (name(t) === old ? name(other) : name(t)) : undefined;
       if (fresh) names[m.id] = fresh;
       else if (audio === null) delete names[m.id];
       const next = { ...m, hasAudio: m.id in names };
@@ -119,17 +129,19 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
         if (now && now.audio[m.id] !== fresh) await drop(fresh);
         throw e;
       }
-      if (audio !== undefined) await drop(old);
+      if (audio !== undefined && old !== names[m.id]) await drop(old);
     }),
     remove: (id) => change(async () => {
       const doc = await readStrict();
-      const { [id]: old, ...audio } = doc.audio;
+      // Only an id the app made can name a recording. Any other id removes the record alone.
+      const old = isUuid(id) ? doc.audio[id] : undefined;
+      const audio = Object.fromEntries(Object.entries(doc.audio).filter(([k]) => k !== id));
       await write({ lib: withoutManifestation(doc.lib, id), audio });
       await drop(old);
     }),
     async audioUri(id) {
       await tidy();
-      const name = (await read()).audio[id];
+      const name = isUuid(id) ? (await read()).audio[id] : undefined;
       return name ? files.uri(name) : null;
     },
     subscribe(fn) {

@@ -180,6 +180,53 @@ describe("native library store", () => {
     expect(calls).toBe(2);
   });
 
+  it("re-records in the same format even when the new file name would equal the old one", async () => {
+    const d = disk();
+    const lib = makeFileLibrary(d, () => "0a1b2c3d"); // every recording asks for the same name
+    const m = item();
+    const again = { bytes: new Uint8Array([4, 5, 6, 7]), mime: "audio/mpeg" };
+    await lib.save(m, mp3);
+    const first = await lib.audioUri(m.id);
+    d.fail = (o, name) => o === "write" && name === "library.json.new";
+    await expect(lib.save(m, again)).rejects.toThrow("disk full");
+    expect(bytesAt(d, await lib.audioUri(m.id))).toEqual(mp3.bytes); // the live file was not touched
+    d.fail = () => false;
+    await lib.save(m, again);
+    expect(await lib.audioUri(m.id)).not.toBe(first);
+    expect(bytesAt(d, await lib.audioUri(m.id))).toEqual(again.bytes);
+    expect(d.audio()).toHaveLength(1);
+  });
+
+  it("removes no recording at start when the device holds no readable records at all", async () => {
+    const d = disk();
+    const m = item();
+    await makeFileLibrary(d).save(m, mp3);
+    const [file] = d.audio();
+    d.files.delete("library.json");
+    d.files.set("library.json.new", '{"manif'); // lost records and a half-written replacement
+    await makeFileLibrary(d).load();
+    d.files.delete("library.json.new");
+    await makeFileLibrary(d).load();
+    expect(d.audio()).toEqual([file]);
+  });
+
+  it("treats only UUIDs as recording ids in audioUri and remove", async () => {
+    const d = disk();
+    const lib = makeFileLibrary(d);
+    const m = item();
+    await lib.save(m, mp3);
+    const asked: unknown[] = [];
+    const uri = d.uri;
+    d.uri = (name) => (asked.push(name), uri(name));
+    for (const id of ["constructor", "__proto__", "toString", "../x"]) {
+      expect(await lib.audioUri(id)).toBeNull();
+      await lib.remove(id);
+    }
+    expect(asked).toEqual([]);
+    expect(await lib.audioUri(m.id)).not.toBeNull();
+    expect((await lib.get(m.id))?.hasAudio).toBe(true);
+  });
+
   it("refuses an id that is not a UUID, so an id can never be a path", async () => {
     const lib = makeFileLibrary(disk());
     await expect(lib.save(item({ id: "../../etc" }), mp3)).rejects.toThrow();
