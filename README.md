@@ -156,7 +156,10 @@ values, and not on production).
 
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
 build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
-applies them by hand against `DATABASE_URL`. Recordings are kept in private
+applies them by hand against `DATABASE_URL`. Each applied migration is recorded
+with a SHA-256 of its file; if a migration that already ran is later edited, the
+run stops before applying anything and the build fails. Never edit a migration
+that has run: add a new one. Recordings are kept in private
 Blob storage and only served through `/api/library/.../audio` to their owner.
 Deleting an account deletes the user row, which cascades to every saved row,
 then deletes the recordings.

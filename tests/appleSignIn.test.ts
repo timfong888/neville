@@ -69,3 +69,29 @@ describe("appleAudience", () => {
     expect(appleAudience("com.example.web", "pckg.neville\n")).toEqual(["com.example.web", "pckg.neville"]);
   });
 });
+
+describe("Apple code before account deletion (#125 review P1)", () => {
+  const fail = (code?: string) => async () => {
+    throw Object.assign(new Error("sheet failed"), code ? { code } : {});
+  };
+  it("stops when the person cancels the sheet", async () => {
+    const { deletionCodeFromSheet } = await import("@/lib/appleSignIn");
+    expect(await deletionCodeFromSheet(fail("ERR_REQUEST_CANCELED"))).toEqual({ proceed: false });
+  });
+  it("stops on any other sheet error: no deletion without a way to revoke", async () => {
+    const { deletionCodeFromSheet } = await import("@/lib/appleSignIn");
+    expect(await deletionCodeFromSheet(fail("ERR_REQUEST_FAILED"))).toEqual({ proceed: false });
+    expect(await deletionCodeFromSheet(fail())).toEqual({ proceed: false });
+  });
+  it("stops when Apple returns no authorization code", async () => {
+    const { deletionCodeFromSheet } = await import("@/lib/appleSignIn");
+    expect(await deletionCodeFromSheet(async () => ({ authorizationCode: null }))).toEqual({ proceed: false });
+    expect(await deletionCodeFromSheet(async () => ({}))).toEqual({ proceed: false });
+    expect(await deletionCodeFromSheet(async () => ({ authorizationCode: "" }))).toEqual({ proceed: false });
+  });
+  it("goes ahead with the code on success, and with none where there is no sheet", async () => {
+    const { deletionCodeFromSheet } = await import("@/lib/appleSignIn");
+    expect(await deletionCodeFromSheet(async () => ({ authorizationCode: "c.1" }))).toEqual({ proceed: true, code: "c.1" });
+    expect(await deletionCodeFromSheet(null)).toEqual({ proceed: true, code: null });
+  });
+});
