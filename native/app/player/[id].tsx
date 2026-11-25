@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { Link, useLocalSearchParams } from "expo-router";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { library } from "../../src/player/libraryStub";
 import type { PlaySession } from "../../src/seams/types";
+import { colors } from "../../src/theme";
+import { Screen } from "../../src/ui/Screen";
 
 type Phase = "idle" | "playing" | "paused";
 
@@ -90,14 +92,14 @@ export default function Player() {
     }
   };
 
-  if (loaded === undefined) return <Shell><Text style={s.p}>Loading…</Text></Shell>;
-  if (loaded === null) return <Shell><Text style={s.p}>This item is not saved on this device.</Text></Shell>;
+  if (loaded === undefined) return <Screen><Text style={s.p}>Loading…</Text></Screen>;
+  if (loaded === null) return <Screen><Text style={s.p}>This item is not saved on this device.</Text></Screen>;
 
   const item = loaded;
   const active = phase !== "idle";
   const at = roundAt(index);
   return (
-    <Shell>
+    <Screen>
       <Text style={s.h1} accessibilityRole="header">{item.title || "Untitled"}</Text>
       {item.voiceName ? <Text style={s.dim}>Voice: {item.voiceName}</Text> : null}
       {voice.current ? (
@@ -153,26 +155,15 @@ export default function Player() {
           <Text key={i} style={s.line}>{l}</Text>
         ))}
       </View>
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <ScrollView contentContainerStyle={s.page}>
-      <Link href="/" style={s.link}>Back</Link>
-      {children}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  page: { padding: 24, paddingTop: 64, gap: 14, backgroundColor: "#151820", minHeight: "100%" },
-  h1: { color: "#fff", fontSize: 28, fontWeight: "600" },
+  h1: { color: colors.text, fontSize: 28, fontWeight: "600" },
   p: { color: "#c9ced8", fontSize: 16 },
-  dim: { color: "#9aa3b5", fontSize: 14 },
-  label: { color: "#9aa3b5", fontSize: 14, marginTop: 8 },
-  link: { color: "#8ab4ff", fontSize: 16 },
+  dim: { color: colors.muted, fontSize: 14 },
+  label: { color: colors.muted, fontSize: 14, marginTop: 8 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10, alignItems: "center" },
   spread: { justifyContent: "space-between" },
   btn: { borderColor: "#c9ced8", borderWidth: 1, borderRadius: 8, paddingVertical: 14, paddingHorizontal: 22, minWidth: 96, alignItems: "center" },

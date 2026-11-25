@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
+import SharePanel from "@/app/components/SharePanel";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
 import { type Manifestation } from "@/lib/library/model";
@@ -124,7 +125,8 @@ export default function ManifestationPage() {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists.`)) return;
+    const note = store.kind === "account" ? " Its public link, if any, stops working." : "";
+    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists.${note}`)) return;
     await store.deleteManifestation(m.id);
     router.push("/library");
   };
@@ -211,6 +213,7 @@ export default function ManifestationPage() {
           {msg}
         </p>
       )}
+      {!editing && <SharePanel m={m} fromDevice={store.kind === "device"} />}
       {inPlaylists.length > 0 && (
         <p className="small muted">
           In:{" "}
