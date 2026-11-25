@@ -53,7 +53,7 @@ export default function Script() {
         ))}
       </View>
       <Text style={s.muted}>
-        {c.made.recording ? `Recorded in the voice of ${c.made.recording.voiceName}. Not kept: saving comes with the Library.` : "Nothing was recorded."}
+        {c.made.recording ? `Recorded in the voice of ${c.made.recording.voiceName}. Not kept unless you save it.` : "Nothing was recorded."}
       </Text>
       <View style={s.row}>
         <Button label={c.made.recording ? "▶ Listen" : "▶ Read along"} onPress={() => router.push("/create/recording")} />

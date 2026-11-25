@@ -1,11 +1,13 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount } from "@/lib/create";
+import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, toManifestation } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
+import { newId } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
 import { api } from "../api";
 import { kv } from "../seams/kv";
+import { library } from "../seams/library";
 import { settings } from "../seams/settings";
 
 export type CreateState = {
@@ -20,9 +22,11 @@ export type CreateState = {
   /** The voice chosen in Settings: the one the next recording uses. */
   voiceName: string;
   made: Made | null;
+  /** The Library id of `made` once saved; empty until then. */
+  savedId: string;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, voiceName: resolveVoice(null).name, made: null };
+let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, voiceName: resolveVoice(null).name, made: null, savedId: "" };
 const subs = new Set<() => void>();
 const set = (p: Partial<CreateState>) => {
   state = { ...state, ...p };
@@ -57,7 +61,7 @@ export function edit(p: { want?: string; name?: string }): void {
 let run = 0;
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
-  set({ making: true, made: null, variant });
+  set({ making: true, made: null, savedId: "", variant });
   const chosen = await settings.read();
   set({ voiceName: resolveVoice(chosen.voiceId).name });
   const made = await makeManifestation(api, { want: state.want, name: state.name, variant, ...chosen }, canSpeak());
@@ -90,11 +94,24 @@ export function newVariation(): boolean {
 /** Back to the wish step. A request still running is dropped. */
 export function leave(): void {
   run++;
-  set({ making: false, made: null });
+  set({ making: false, made: null, savedId: "" });
 }
 /** "Reset demo": the free creations start again. */
 export function reset(): void {
   leave();
   set({ used: 0, gate: false });
   write(FREE_STORAGE_KEY, "0");
+}
+
+/** Keeps the result in the Library on this device and gives its id. Rejects with a message to show. */
+export async function save(): Promise<string> {
+  const made = state.made;
+  if (!made) throw new Error("Nothing to save.");
+  if (state.savedId) return state.savedId;
+  const id = newId();
+  const audio = made.recording ? { bytes: new Uint8Array(made.recording.audio), mime: made.recording.mime } : null;
+  await library.save(toManifestation(made, state, id), audio);
+  // A new variation made while saving is not this saved one.
+  if (state.made === made) set({ savedId: id });
+  return id;
 }

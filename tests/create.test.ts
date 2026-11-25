@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, toManifestation, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
@@ -76,5 +76,15 @@ describe("the Create flow (#120)", () => {
   it("reads a stored draft within the limits", () => {
     expect(parseDraft(JSON.stringify({ want: "w".repeat(300), name: 7 }))).toEqual({ want: "w".repeat(280), name: "" });
     expect(parseDraft("{bad")).toEqual({ want: "", name: "" });
+  });
+  it("builds the Library item as the website's Save does", async () => {
+    const w = { want: " to be calm ", name: " Tim " };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    expect(toManifestation(made, w, "id-1", 5)).toEqual({
+      id: "id-1", title: made.title, want: "to be calm", firstName: "Tim", lines: LINES,
+      voiceId: made.recording?.voiceId, voiceName: made.recording?.voiceName, hasAudio: true, createdAt: 5, updatedAt: 5,
+    });
+    const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
+    expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
   });
 });

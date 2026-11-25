@@ -4,7 +4,7 @@ import { Redirect, Stack, useRouter } from "expo-router";
 import { freeLeft } from "@/lib/create";
 import { CLOSING } from "@/lib/prompt";
 import { play } from "../../src/create/playback";
-import { canSpeak, leave, newVariation, useCreate } from "../../src/create/session";
+import { canSpeak, leave, newVariation, save, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
 
@@ -18,6 +18,7 @@ export default function Recording() {
   // -1 before the first play; lines.length once finished.
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
+  const [saving, setSaving] = useState(false);
   const stopper = useRef<(() => void) | null>(null);
 
   const stop = useCallback(() => {
@@ -47,6 +48,20 @@ export default function Recording() {
     stop();
     if (newVariation()) router.back();
   };
+  // Saves once, then opens the saved item in the player.
+  const keep = async () => {
+    if (saving) return;
+    stop();
+    setSaving(true);
+    setToast("");
+    try {
+      const id = await save();
+      router.push(`/player/${id}`);
+    } catch (e) {
+      setToast(e instanceof Error && e.message ? e.message : "Could not save on this device.");
+    }
+    setSaving(false);
+  };
   const back = () => {
     stop();
     leave();
@@ -63,6 +78,7 @@ export default function Recording() {
       </View>
       <View style={s.row}>
         {playing ? <Button label="■ Stop" onPress={stop} /> : <Button label={done ? "▶ Play again" : "▶ Play"} onPress={start} />}
+        <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
         <Button small label="New variation" onPress={again} />
       </View>
       {toast ? <Text accessibilityRole="alert" style={s.muted}>{toast}</Text> : null}
@@ -74,7 +90,7 @@ export default function Recording() {
       </View>
       <Text style={s.muted}>
         {made.recording
-          ? `Recorded in the voice of ${made.recording.voiceName}. Not kept: saving comes with the Library.`
+          ? `Recorded in the voice of ${made.recording.voiceName}. ${c.savedId ? "Saved in your library." : "Not kept unless you tap Save."}`
           : canSpeak()
             ? "Read by your device's own voice. Nothing was recorded."
             : "Nothing was recorded."}

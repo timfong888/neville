@@ -4,6 +4,7 @@ import { ApiError, type Api, type WishRequest } from "@/lib/api/client";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import { lineStarts } from "@/lib/audio";
 import { MAX_NAME, MAX_WANT, type Draft } from "@/lib/draftStore";
+import type { Manifestation } from "@/lib/library/model";
 import { VARIANT_COUNT, neutralScript, scriptLines, titleFor } from "@/lib/script";
 import { resolveVoice } from "@/lib/voices";
 
@@ -95,4 +96,20 @@ export function lineAt(starts: number[], at: number): number {
   let i = 0;
   while (i + 1 < starts.length && starts[i + 1] <= at) i++;
   return i;
+}
+
+/** The Library item for a result, as the website's Save builds it. */
+export function toManifestation(made: Made, w: Draft, id: string, now = Date.now()): Manifestation {
+  return {
+    id,
+    title: made.title,
+    want: w.want.trim(),
+    firstName: w.name.trim(),
+    lines: made.lines,
+    voiceId: made.recording?.voiceId ?? "",
+    voiceName: made.recording?.voiceName ?? "Device voice",
+    hasAudio: !!made.recording,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
