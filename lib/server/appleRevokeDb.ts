@@ -7,6 +7,13 @@ import type { Db } from "@/lib/server/libraryDb";
 /** How many older rows one account deletion retries, so a long backlog never slows a request much. */
 export const RETRY_BATCH = 5;
 
+/**
+ * Once this much time has gone on Apple calls in one request, older rows wait for the next deletion.
+ * Each call has its own five-second deadline, so a dead Apple could otherwise hold the response for
+ * that long per row. The rows of the account just deleted are always tried.
+ */
+export const RETRY_BUDGET_MS = 8000;
+
 type Row = RevocableToken & { id: string };
 
 /** Records tokens to revoke. Call it in the transaction that deletes the account. Returns the new row ids. */
@@ -29,13 +36,21 @@ async function pending(db: Db, where: string, params: unknown[]): Promise<Row[]>
  * left by earlier failures. A row Apple accepts is removed; any other stays, with its attempt counted,
  * for a later deletion to retry. Returns how many of `mine` are still pending.
  */
-export async function settleAppleRevocations(db: Db, clients: { web?: AppleClient | null; app?: AppleClient | null }, mine: string[], doFetch: typeof fetch = fetch): Promise<number> {
+export async function settleAppleRevocations(
+  db: Db,
+  clients: { web?: AppleClient | null; app?: AppleClient | null },
+  mine: string[],
+  doFetch: typeof fetch = fetch,
+  clock: () => number = Date.now,
+): Promise<number> {
+  const started = clock();
   const rows = [
     ...(mine.length ? await pending(db, `where id = any($1::bigint[])`, [mine]) : []),
     ...(await pending(db, `where not (id = any($1::bigint[])) order by last_tried_at nulls first, id limit $2`, [mine, RETRY_BATCH])),
   ];
   let left = 0;
   for (const r of rows) {
+    if (!mine.includes(r.id) && clock() - started > RETRY_BUDGET_MS) break;
     if (await revokeStoredToken(r, clients, doFetch)) {
       await db.query(`delete from apple_revocation_pending where id = $1`, [r.id]);
     } else {

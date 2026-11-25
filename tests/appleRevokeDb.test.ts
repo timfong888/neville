@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { addPendingRevocations, RETRY_BATCH, settleAppleRevocations } from "@/lib/server/appleRevokeDb";
+import { addPendingRevocations, RETRY_BATCH, RETRY_BUDGET_MS, settleAppleRevocations } from "@/lib/server/appleRevokeDb";
 import type { Db } from "@/lib/server/libraryDb";
 
 const clients = { web: { clientId: "com.example.web", clientSecret: "web-secret" }, app: { clientId: "pckg.neville", clientSecret: "app-secret" } };
@@ -65,6 +65,20 @@ describe("Sign in with Apple revocation retry record", () => {
     await settleAppleRevocations(db, clients, [], apple(() => true));
     expect(sent.map((s) => s.split(" ")[1])).toEqual([`t${RETRY_BATCH}`, `t${RETRY_BATCH + 1}`, "t0"]);
     expect(await rows()).toEqual([]);
+  });
+
+  it("stops retrying older rows once Apple has used up the time budget, but always tries its own", async () => {
+    await addPendingRevocations(db, [rt("old-1"), rt("old-2")]);
+    const mine = await addPendingRevocations(db, [rt("mine-1"), rt("mine-2")]);
+    let now = 0;
+    const slow = (async (_url: string, init: RequestInit) => {
+      sent.push(new URLSearchParams(String(init.body)).get("token") ?? "");
+      now += 5000; // every call runs into its deadline
+      return new Response(null, { status: 503 });
+    }) as unknown as typeof fetch;
+    expect(await settleAppleRevocations(db, clients, mine, slow, () => now)).toBe(2);
+    expect(sent).toEqual(["mine-1", "mine-2"]);
+    expect(RETRY_BUDGET_MS).toBeLessThan(10000);
   });
 
   it("leaves a row alone when its client is no longer configured", async () => {
