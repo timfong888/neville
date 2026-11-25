@@ -28,4 +28,4 @@ npm run export:ios
 
 - Colours and type come from `src/theme.ts`. Wrap a screen in `Screen` from `src/ui/Screen.tsx`.
 - The web build is a single-page app (`web.output: "single"`), because screens read device storage.
-- `/phase0` and `/spike` are the Phase 0 pages, kept until Account and Player replace them.
+- `/spike` is the Phase 0 audio page, kept until Player replaces it. The Account tab replaced `/phase0`.
