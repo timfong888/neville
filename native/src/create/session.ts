@@ -19,7 +19,7 @@ export type CreateState = {
   /** The free creations are used up and one more was asked for. */
   gate: boolean;
   making: boolean;
-  /** A voice picked on the Create page for this visit; null means the Settings choice. */
+  /** A voice picked on the Create page; null means the Settings choice. Cleared when the Settings voice changes. */
   picked: string | null;
   /** The voice the next recording uses: the pick, else the Settings choice. */
   voiceId: string;
@@ -31,9 +31,10 @@ export type CreateState = {
 
 let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, made: null, savedId: "" };
 const subs = new Set<() => void>();
-const set = (p: Partial<CreateState>) => {
+const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
   subs.forEach((f) => f());
+  return p;
 };
 const subscribe = (f: () => void) => (subs.add(f), () => void subs.delete(f));
 const snapshot = () => state;
@@ -49,12 +50,21 @@ export const canSpeak = (): boolean => typeof (globalThis as { speechSynthesis?:
 /** The state for a voice id: its id and the name to show. */
 const voice = (id: string) => ({ voiceId: id, voiceName: resolveVoice(id).name });
 
+// A pick on Create lasts until the Settings voice changes: a newer choice there wins.
+let settingsVoice: string | null = null;
+function voiceNow(settingsVoiceId: string) {
+  const changed = settingsVoice !== null && settingsVoice !== settingsVoiceId;
+  settingsVoice = settingsVoiceId;
+  const picked = changed ? null : state.picked;
+  return { picked, ...voice(voiceFor(picked, settingsVoiceId)) };
+}
+
 let typed = false;
 /** Reads what the device keeps: the draft, the count and the chosen voice. Run when the wish step shows. */
 export async function load(): Promise<void> {
   const [draft, used, chosen] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read()]);
   // Typing that began before storage answered wins over the stored draft.
-  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), ...voice(voiceFor(state.picked, chosen.voiceId)) });
+  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), ...voiceNow(chosen.voiceId) });
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
@@ -68,7 +78,10 @@ export function edit(p: { want?: string; name?: string }): void {
 export async function pickVoice(id: string, asDefault = false): Promise<boolean> {
   const voiceId = voiceFor(id, state.voiceId);
   set({ picked: voiceId, ...voice(voiceId) });
-  return asDefault ? settings.write({ voiceId }) : true;
+  if (!asDefault) return true;
+  // Our own write is not a newer Settings choice, so it must not clear the pick.
+  settingsVoice = voiceId;
+  return settings.write({ voiceId });
 }
 
 let run = 0;
@@ -79,8 +92,7 @@ async function generate(variant: number): Promise<void> {
   set({ making: true, made: null, savedId: "", variant });
   const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
-  const voiceId = voiceFor(state.picked, chosen.voiceId);
-  set(voice(voiceId));
+  const { voiceId } = set(voiceNow(chosen.voiceId));
   const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;

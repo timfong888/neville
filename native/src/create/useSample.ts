@@ -51,5 +51,5 @@ export function useSample() {
       fail();
     }
   };
-  return { playing, error, toggle, stop };
+  return { playing, error, toggle, stop, clearError: () => setError("") };
 }

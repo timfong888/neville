@@ -11,16 +11,17 @@ import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
 
 // Create: choose the voice for the next recording. The same voices and samples as Settings.
-// A pick here is for this visit; Settings keeps its choice unless "Make this my default" is tapped.
+// A pick here lasts until the voice is changed in Settings; Settings keeps its choice unless "Make this my default" is tapped.
 export default function VoicePicker() {
   const c = useCreate();
   const router = useRouter();
   const { settings: saved } = useSettings();
-  const { playing, error, toggle, stop } = useSample();
+  const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
   const isDefault = c.voiceId === saved.voiceId;
 
   const makeDefault = async () => {
+    clearError();
     const ok = await pickVoice(c.voiceId, true);
     setNote(ok ? `${c.voiceName} is now your default voice.` : "This device would not save it, so it applies until you leave.");
   };
@@ -36,7 +37,7 @@ export default function VoicePicker() {
       {/* Above the long list, so the choice and its buttons need no scrolling. */}
       <Text accessibilityLiveRegion="polite" style={type.body}>{error || note}</Text>
       <Text style={type.muted}>
-        {isDefault ? `${c.voiceName} is your default voice.` : `${c.voiceName} is used for this visit. Your default in Settings stays as it is.`}
+        {isDefault ? `${c.voiceName} is your voice in Settings.` : `${c.voiceName} is used here until you change the voice in Settings. Settings stays as it is.`}
       </Text>
       <View style={s.row}>
         <Button label={`Use ${c.voiceName}`} onPress={done} />
@@ -47,11 +48,11 @@ export default function VoicePicker() {
           <OptionRow
             key={v.id}
             label={v.name}
-            note={[v.generate ? "" : "Sample only", voiceBlurb(v), TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
-            isDefault={v.id === saved.voiceId}
+            // "Default" in Settings marks the app's own default, so the saved choice is named differently here.
+            note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", voiceBlurb(v), TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
             selected={c.voiceId === v.id}
             disabled={!v.generate}
-            onPress={() => (setNote(""), void pickVoice(v.id))}
+            onPress={() => (setNote(""), clearError(), void pickVoice(v.id))}
             right={<SmallButton label={playing === v.id ? "Stop" : "Play"} a11y={`${playing === v.id ? "Stop" : "Play"} sample of ${v.name}`} onPress={() => toggle(v.id, v.sample)} />}
           />
         ))}
