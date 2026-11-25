@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
-import { appleUserFromFullName, makeNoncePair } from "@/lib/appleSignIn";
+import { appleUserFromFullName, type DeletionCode, deletionCodeFromSheet, makeNoncePair } from "@/lib/appleSignIn";
 import { API_URL } from "./config";
 import { sessionStorage } from "./secureStorage";
 
@@ -58,17 +58,11 @@ export async function signInWithApple(): Promise<AppleResult> {
 
 /**
  * A fresh Apple authorization code, asked for just before the account is deleted. The server
- * exchanges it and revokes the Apple grant (App Review 5.1.1(v), #98). `code` is null where the
- * system sheet does not exist (the web) or Apple returned none; deletion still goes ahead then.
+ * exchanges it and revokes the Apple grant (App Review 5.1.1(v), #98). On iOS, no code means no
+ * deletion (see deletionCodeFromSheet); the web has no sheet and goes ahead without one.
  */
-export async function appleCodeForDeletion(): Promise<{ cancelled: boolean; code: string | null }> {
-  if (Platform.OS !== "ios") return { cancelled: false, code: null };
-  try {
-    const cred = await AppleAuthentication.signInAsync({ requestedScopes: [] });
-    return { cancelled: false, code: cred.authorizationCode ?? null };
-  } catch (e) {
-    return { cancelled: (e as { code?: string }).code === "ERR_REQUEST_CANCELED", code: null };
-  }
+export function appleCodeForDeletion(): Promise<DeletionCode> {
+  return deletionCodeFromSheet(Platform.OS === "ios" ? () => AppleAuthentication.signInAsync({ requestedScopes: [] }) : null);
 }
 
 /** On the web there is no system sheet: Apple sign-in is Better Auth's redirect, returning to `/account`. */

@@ -44,9 +44,9 @@ export default function Account() {
 
   const signOut = async () => {
     setBusy("Signing out…");
-    await authClient.signOut().catch(() => undefined);
+    const r = await authClient.signOut().catch(() => null);
     setBusy("");
-    setNote("");
+    setNote(!r || r.error ? "Could not sign out just now. Try again." : "");
     await refresh();
   };
 
@@ -55,8 +55,9 @@ export default function Account() {
   const deleteAccount = async () => {
     setConfirming(null);
     // Apple asks once more, so the server can revoke the Apple grant along with the account.
+    // Without a code from the sheet (a cancel, an error, an empty answer) nothing is sent to the server.
     const apple = await appleCodeForDeletion();
-    if (apple.cancelled) return setNote("Nothing was deleted.");
+    if (!apple.proceed) return setNote("Nothing was deleted.");
     setBusy("Deleting your account…");
     try {
       await api.deleteAccount(apple.code ? { appleAuthorizationCode: apple.code } : {});
