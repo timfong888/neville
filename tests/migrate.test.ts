@@ -1,7 +1,7 @@
 // The migration runner on PGlite: applies new files once, records a checksum,
 // and refuses to run when a migration that already ran has been edited.
 import { PGlite } from "@electric-sql/pglite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -104,7 +104,10 @@ describe("runMigrations", () => {
   });
 
   it("runs this repo's migrations cleanly", async () => {
-    await expect(runMigrations(client, path.join(process.cwd(), "db", "migrations"), () => {})).resolves.toBeUndefined();
-    expect((await rows()).map((r) => r.name)).toEqual(["001_accounts_and_library.sql", "002_share_links.sql"]);
+    const dir = path.join(process.cwd(), "db", "migrations");
+    await expect(runMigrations(client, dir, () => {})).resolves.toBeUndefined();
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+    expect(files.length).toBeGreaterThan(0);
+    expect((await rows()).map((r) => r.name)).toEqual(files);
   });
 });
