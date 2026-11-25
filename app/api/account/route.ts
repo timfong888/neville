@@ -5,6 +5,8 @@ import { type AppleLink, type RevokeOutcome, readAppleCode, revokeAppleGrants } 
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
 export const dynamic = "force-dynamic";
+// Deleting an account can wait on Apple: a few calls, each with a five-second deadline (lib/server/appleRevoke.ts).
+export const maxDuration = 60;
 
 /** Whether accounts are on here, and who is signed in. */
 export async function GET(req: Request) {
