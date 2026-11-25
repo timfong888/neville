@@ -6,6 +6,13 @@ const saved = new Map<string, string>();
 // Addresses an open session may still load, and replaced ones waiting for that session to stop.
 const inUse = new Map<string, number>();
 const stale = new Set<string>();
+function put(name: string, blob: Blob): string {
+  const old = saved.get(name);
+  if (old) inUse.get(old) ? stale.add(old) : URL.revokeObjectURL(old);
+  const url = URL.createObjectURL(blob);
+  saved.set(name, url);
+  return url;
+}
 const media = () => (typeof navigator !== "undefined" && "mediaSession" in navigator ? navigator.mediaSession : null);
 
 // The web audio seam: one <audio> element carries the whole session, as the
@@ -13,11 +20,11 @@ const media = () => (typeof navigator !== "undefined" && "mediaSession" in navig
 export const audio: AudioSeam = {
   async configure() {},
   async save(name, bytes, mime) {
-    const old = saved.get(name);
-    if (old) inUse.get(old) ? stale.add(old) : URL.revokeObjectURL(old);
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
-    saved.set(name, url);
-    return url;
+    return put(name, new Blob([bytes as BlobPart], { type: mime }));
+  },
+  // The library frees its addresses whenever it changes, in this tab or another, so the copy gets its own.
+  async keep(name, src) {
+    return put(name, await (await fetch(src)).blob());
   },
   duration(src) {
     return new Promise((resolve) => {

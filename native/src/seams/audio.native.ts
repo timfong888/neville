@@ -19,6 +19,10 @@ export const audio: AudioSeam = {
     f.write(bytes);
     return f.uri;
   },
+  // A recording on the phone is a file that stays readable while the Player is open, so no copy is made.
+  async keep(_name, src) {
+    return src;
+  },
   async duration(src) {
     const p = createAudioPlayer(src);
     try {
