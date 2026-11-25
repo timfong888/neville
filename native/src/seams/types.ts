@@ -28,8 +28,9 @@ export interface AudioSeam {
    */
   save(name: string, bytes: Uint8Array, mime: string): Promise<string>;
   /**
-   * Takes a copy of a clip that someone else owns, such as a library recording,
-   * so a session can keep playing it if the owner replaces or frees it. Returns the copy's address.
+   * Gives a session its own address for a clip that someone else owns, such as a library recording.
+   * On the web this is a copy, so the session keeps playing if the owner replaces or frees the clip.
+   * On a phone it is the owner's file itself, so the file must stay in place until the session stops.
    */
   keep(name: string, src: string): Promise<string>;
   /** Length of a clip in seconds; 0 when it cannot be read. */
