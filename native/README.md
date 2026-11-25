@@ -18,6 +18,7 @@ npm run export:ios
 
 | Route | Screen | File |
 | --- | --- | --- |
+| `/` | Opens Create | `app/(tabs)/index.tsx` |
 | `/create` | Create (tab) | `app/(tabs)/create.tsx` |
 | `/library` | Library list (tab) | `app/(tabs)/library.tsx` |
 | `/library/[id]` | Library detail | `app/library/[id].tsx` |
