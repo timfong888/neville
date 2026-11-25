@@ -53,3 +53,25 @@ export function appleAudience(clientId: string, bundleId: string | undefined): s
   const app = bundleId?.trim();
   return app ? [clientId, app] : [clientId];
 }
+
+/** Whether an account deletion may go ahead, and the Apple authorization code to send with it. */
+export type DeletionCode = { proceed: true; code: string | null } | { proceed: false };
+
+/**
+ * Asks Apple for a fresh authorization code just before an account is deleted, so the server can
+ * revoke the Apple grant with it (App Review 5.1.1(v), #98). `askSheet` shows the system sheet; pass
+ * null where there is none (the web), and deletion goes ahead with no code.
+ *
+ * Where there is a sheet, anything short of a code stops the deletion: a cancel, any other error,
+ * or an answer with no code. Deleting then would leave the Apple grant in place with nothing left
+ * to revoke it, while telling the person the account is gone.
+ */
+export async function deletionCodeFromSheet(askSheet: (() => Promise<{ authorizationCode?: string | null }>) | null): Promise<DeletionCode> {
+  if (!askSheet) return { proceed: true, code: null };
+  try {
+    const code = (await askSheet()).authorizationCode;
+    return code ? { proceed: true, code } : { proceed: false };
+  } catch {
+    return { proceed: false };
+  }
+}
