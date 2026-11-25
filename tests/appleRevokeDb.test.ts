@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { addPendingRevocations, RETRY_BATCH, RETRY_BUDGET_MS, settleAppleRevocations } from "@/lib/server/appleRevokeDb";
+import { addPendingRevocations, RETRY_BATCH, RETRY_BUDGET_MS, settleAppleRevocations, tryAddPendingRevocations } from "@/lib/server/appleRevokeDb";
 import type { Db } from "@/lib/server/libraryDb";
 
 const clients = { web: { clientId: "com.example.web", clientSecret: "web-secret" }, app: { clientId: "pckg.neville", clientSecret: "app-secret" } };
@@ -86,5 +86,26 @@ describe("Sign in with Apple revocation retry record", () => {
     expect(await settleAppleRevocations(db, clients, mine, apple(() => true))).toBe(1);
     expect(sent).toEqual([]);
     expect(await rows()).toEqual([{ token: "rt-1", attempts: 1 }]);
+  });
+
+  it("does not abort the deleting transaction when the table is missing (migration 003 not applied)", async () => {
+    const pg = new PGlite();
+    await pg.exec(readFileSync("db/migrations/001_accounts_and_library.sql", "utf8"));
+    const bare: Db = { query: (t, p) => pg.query(t, p) as Promise<{ rows: Record<string, unknown>[] }> };
+    await bare.query(`insert into "user" (id, name, email, "emailVerified") values ('u1', 'U', 'u@x.test', true)`);
+    await bare.query(`begin`);
+    await bare.query(`delete from "user" where id = 'u1'`);
+    expect(await tryAddPendingRevocations(bare, [rt("rt-1")])).toBeNull();
+    // The transaction is still usable and commits: the account is gone.
+    await bare.query(`commit`);
+    expect((await bare.query(`select id from "user"`)).rows).toEqual([]);
+  });
+
+  it("records inside a transaction when the table is there, and writes nothing for no tokens", async () => {
+    await db.query(`begin`);
+    expect(await tryAddPendingRevocations(db, [])).toEqual([]);
+    expect(await tryAddPendingRevocations(db, [rt("rt-1")])).toHaveLength(1);
+    await db.query(`commit`);
+    expect(await rows()).toEqual([{ token: "rt-1", attempts: 0 }]);
   });
 });

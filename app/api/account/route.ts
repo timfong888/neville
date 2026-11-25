@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { sameSiteRequest } from "@/lib/server/origin";
 import { accountsEnabled, appleClients, appleLinks, currentUser, missingVars, purgeAudio, signInProviders, withTx } from "@/lib/server/accounts";
-import { addPendingRevocations, settleAppleRevocations } from "@/lib/server/appleRevokeDb";
+import { settleAppleRevocations, tryAddPendingRevocations } from "@/lib/server/appleRevokeDb";
 import { type Db, getPool } from "@/lib/server/db";
-import { type RevokeOutcome, collectAppleTokens, readAppleCode } from "@/lib/server/appleRevoke";
+import { type RevokeOutcome, collectAppleTokens, readAppleCode, revokeStoredToken } from "@/lib/server/appleRevoke";
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,13 @@ export async function GET(req: Request) {
  * `appleAuthorizationCode`. The tokens are gathered before the rows go and written to
  * apple_revocation_pending in the deleting transaction. Apple is called only after that commits,
  * and a token Apple does not accept stays recorded for a later deletion to retry. Deletion never
- * depends on Apple; `apple` reports the result.
+ * depends on Apple, nor on the retry table: if the tokens cannot be recorded, the account is still
+ * deleted and Apple is tried once, without a retry. `apple` reports the result.
+ *
+ * The app's authorization code is single-use and is exchanged before the transaction, so that its
+ * refresh token can be recorded with the delete. If the delete then fails, that code is spent and
+ * nothing is revoked or stored, which is right: the account still exists. The app asks Apple for a
+ * fresh code on every delete attempt (native/src/auth.ts, appleCodeForDeletion), so a retry works.
  */
 export async function DELETE(req: Request) {
   if (!sameSiteRequest(req)) return NextResponse.json({ error: "Wrong origin." }, { status: 403 });
@@ -44,9 +50,17 @@ export async function DELETE(req: Request) {
   const { keys, pending } = await withTx(async (db) => {
     const keys = await deleteAccount(db, user.id);
     await addTombstones(db, keys);
-    return { keys, pending: found ? await addPendingRevocations(db, found.tokens) : [] };
+    return { keys, pending: found ? await tryAddPendingRevocations(db, found.tokens) : [] };
   });
-  const left = await settleAppleRevocations(getPool() as unknown as Db, clients, pending).catch(() => pending.length);
+  let left: number;
+  if (pending) {
+    left = await settleAppleRevocations(getPool() as unknown as Db, clients, pending).catch(() => pending.length);
+  } else {
+    // The retry table could not be written (migration 003 not applied, perhaps). Try Apple once anyway.
+    console.error("Account deletion: Apple revocations could not be recorded for retry.");
+    left = 0;
+    for (const t of found?.tokens ?? []) if (!(await revokeStoredToken(t, clients).catch(() => false))) left++;
+  }
   const apple: RevokeOutcome = found?.links === 0 ? "nothing-to-revoke" : found && !found.unreachable && left === 0 ? "revoked" : "failed";
   // No ids or tokens in the log: only that a grant was left behind for a retry or for someone to follow up.
   if (apple === "failed") console.error("Account deletion: the Sign in with Apple grant could not be revoked.");

@@ -26,6 +26,24 @@ export async function addPendingRevocations(db: Db, tokens: RevocableToken[]): P
   return ids;
 }
 
+/**
+ * addPendingRevocations for use inside the deleting transaction, where it must never cost the
+ * deletion: a savepoint keeps a failure here (the table missing because migration 003 has not run,
+ * for one) from aborting the transaction. Returns null when nothing could be recorded.
+ */
+export async function tryAddPendingRevocations(db: Db, tokens: RevocableToken[]): Promise<string[] | null> {
+  if (!tokens.length) return [];
+  await db.query(`savepoint apple_pending`);
+  try {
+    const ids = await addPendingRevocations(db, tokens);
+    await db.query(`release savepoint apple_pending`);
+    return ids;
+  } catch {
+    await db.query(`rollback to savepoint apple_pending`);
+    return null;
+  }
+}
+
 async function pending(db: Db, where: string, params: unknown[]): Promise<Row[]> {
   const { rows } = await db.query(`select id::text, client_id, token, token_hint from apple_revocation_pending ${where}`, params);
   return rows.map((r) => ({ id: String(r.id), clientId: String(r.client_id), token: String(r.token), hint: r.token_hint as Row["hint"] }));

@@ -7,6 +7,8 @@ vi.mock("server-only", () => ({}));
 const steps: string[] = [];
 let user: { id: string } | null;
 let deleteFails = false;
+let recordFails = false;
+let direct: () => Promise<boolean>;
 let found: () => Promise<{ tokens: unknown[]; unreachable: boolean }>;
 let links: unknown[];
 let left: () => Promise<number>;
@@ -35,9 +37,10 @@ vi.mock("@/lib/server/libraryDb", () => ({
 vi.mock("@/lib/server/appleRevoke", async (orig) => ({
   ...(await orig<typeof import("@/lib/server/appleRevoke")>()),
   collectAppleTokens: (o: { code?: string }) => (steps.push(`collect:${o.code ?? "-"}`), found()),
+  revokeStoredToken: () => (steps.push("direct"), direct()),
 }));
 vi.mock("@/lib/server/appleRevokeDb", () => ({
-  addPendingRevocations: async (_db: unknown, tokens: unknown[]) => (steps.push(`record:${tokens.length}`), tokens.map((_, i) => String(i + 1))),
+  tryAddPendingRevocations: async (_db: unknown, tokens: unknown[]) => (steps.push(`record:${tokens.length}`), recordFails ? null : tokens.map((_, i) => String(i + 1))),
   settleAppleRevocations: async (_db: unknown, _c: unknown, mine: string[]) => (steps.push(`settle:${mine.length}`), left()),
 }));
 
@@ -53,6 +56,8 @@ beforeEach(() => {
   steps.length = 0;
   user = { id: "u1" };
   deleteFails = false;
+  recordFails = false;
+  direct = async () => true;
   links = [{ accountId: "apple-user-1", refreshToken: null, accessToken: null }];
   found = async () => ({ tokens: [{ clientId: "pckg.neville", token: "rt", hint: "refresh_token" }], unreachable: false });
   left = async () => 0;
@@ -90,6 +95,15 @@ describe("DELETE /api/account with Sign in with Apple revocation", () => {
     found = async () => ({ tokens: [], unreachable: false });
     expect(await run()).toMatchObject({ ok: true, apple: "nothing-to-revoke" });
     expect(steps).toContain("settle:0");
+  });
+
+  it("still deletes when the retry table cannot be written, and tries Apple once without it", async () => {
+    recordFails = true;
+    expect(await run({ appleAuthorizationCode: "c.1" })).toEqual({ ok: true, audioPending: 0, apple: "revoked" });
+    expect(steps).toEqual(["links", "collect:c.1", "delete", "record:1", "direct", "purge"]);
+    direct = async () => false;
+    expect(await run()).toMatchObject({ ok: true, apple: "failed" });
+    expect(console.error).toHaveBeenCalledWith("Account deletion: Apple revocations could not be recorded for retry.");
   });
 
   it("neither records nor calls Apple when the deletion fails", async () => {
