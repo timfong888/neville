@@ -30,6 +30,7 @@ export default function Player() {
   const [note, setNote] = useState("");
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const session = useRef<PlaySession | null>(null);
+  const starting = useRef(false);
 
   const stop = (message = "") => {
     session.current?.stop();
@@ -76,7 +77,9 @@ export default function Player() {
   const play = async () => {
     if (session.current) return session.current.play();
     const v = voice.current;
-    if (!v || !loaded) return;
+    // A second tap while the first is still starting must not open a second session.
+    if (!v || !loaded || starting.current) return;
+    starting.current = true;
     try {
       const repeats = repeatsFor(v.seconds, minutes);
       const gap = repeats ? await audio.save(bellOn ? "player-gap-bell.wav" : "player-gap.wav", gapClip(bellOn), "audio/wav") : "";
@@ -97,6 +100,8 @@ export default function Player() {
       s.play();
     } catch (e) {
       stop(`Could not play: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      starting.current = false;
     }
   };
 
