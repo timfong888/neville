@@ -1,6 +1,50 @@
-import { Placeholder } from "../../src/ui/Screen";
+import { Link, useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { type Manifestation, newestFirst } from "@/lib/library/model";
+import { useLibrary } from "../../src/seams/useLibrary";
+import { Button } from "../../src/ui/Button";
+import { Screen } from "../../src/ui/Screen";
+import { colors, radius, space, type } from "../../src/theme";
 
-// Placeholder. Owner: the shell session (#118).
-export default function Library() {
-  return <Placeholder title="Library" note="Your saved manifestations will be listed here." />;
+const itemMeta = (m: Manifestation) => `${m.lines.length} lines · ${m.hasAudio ? m.voiceName : "no recording"} · ${new Date(m.createdAt).toLocaleDateString()}`;
+
+// Everything saved on this device, newest first. Playlists and account sync come in Phase 2.
+export default function LibraryScreen() {
+  const { lib, ready, error, reload } = useLibrary();
+  const router = useRouter();
+  const items = newestFirst(lib.manifestations);
+  return (
+    <Screen title="My manifestations">
+      <Text style={type.muted}>Everything you have saved, newest first. Saved on this device only.</Text>
+      {!ready ? null : error ? (
+        <View style={s.card}>
+          <Text style={type.body}>{error}</Text>
+          <Button label="Try again" onPress={reload} />
+        </View>
+      ) : items.length === 0 ? (
+        <View style={s.card}>
+          <Text style={type.body}>Nothing saved yet.</Text>
+          <Text style={type.muted}>Make a manifestation, then save it.</Text>
+          <Button kind="primary" label="Create one" onPress={() => router.push("/create")} />
+        </View>
+      ) : (
+        <View accessibilityRole="list" style={s.list}>
+          {items.map((m) => (
+            <Link key={m.id} href={`/library/${m.id}`} asChild>
+              <Pressable accessibilityRole="link" accessibilityLabel={m.title} style={s.row}>
+                <Text style={type.body} numberOfLines={2}>{m.title}</Text>
+                <Text style={type.muted}>{itemMeta(m)}</Text>
+              </Pressable>
+            </Link>
+          ))}
+        </View>
+      )}
+    </Screen>
+  );
 }
+
+const s = StyleSheet.create({
+  list: { gap: space.sm },
+  card: { gap: space.md, padding: space.lg, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
+  row: { gap: 2, padding: space.md, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
+});
