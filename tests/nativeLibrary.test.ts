@@ -9,7 +9,11 @@ function disk(): LibraryFiles & { files: Map<string, Uint8Array | string> } {
     files,
     readRecords: async () => (files.get("library.json") as string | undefined) ?? null,
     writeRecords: async (json) => void files.set("library.json", json),
-    writeAudio: async (id, a) => void files.set(`${id}.${extFor(a.mime)}`, a.bytes),
+    writeAudio: async (id, a) => {
+      if (a.bytes.length === 0) throw new Error("disk full");
+      if (find(id)) files.delete(find(id)!);
+      files.set(`${id}.${extFor(a.mime)}`, a.bytes);
+    },
     deleteAudio: async (id) => void (find(id) && files.delete(find(id)!)),
     audioUri: async (id) => (find(id) ? `file:///library/${find(id)}` : null),
   };
@@ -61,6 +65,23 @@ describe("native library store", () => {
     await lib.save(m, null);
     expect(await lib.audioUri(m.id)).toBeNull();
     expect((await lib.get(m.id))?.hasAudio).toBe(false);
+  });
+
+  it("keeps the old recording when its replacement cannot be written", async () => {
+    const lib = makeFileLibrary(disk());
+    const m = item();
+    await lib.save(m, mp3);
+    await expect(lib.save(m, { bytes: new Uint8Array(0), mime: "audio/wav" })).rejects.toThrow("disk full");
+    expect(await lib.audioUri(m.id)).toBe(`file:///library/${m.id}.mp3`);
+    expect((await lib.get(m.id))?.hasAudio).toBe(true);
+  });
+
+  it("keeps every item when saves and deletes overlap", async () => {
+    const lib = makeFileLibrary(disk());
+    const [a, b, c] = [item({ title: "A" }), item({ title: "B" }), item({ title: "C" })];
+    await lib.save(c);
+    await Promise.all([lib.save(a, mp3), lib.save(b, mp3), lib.remove(c.id)]);
+    expect((await lib.load()).manifestations.map((m) => m.title).sort()).toEqual(["A", "B"]);
   });
 
   it("deletes the item and its file, and tells subscribers", async () => {

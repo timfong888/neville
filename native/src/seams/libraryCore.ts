@@ -8,6 +8,7 @@ export type LibraryFiles = {
   readRecords(): Promise<string | null>;
   /** Throws when the device is full; callers show the error. */
   writeRecords(json: string): Promise<void>;
+  /** Replaces any earlier recording for the id. If it throws, the earlier recording must still be there. */
   writeAudio(id: string, audio: AudioBytes): Promise<void>;
   deleteAudio(id: string): Promise<void>;
   audioUri(id: string): Promise<string | null>;
@@ -36,6 +37,13 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     listeners.forEach((fn) => fn());
   };
   // An id becomes a file name, so only the id format the app itself makes is accepted.
+  // One change at a time: each reads the records, then writes them, so two at once would lose one.
+  let tail: Promise<unknown> = Promise.resolve();
+  const inTurn = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = tail.then(fn, fn);
+    tail = run.catch(() => undefined);
+    return run;
+  };
   const check = (id: string) => {
     if (!isUuid(id)) throw new Error("That item has an id this device cannot store.");
   };
@@ -44,7 +52,7 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     async get(id) {
       return (await read()).manifestations.find((m) => m.id === id) ?? null;
     },
-    async save(m: Manifestation, audio?: AudioBytes | null) {
+    save: (m: Manifestation, audio?: AudioBytes | null) => inTurn(async () => {
       check(m.id);
       const lib = await read();
       const old = lib.manifestations.find((x) => x.id === m.id);
@@ -53,18 +61,16 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
         await files.deleteAudio(m.id).catch(() => undefined);
         hasAudio = false;
       } else if (audio) {
-        // Clear first: a new recording may have another extension than the old one.
-        await files.deleteAudio(m.id).catch(() => undefined);
         await files.writeAudio(m.id, audio);
         hasAudio = true;
       }
       const next = { ...m, hasAudio };
       await write({ ...lib, manifestations: old ? lib.manifestations.map((x) => (x.id === m.id ? next : x)) : [next, ...lib.manifestations] });
-    },
-    async remove(id) {
+    }),
+    remove: (id) => inTurn(async () => {
       if (isUuid(id)) await files.deleteAudio(id).catch(() => undefined);
       await write(withoutManifestation(await read(), id));
-    },
+    }),
     async audioUri(id) {
       return isUuid(id) ? files.audioUri(id) : null;
     },

@@ -24,9 +24,18 @@ export const library = makeFileLibrary({
     f.write(json);
   },
   async writeAudio(id, audio) {
-    const f = new File(dir(), `${id}.${extFor(audio.mime)}`);
-    if (!f.exists) f.create();
-    f.write(audio.bytes);
+    // Write beside the old recording first, so a full disk leaves the old one playable.
+    const tmp = new File(dir(), `${id}.tmp`);
+    if (tmp.exists) tmp.delete();
+    tmp.create();
+    try {
+      tmp.write(audio.bytes);
+    } catch (e) {
+      if (tmp.exists) tmp.delete();
+      throw e;
+    }
+    audioFile(id)?.delete();
+    tmp.move(new File(dir(), `${id}.${extFor(audio.mime)}`));
   },
   async deleteAudio(id) {
     audioFile(id)?.delete();
