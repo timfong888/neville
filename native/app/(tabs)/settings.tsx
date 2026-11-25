@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { type AudioPlayer, createAudioPlayer } from "expo-audio";
+import { useFocusEffect } from "expo-router";
 import { DEFAULT_PACE_ID, DEFAULT_TONE_ID, PACES, TONES } from "@/lib/delivery";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, TIER_LABEL, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { paceSupport } from "@/lib/voiceMix";
@@ -19,29 +20,44 @@ export default function SettingsScreen() {
   const [playing, setPlaying] = useState<string | null>(null);
   const player = useRef<AudioPlayer | null>(null);
 
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const stop = useCallback(() => {
+    if (watchdog.current) clearTimeout(watchdog.current);
+    watchdog.current = null;
     player.current?.pause();
     player.current?.remove();
     player.current = null;
     setPlaying(null);
   }, []);
-  useEffect(() => stop, [stop]);
+  // Tabs stay mounted, so stop when the screen loses focus as well as when it unmounts.
+  useFocusEffect(useCallback(() => stop, [stop]));
 
   const toggle = (id: string, sample: string) => {
     if (playing === id) return stop();
     stop();
+    const fail = () => {
+      stop();
+      setNote("That sample could not be played.");
+    };
     try {
       const p = createAudioPlayer(`${API_URL}${sample}`);
       player.current = p;
+      let loaded = false;
       p.addListener("playbackStatusUpdate", (st) => {
-        if (st.didJustFinish && player.current === p) stop();
+        if (player.current !== p) return;
+        // A missing or broken file reports later, not as a thrown error: web sends `error`, iOS a failed state.
+        if ((st as { error?: string }).error || st.playbackState === "failed") return fail();
+        if (st.isLoaded) loaded = true;
+        if (st.didJustFinish) stop();
       });
+      // No network gives no event at all, so give up after a while.
+      watchdog.current = setTimeout(() => player.current === p && !loaded && fail(), 10000);
       p.play();
       setPlaying(id);
       setNote("");
     } catch {
-      stop();
-      setNote("That sample could not be played.");
+      fail();
     }
   };
 
