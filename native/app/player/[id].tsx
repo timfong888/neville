@@ -49,8 +49,9 @@ export default function Player() {
       // `/player/demo` is a built-in test tone. Every other id comes from the library seam.
       const demo = String(id) === DEMO_ID;
       const it = demo ? demoItem : await library.get(String(id)).catch(() => null);
-      // The address is asked for on every open. The seam owns it and may replace it, so it is not kept or freed here.
-      const src = !it?.hasAudio ? null : await (demo ? demoAudioUri() : library.audioUri(it.id)).catch(() => null);
+      // The library owns its address and may free it at any time, so the Player plays its own copy.
+      const own = (u: string | null) => (u ? audio.keep("player-voice", u) : null);
+      const src = !it?.hasAudio ? null : await (demo ? demoAudioUri() : library.audioUri(it.id).then(own)).catch(() => null);
       if (src) {
         // The length is read now, so Play does not wait and the browser still counts it as a tap.
         const seconds = await audio.duration(src);
