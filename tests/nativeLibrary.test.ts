@@ -121,7 +121,7 @@ describe("native library store", () => {
     expect(d.audio().sort()).toEqual([(await makeFileLibrary(d).audioUri(m.id))!.replace("file:///library/", ""), "notes.txt"].sort());
     const kept = d.audio().length;
     const good = d.files.get("library.json")!;
-    for (const bad of ['{"manifestations":[{"id":', "{}", "[]"]) {
+    for (const bad of ['{"manifestations":[{"id":', "{}", "[]", "null"]) {
       d.files.set("library.json", bad);
       await makeFileLibrary(d).load();
       expect(d.audio()).toHaveLength(kept);
@@ -205,6 +205,11 @@ describe("native library store", () => {
     d.files.delete("library.json");
     d.files.set("library.json.new", '{"manif'); // lost records and a half-written replacement
     await makeFileLibrary(d).load();
+    for (const leftover of ["null", "{}", "7"]) {
+      d.files.set("library.json.new", leftover); // valid JSON that is not a library
+      await makeFileLibrary(d).load();
+      expect(d.audio()).toEqual([file]);
+    }
     d.files.delete("library.json.new");
     await makeFileLibrary(d).load();
     expect(d.audio()).toEqual([file]);

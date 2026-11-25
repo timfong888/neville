@@ -26,9 +26,10 @@ const AUDIO_NAME = /^[0-9a-f-]{36}\.[0-9a-f]{8}\.(mp3|wav|m4a)$/;
 export function extFor(mime: string): string {
   return EXT[mime.split(";")[0].trim().toLowerCase()] ?? "mp3";
 }
-const isJson = (s: string | null): s is string => {
+const isLibraryJson = (s: string | null): s is string => {
   try {
-    return s !== null && typeof JSON.parse(s) === "object";
+    // "null" is valid JSON and is not a library.
+    return s !== null && Array.isArray((JSON.parse(s) as { manifestations?: unknown } | null)?.manifestations);
   } catch {
     return false;
   }
@@ -47,7 +48,7 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
     const cur = await files.read(REC);
     if (cur !== null) return cur;
     const next = await files.read(NEXT);
-    return isJson(next) ? next : null;
+    return isLibraryJson(next) ? next : null;
   };
   // Records that exist but cannot be read are an error, never "empty": a change built on an
   // empty library would overwrite every other item.
@@ -55,7 +56,7 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
     try {
       const raw = await readRaw();
       const parsed = raw === null ? null : (JSON.parse(raw) as { manifestations?: unknown; audioFiles?: unknown });
-      if (parsed !== null && !Array.isArray(parsed?.manifestations)) throw new Error("not a library");
+      if (raw !== null && !Array.isArray(parsed?.manifestations)) throw new Error("not a library");
       const audio: Record<string, string> = {};
       for (const [id, name] of Object.entries(parsed?.audioFiles ?? {})) {
         // A name becomes a path, so only names this store makes are accepted.
@@ -70,7 +71,7 @@ export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomT
   const read = (): Promise<Doc> => readStrict().catch(() => ({ lib: parseLibrary(null), audio: {} }));
   // Replaces the records in one step. At every moment one complete copy is on the device.
   const write = async ({ lib, audio }: Doc) => {
-    if ((await files.read(REC)) === null && isJson(await files.read(NEXT))) await files.move(NEXT, REC);
+    if ((await files.read(REC)) === null && isLibraryJson(await files.read(NEXT))) await files.move(NEXT, REC);
     await files.write(NEXT, JSON.stringify({ ...lib, audioFiles: audio }));
     await files.remove(REC);
     await files.move(NEXT, REC);
