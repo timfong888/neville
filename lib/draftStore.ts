@@ -9,15 +9,23 @@ export type Draft = { want: string; name: string };
 
 const EMPTY: Draft = { want: "", name: "" };
 
-export function readDraft(): Draft {
+/** The draft as stored, cut to the limits; anything unreadable is empty. Shared with the native app. */
+export function parseDraft(raw: string | null): Draft {
   try {
-    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return EMPTY;
     const v = JSON.parse(raw) as Partial<Draft>;
     return {
       want: typeof v.want === "string" ? v.want.slice(0, MAX_WANT) : "",
       name: typeof v.name === "string" ? v.name.slice(0, MAX_NAME) : "",
     };
+  } catch {
+    return EMPTY;
+  }
+}
+
+export function readDraft(): Draft {
+  try {
+    return parseDraft(window.localStorage.getItem(DRAFT_STORAGE_KEY));
   } catch {
     return EMPTY;
   }
