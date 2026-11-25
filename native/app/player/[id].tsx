@@ -127,7 +127,11 @@ export default function Player() {
           ) : null}
         </View>
       ) : (
-        <Text style={s.p}>No recording is saved with this one, so there is nothing to play yet.</Text>
+        <Text style={s.p}>
+          {loaded.hasAudio
+            ? "This recording could not be loaded. Go back and open it again."
+            : "No recording is saved with this one, so there is nothing to play yet."}
+        </Text>
       )}
       {active ? (
         <Text style={s.p} accessibilityLiveRegion="polite">
