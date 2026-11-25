@@ -48,15 +48,14 @@ export default function Recording() {
     stop();
     if (newVariation()) router.back();
   };
-  // Saves once, then opens the saved item in the player.
+  // Saves once and stays here, as the website does. Once saved, the button opens the item in the player.
   const keep = async () => {
     if (saving) return;
-    stop();
+    if (c.savedId) return stop(), router.push(`/player/${c.savedId}`);
     setSaving(true);
-    setToast("");
     try {
-      const id = await save();
-      router.push(`/player/${id}`);
+      await save();
+      setToast("Saved to your library.");
     } catch (e) {
       setToast(e instanceof Error && e.message ? e.message : "Could not save on this device.");
     }
