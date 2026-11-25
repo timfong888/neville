@@ -8,7 +8,7 @@ import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { VOICE_STORAGE_KEY } from "@/lib/voiceStore";
 import { resolveVoice } from "@/lib/voices";
 import { api } from "../api";
-import { kv } from "../seams/kv";
+import { kv } from "./kv";
 
 export type CreateState = {
   want: string;
