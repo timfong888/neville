@@ -59,7 +59,7 @@ export const audio: AudioSeam = {
           ms.setActionHandler("pause", null);
         }
         open = false;
-        a.onended = a.onpause = a.onplay = null;
+        a.onended = a.onpause = a.onplay = a.onerror = null;
         a.pause();
         a.removeAttribute("src");
       },
@@ -81,6 +81,14 @@ export const audio: AudioSeam = {
     a.onplay = () => {
       switching = false;
       if (!want) ((want = true), emit());
+    };
+    // A clip that fails after play() resolved (network, decoding) rejects nothing, so it is caught here.
+    a.onerror = () => {
+      if (!open) return;
+      want = false;
+      o.onState({ playing: false, index, ended: false, failed: true });
+      const m = media();
+      if (m) m.playbackState = "none";
     };
     a.src = srcs[0];
     const ms = media();

@@ -10,6 +10,8 @@ export type PlayState = {
   index: number;
   /** True once, when the last clip has finished. */
   ended: boolean;
+  /** True once, when a clip could not be loaded or decoded. The session has stopped playing. */
+  failed?: boolean;
 };
 
 /** One playing session. `stop` also frees it and clears the lock screen. */
