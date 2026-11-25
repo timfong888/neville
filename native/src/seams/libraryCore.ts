@@ -26,17 +26,21 @@ const AUDIO_NAME = /^[0-9a-f-]{36}\.[0-9a-f]{8}\.(mp3|wav|m4a)$/;
 export function extFor(mime: string): string {
   return EXT[mime.split(";")[0].trim().toLowerCase()] ?? "mp3";
 }
-const isJson = (s: string | null): s is string => {
+const isLibraryJson = (s: string | null): s is string => {
   try {
-    return s !== null && typeof JSON.parse(s) === "object";
+    // "null" is valid JSON and is not a library.
+    return s !== null && Array.isArray((JSON.parse(s) as { manifestations?: unknown } | null)?.manifestations);
   } catch {
     return false;
   }
 };
 
-type Doc = { lib: Library; audio: Record<string, string> };
+/** `found` is false when the device holds no records at all. */
+type Doc = { lib: Library; audio: Record<string, string>; found?: boolean };
+const randomTag = () => newId().slice(0, 8);
 
-export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
+/** `tag` makes the part of a file name that differs between recordings of one item. Tests pass their own. */
+export function makeFileLibrary(files: LibraryFiles, tag: () => string = randomTag): DeviceLibrary {
   const listeners = new Set<() => void>();
   // library.json is removed only once library.json.new is complete, so with no library.json a
   // complete .new file is the library. A half-written .new is a first save that never finished.
@@ -44,7 +48,7 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     const cur = await files.read(REC);
     if (cur !== null) return cur;
     const next = await files.read(NEXT);
-    return isJson(next) ? next : null;
+    return isLibraryJson(next) ? next : null;
   };
   // Records that exist but cannot be read are an error, never "empty": a change built on an
   // empty library would overwrite every other item.
@@ -52,13 +56,13 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     try {
       const raw = await readRaw();
       const parsed = raw === null ? null : (JSON.parse(raw) as { manifestations?: unknown; audioFiles?: unknown });
-      if (parsed !== null && !Array.isArray(parsed?.manifestations)) throw new Error("not a library");
+      if (raw !== null && !Array.isArray(parsed?.manifestations)) throw new Error("not a library");
       const audio: Record<string, string> = {};
       for (const [id, name] of Object.entries(parsed?.audioFiles ?? {})) {
         // A name becomes a path, so only names this store makes are accepted.
         if (isUuid(id) && typeof name === "string" && AUDIO_NAME.test(name) && name.startsWith(`${id}.`)) audio[id] = name;
       }
-      return { lib: parseLibrary(parsed), audio };
+      return { lib: parseLibrary(parsed), audio, found: raw !== null };
     } catch {
       throw new Error("Your library could not be read, so nothing was changed. Try again.");
     }
@@ -67,7 +71,7 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
   const read = (): Promise<Doc> => readStrict().catch(() => ({ lib: parseLibrary(null), audio: {} }));
   // Replaces the records in one step. At every moment one complete copy is on the device.
   const write = async ({ lib, audio }: Doc) => {
-    if ((await files.read(REC)) === null && isJson(await files.read(NEXT))) await files.move(NEXT, REC);
+    if ((await files.read(REC)) === null && isLibraryJson(await files.read(NEXT))) await files.move(NEXT, REC);
     await files.write(NEXT, JSON.stringify({ ...lib, audioFiles: audio }));
     await files.remove(REC);
     await files.move(NEXT, REC);
@@ -82,15 +86,37 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
     return run;
   };
   // Once per start: removes recordings the records do not name. A save or delete that was cut
-  // short leaves one behind. Nothing is removed while the records cannot be read.
+  // short leaves one behind. Nothing is removed while the records cannot be read. A start that
+  // fails is tried again, and no change is made until one succeeds: a change made after a failed
+  // recovery would write records that leave the old recordings unnamed.
   let swept: Promise<void> | null = null;
   const tidy = () =>
     (swept ??= inTurn(async () => {
-      const keep = new Set(Object.values((await readStrict()).audio));
-      for (const n of await files.list()) if (AUDIO_NAME.test(n) && !keep.has(n)) await drop(n);
-    }).catch(() => undefined));
+      const doc = await readStrict();
+      const found = (await files.list()).filter((n) => AUDIO_NAME.test(n));
+      if (!doc.found) {
+        // No records at all, yet recordings exist: the records were lost. The recordings are put
+        // back in the library under a plain title, so a later save cannot orphan them.
+        const audio: Record<string, string> = {};
+        for (const n of found) audio[n.slice(0, 36)] = n;
+        const ids = Object.keys(audio);
+        if (ids.length === 0) return;
+        const now = Date.now();
+        const manifestations = ids.map((id): Manifestation => ({
+          id, title: "Recovered recording", want: "", firstName: "", lines: ["The words of this recording were lost. The recording is safe."],
+          voiceId: "", voiceName: "Unknown", hasAudio: true, createdAt: now, updatedAt: now,
+        }));
+        await write({ lib: { manifestations, playlists: [] }, audio });
+        return;
+      }
+      const keep = new Set(Object.values(doc.audio));
+      for (const n of found) if (!keep.has(n)) await drop(n);
+    }).catch((e) => {
+      swept = null;
+      throw e;
+    }));
   const change = <T>(fn: () => Promise<T>) => tidy().then(() => inTurn(fn));
-  const load = async () => (await tidy(), (await read()).lib);
+  const load = async () => (await tidy().catch(() => undefined), (await read()).lib);
   return {
     load,
     get: async (id) => (await load()).manifestations.find((m) => m.id === id) ?? null,
@@ -103,7 +129,11 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
       // Order matters. The new recording is written under a new name, then the records are written
       // to name it, and only then is the old file removed. Stopping at any step leaves the records
       // naming a whole recording.
-      const fresh = audio ? `${m.id}.${newId().slice(0, 8)}.${extFor(audio.mime)}` : undefined;
+      const name = (t: string) => `${m.id}.${t}.${extFor(audio?.mime ?? "")}`;
+      // A file is never rewritten: a name equal to the current one would replace the live recording early.
+      const t = tag();
+      const other = ((parseInt(t, 16) + 1) >>> 0).toString(16).padStart(8, "0").slice(-8);
+      const fresh = audio ? (name(t) === old ? name(other) : name(t)) : undefined;
       if (fresh) names[m.id] = fresh;
       else if (audio === null) delete names[m.id];
       const next = { ...m, hasAudio: m.id in names };
@@ -119,17 +149,19 @@ export function makeFileLibrary(files: LibraryFiles): DeviceLibrary {
         if (now && now.audio[m.id] !== fresh) await drop(fresh);
         throw e;
       }
-      if (audio !== undefined) await drop(old);
+      if (audio !== undefined && old !== names[m.id]) await drop(old);
     }),
     remove: (id) => change(async () => {
       const doc = await readStrict();
-      const { [id]: old, ...audio } = doc.audio;
+      // Only an id the app made can name a recording. Any other id removes the record alone.
+      const old = isUuid(id) ? doc.audio[id] : undefined;
+      const audio = Object.fromEntries(Object.entries(doc.audio).filter(([k]) => k !== id));
       await write({ lib: withoutManifestation(doc.lib, id), audio });
       await drop(old);
     }),
     async audioUri(id) {
-      await tidy();
-      const name = (await read()).audio[id];
+      await tidy().catch(() => undefined);
+      const name = isUuid(id) ? (await read()).audio[id] : undefined;
       return name ? files.uri(name) : null;
     },
     subscribe(fn) {
