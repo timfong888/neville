@@ -1,6 +1,20 @@
 # Neville architecture
 
-> **Note, 2026-11-25.** The `/architecture` page on the website is gone (Tim: "You can drop the architecture page"); this document is the written record only. The page's content (diagram, stack, cost tables, guardrails) is kept as text in `architecture-site-page.md`, and its numbers stay in `lib/architecture.ts`. It is also stale in two places: it describes Google-only sign-in (accounts now turn on with Sign in with Apple alone, Google is optional) and a Next-only web app (the client is now `native/`, one React Native codebase for iOS and web, with Next as the API; see `native-ios.md`).
+> **Note, 2026-11-25.** The `/architecture` page on the website is gone (Tim: "You can drop the architecture page"); this document is the written record only. The page's content (diagram, stack, cost tables, guardrails) is kept as text in `architecture-site-page.md`, and its numbers stay in `lib/architecture.ts`. The original text below is the 2026-11-17 design; the corrections that follow say where it no longer matches what is built or what vendors charge. Corrected lines are marked **[corrected 2026-11-25]** in place.
+
+## Corrections, 2026-11-25
+
+Each fix, with how it was checked. "Code" means this repository on `main` at 83ad7c1. "OpenRouter" means its public model list read on 2026-11-25.
+
+1. **Cheap voice price.** Kokoro 82M is $0.99 per 1M characters, not $0.62 (OpenRouter).
+2. **Default voice.** The default is `gemini-sulafat` on `google/gemini-3.8-flash-lite-tts` (`config/voices.json`), priced by tokens ($0.50 per 1M text-in, $6 per 1M audio-out, OpenRouter), not per character. The cheap-voice and mid-voice monthly totals ($27, $48, $266 and $32, $94, $731) were built on per-character prices and are **not valid** for the default voice. A real figure needs audio-token counts per clip; the usage ledger (item 4) is where to measure it.
+3. **Script models.** The writer uses Gemini 2.5 Flash Lite and similar small models at $0.10 in and $0.40 out per 1M tokens (OpenRouter; list in `config/limits.json`: Gemini 2.5 Flash Lite, GPT-4.1 nano, GPT-4o mini, Mistral Small 3.2, Llama 3.3 70B), not Claude Haiku at about $0.0035 a script. A script at those prices is a small fraction of a cent.
+4. **Guardrails as built** (`config/limits.json`, `lib/limits.ts`, `lib/ledger.ts`, PR #26): a spend ceiling of $2 read from OpenRouter's own usage counter; at most 150 generations a day in total and 6 per visitor per day (counted in Upstash Redis when configured, otherwise in memory per instance); 280 characters in and 700 out; a kill switch (`generationEnabled`, `SPEECH_ENABLED`); alerts at 50%, 80% and 100% of the ceiling, to a webhook (`ALERT_WEBHOOK_URL`) or the log, not email. The usage ledger is `[ledger]` log lines plus the last 500 entries in memory per instance, not a Postgres table. **No bot check exists yet:** BotID is not in the code.
+5. **Sign-in.** Apple-only is enough to turn accounts on; Google is optional and appears only when its two variables are set (#106, `lib/server/providers.ts`). The Expo section's "Sign in with Apple alongside Google" is now the other way round.
+6. **Not built:** Stripe (nothing in the code) and the `entitlement` table. Neither are the `allowance`, `job`, `usage`, `image`, `rate_limit` or `setting` tables below. The tables that exist (`db/migrations/001_accounts_and_library.sql`) are `user`, `session`, `account`, `verification`, `profile`, `manifestation`, `rendition`, `playlist`, `playlist_item` and `blob_tombstone`.
+7. **Blob transfer** is included in Vercel's flat rate, so there is no separate per-GB transfer line; only storage is a cost to watch. (Reported by the PRD steward from Vercel's pricing; not re-read here.)
+8. **Neon** is on the Free plan today; a typical Launch plan bill is about $15 a month, not $5 to $19. (Reported by the PRD steward; the Neon API does not show the plan, so not independently checked here.)
+9. **Web stack.** The client is `native/`, one React Native codebase for iOS and web, with Next.js as the API only; see `native-ios.md`.
 
 Status: proposed, 2026-11-17. Source of truth for product scope is the PRD (Google Doc "Neville"). This document starts fresh: nothing from the old Google project, FlutterFlow app, users or recordings is reused.
 
@@ -11,12 +25,12 @@ Status: proposed, 2026-11-17. Source of truth for product scope is the PRD (Goog
 | Concern | Choice | Why |
 |---|---|---|
 | Web app and API | Next.js on Vercel Pro. Route handlers are the whole backend. | One deploy, preview URL per PR, and the same HTTP API serves the Expo app later. |
-| Database | Neon Postgres (Launch plan), installed from the Vercel Marketplace | Plain SQL, on the Vercel invoice, portable to any Postgres host. Paid plan because the free tier suspends the whole app when its compute hours run out. |
-| Files | Vercel Blob, behind a small storage interface | Same bill. Audio transfer is cents at this scale (see costs). |
+| Database | Neon Postgres (Launch plan), installed from the Vercel Marketplace | Plain SQL, on the Vercel invoice, portable to any Postgres host. Paid plan because the free tier suspends the whole app when its compute hours run out. **[corrected 2026-11-25]** Today it runs on the Free plan; Launch is about $15 a month when needed (correction 8). |
+| Files | Vercel Blob, behind a small storage interface | Same bill. Audio transfer is cents at this scale (see costs). **[corrected 2026-11-25]** Transfer is included in Vercel's flat rate (correction 7). |
 | Script, voice, images | OpenRouter only | It is the model router the PRD asks for: one API and one balance across voice models, so cost and quality can be compared by changing a model id. |
-| Auth | Better Auth inside the app, Google sign-in only at MVP | No extra vendor or bill, users live in our Postgres, so "delete my account" is one transaction. Google-only avoids adding an email-sending service. |
-| Bot protection and rate limits | Vercel BotID plus counters in Postgres | No extra vendor. |
-| Payments | Stripe Checkout and one webhook | Fees come out of revenue, there is no bill to pay. |
+| Auth | Better Auth inside the app, Google sign-in only at MVP | No extra vendor or bill, users live in our Postgres, so "delete my account" is one transaction. Google-only avoids adding an email-sending service. **[corrected 2026-11-25]** Sign in with Apple alone turns accounts on; Google is optional (correction 5). |
+| Bot protection and rate limits | Vercel BotID plus counters in Postgres | No extra vendor. **[corrected 2026-11-25]** Not built as written: no BotID yet; counters are in Upstash Redis when configured, else in memory (correction 4). |
+| Payments | Stripe Checkout and one webhook | Fees come out of revenue, there is no bill to pay. **[corrected 2026-11-25]** Not built yet (correction 6). |
 | Background music | A few licensed loops as static files, mixed in the browser | Zero marginal cost. No server-side audio processing. |
 
 Two bills to pay: **Vercel** (hosting, database, files) and **OpenRouter** (all AI). The spend that scales with usage sits almost entirely on OpenRouter, which is prepaid and stops at zero.
@@ -43,15 +57,16 @@ Unit prices, read 2026-11-17:
 
 | Item | Price | Per unit | Confidence |
 |---|---|---|---|
-| Voice, cheap: Kokoro 82M | $0.62 per 1M characters | $0.0011 per 2-minute audio | Verified on OpenRouter |
+| Voice, cheap: Kokoro 82M | **[corrected 2026-11-25]** $0.99 per 1M characters (was $0.62) | about $0.0018 per 2-minute audio (1,800 characters) | OpenRouter, 2026-11-25 |
+| Voice, default: Gemini 3.8 Flash Lite TTS (`gemini-sulafat`) | **[added 2026-11-25]** $0.50 per 1M text tokens in, $6 per 1M audio tokens out | not per character; measure from the ledger | OpenRouter, 2026-11-25 |
 | Voice, mid: several models (Grok Voice, AssemblyAI TTS 1, MAI-Voice, Speechify) | about $15 per 1M characters | $0.027 per audio | Listed price, from search results |
 | Voice, premium: ElevenLabs v4 | $40 to $80 per 1M characters | $0.07 to $0.14 per audio | Listed price, from search results |
-| Script: Claude Haiku class | $1 in / $5 out per 1M tokens | about $0.0035 per script | Verified on OpenRouter |
+| Script: Gemini 2.5 Flash Lite and similar | **[corrected 2026-11-25]** $0.10 in / $0.40 out per 1M tokens (was Claude Haiku class, $1 / $5) | a small fraction of a cent per script | OpenRouter, 2026-11-25 |
 | Image: Seedream class | about $0.008 per image | | Verified on OpenRouter |
 | OpenRouter fee | 5.5% on credit purchases | | From OpenRouter FAQ |
 | Vercel Pro | $20 a month, includes a usage credit | | Verified |
-| Neon Launch | usage-based, about $5 a month idle-ish, about $19 at 1,000 users | | Estimate |
-| Vercel Blob | $0.023 per GB stored, about $0.05 per GB transferred | | Verified via search |
+| Neon Launch | usage-based, about $5 a month idle-ish, about $19 at 1,000 users. **[corrected 2026-11-25]** Free plan today; typical Launch bill about $15 | | Estimate; steward-reported |
+| Vercel Blob | $0.023 per GB stored, about $0.05 per GB transferred. **[corrected 2026-11-25]** Transfer is included in Vercel's flat rate | | Verified via search; steward-reported |
 
 Monthly cost per service:
 
@@ -69,6 +84,8 @@ Monthly cost per service:
 | **Total, mid voice** | **$32** | **$94** | **$731** |
 | Total, premium voice ($80 per 1M) | $53 | $304 | $2,829 |
 
+**[corrected 2026-11-25]** The Scripts and "Voice, cheap tier" rows and the totals above use the old prices (corrections 1 to 3). The Neon row ($5 / $5 / $19) and the Blob "plus transfer" are stale too (corrections 7 and 8: Neon is on the Free plan today, about $15 on Launch, and Blob transfer is inside the flat rate). The cheap-voice and mid-voice totals are not valid for the default voice; read this table as the 2026-11-17 estimate, not the current cost.
+
 What the table says:
 
 - **Voice only dominates from the mid tier up.** On the cheap tier, images are the largest line. Voice is under 10% of the total on cheap, about 63% on mid, close to 90% on premium.
@@ -84,7 +101,7 @@ Not verified this session: direct fetches of vercel.com and openrouter.ai were b
 
 Vendor caps stop spend but they do it by breaking the app, so the first line of defence is in our own code and the vendor caps are the backstop.
 
-In the app (first line):
+In the app (first line). **[corrected 2026-11-25]** This list is the design. What is built is in correction 4: the $2 ceiling, 150 a day total, 6 per visitor per day, the kill switch and 50/80/100% alerts. The allowance ledger, idempotent jobs, BotID, cheap-voice-only free accounts and the Postgres usage ledger are not built.
 
 1. **Per-user allowance ledger.** Every account has a monthly allowance of voice characters and images, set by plan. A generation debits the ledger before the model is called and is refused when the allowance is spent. Premium voices debit at their real cost ratio. This is what stops one subscriber spending $80 against a $10 subscription.
 2. **Idempotent jobs.** Each generation is a row with a client-supplied key; a retry returns the existing job instead of paying twice.
@@ -108,6 +125,8 @@ At the vendors (backstop):
 ## Data model
 
 Postgres. Auth tables (`user`, `session`, `account`) are created by Better Auth and not shown.
+
+**[corrected 2026-11-25]** The SQL below is the original design. Only `profile`, `manifestation` and `rendition` exist from it, plus `playlist`, `playlist_item` and `blob_tombstone`, which it does not list (correction 6).
 
 ```sql
 -- A person, or an anonymous device before sign-up.

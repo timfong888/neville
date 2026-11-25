@@ -1,5 +1,7 @@
-// Single source for the numbers shown on /architecture and in the demo's cost meter.
-// Keep in step with docs/specs/architecture.md.
+// Live: FREE_ANON_GENERATIONS, the free-creation cap used by app/page.tsx.
+// Everything else here is archived data from the /architecture page removed in #112, kept as text in
+// docs/specs/architecture-site-page.md. Nothing imports it and it is not shown to users. Several
+// figures predate the corrections at the top of docs/specs/architecture.md; do not treat them as current.
 
 /**
  * Free creations before the sign-up gate (variations count). SOFT MVP CAP: it
