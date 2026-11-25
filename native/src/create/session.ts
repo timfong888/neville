@@ -59,14 +59,19 @@ export function edit(p: { want?: string; name?: string }): void {
 }
 
 let run = 0;
+/** The wish the current `made` was asked for. The form can change afterwards. */
+let asked = { want: "", name: "" };
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
   set({ making: true, made: null, savedId: "", variant });
+  const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
   set({ voiceName: resolveVoice(chosen.voiceId).name });
-  const made = await makeManifestation(api, { want: state.want, name: state.name, variant, ...chosen }, canSpeak());
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
-  if (run === mine) set({ making: false, made });
+  if (run !== mine) return;
+  asked = wish;
+  set({ making: false, made });
 }
 
 /** Counts one free creation. False, with the gate shown, when none are left. */
@@ -110,7 +115,7 @@ export async function save(): Promise<string> {
   if (state.savedId) return state.savedId;
   const id = newId();
   const audio = made.recording ? { bytes: new Uint8Array(made.recording.audio), mime: made.recording.mime } : null;
-  await library.save(toManifestation(made, state, id), audio);
+  await library.save(toManifestation(made, asked, id), audio);
   // A new variation made while saving is not this saved one.
   if (state.made === made) set({ savedId: id });
   return id;
