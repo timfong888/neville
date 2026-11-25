@@ -29,6 +29,7 @@ describe("the Create flow (#120)", () => {
   it("returns the recording with the server's line starts", async () => {
     const m = await makeManifestation(api(rec({ starts: [0, 0.3, 0.8] })), wish, true);
     expect(m.note).toBe("");
+    expect(m.title).toBe("You are calm");
     expect(m.lines).toEqual(LINES);
     expect(m.recording).toMatchObject({ mime: "audio/wav", voiceName: resolveVoice(DEFAULT_VOICE_ID).name, starts: [0, 0.3, 0.8] });
   });
@@ -50,12 +51,14 @@ describe("the Create flow (#120)", () => {
   it("keeps the server's script when only the voice failed", async () => {
     const m = await makeManifestation(api(new ApiError("The voice could not be recorded just now.", 502, "voice_failed", LINES)), wish, false);
     expect(m.lines).toEqual(LINES);
+    expect(m.title).toBe("A moment of calm");
     expect(m.note).toBe("The voice could not be recorded just now. Here is your script to read.");
   });
   it("never reads the typed wish back when the request fails", async () => {
     for (const e of [new Error("offline"), new ApiError("Request failed (504).", 504)]) {
       const m = await makeManifestation(api(e), { want: "something unkind", name: "" }, true);
       expect(m.lines.join(" ")).not.toContain("unkind");
+      expect(m.title).toBe("A moment of calm");
     }
     expect((await makeManifestation(api(new Error("offline")), wish, true)).note).toMatch(/^The recording could not be made just now\./);
     expect((await makeManifestation(api(new ApiError("Request failed (504).", 504)), wish, true)).note).toMatch(/^Recording is not available just now\./);

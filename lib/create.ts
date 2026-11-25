@@ -32,6 +32,9 @@ export const freeBanner = (used: number): string => {
 };
 export const nextVariant = (v: number): number => (v + 1) % VARIANT_COUNT;
 
+/** The title when there is no recording. It is not about the wish, as on the website's Save. */
+export const FALLBACK_TITLE = "A moment of calm";
+
 /** The wish as typed, and the choices from Settings. */
 export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
 
@@ -49,8 +52,9 @@ export function wishRequest(w: Wish): WishRequest {
 
 /** What the script and recording steps show. `recording` is null when only a script could be given. */
 export type Made = {
-  title: string;
   lines: string[];
+  /** About the wish only when the server vetted it and recorded it. */
+  title: string;
   /** Why this is not the recording that was asked for; empty when it is. */
   note: string;
   recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
@@ -63,12 +67,11 @@ export type Made = {
  * `deviceVoice` says whether this device can speak the script itself.
  */
 export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, deviceVoice: boolean): Promise<Made> {
-  const title = titleFor(w.want);
   try {
     const r = await api.manifest(wishRequest(w));
     const voice = resolveVoice(r.voiceId);
     return {
-      title,
+      title: titleFor(w.want),
       lines: r.lines,
       note: r.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
@@ -78,7 +81,8 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const written = e instanceof ApiError ? scriptLines(e.lines) : null;
     const how = deviceVoice ? "in your device's own voice" : "to read";
     return {
-      title,
+      // Nothing typed is shown back when the request failed: not in the script, not in the title.
+      title: FALLBACK_TITLE,
       lines: written ?? neutralScript(w.name.trim()),
       note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
       recording: null,
