@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
 import type { Manifestation } from "@/lib/library/model";
@@ -8,14 +9,18 @@ import { getShare } from "@/lib/server/shareDb";
 
 export const dynamic = "force-dynamic";
 
-async function load(id: string) {
+// Both generateMetadata and the page need the share, and each called this
+// separately, so every visit read the database twice. React's cache() shares
+// one read per request (Next.js only de-duplicates fetch(), not direct pg
+// queries), which matters on a public, unauthenticated, uncached route.
+const load = cache(async (id: string) => {
   if (!dbConfigured()) return null;
   try {
     return await getShare(getPool(), id);
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const s = await load((await params).id);
