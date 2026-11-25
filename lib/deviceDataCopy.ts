@@ -39,3 +39,14 @@ export function deleteAccountPrompt(device?: DeviceData): string {
 
 /** Shown after the account is gone. */
 export const ACCOUNT_DELETED = "Your account and everything saved in it have been deleted.";
+
+/**
+ * Counts for deleteAccountPrompt from the library saved on the device. Undefined when the library is
+ * empty: the app cannot yet see a wish being typed (the Create screen owns that), and an unreadable
+ * library also loads as empty, so "nothing is saved on this phone" would be a claim it cannot back.
+ */
+export function deviceDataFromLibrary(lib: { manifestations: readonly unknown[]; playlists: readonly unknown[] }): DeviceData | undefined {
+  const manifestations = lib.manifestations.length;
+  const playlists = lib.playlists.length;
+  return manifestations || playlists ? { manifestations, playlists, draft: false } : undefined;
+}
