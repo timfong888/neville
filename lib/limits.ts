@@ -9,6 +9,13 @@
 // it, MemoryCounter keeps one copy per instance, lost on restart.
 import limits from "@/config/limits.json";
 
+/**
+ * Free creations before the sign-up gate (variations count). SOFT MVP CAP: it
+ * is counted in the browser's own storage, so clearing it or using another
+ * browser resets it. It shapes the experience; it does not bound spend.
+ */
+export const FREE_ANON_GENERATIONS = 2;
+
 /** The two keys a request counts against, and the request's own marker. */
 export type SlotKeys = { day: string; visitor: string; marker: string };
 

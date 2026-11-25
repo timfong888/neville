@@ -48,9 +48,10 @@ Each has a `.web.ts` and a `.native.ts` file, kept outside the routes folder.
 - Shared by web and iOS: all user screens, the platform-neutral `lib/`
   modules (16 files, 1,588 lines) and their tests, `config/*.json`, a typed
   API client.
-- Stays in Next: `/api/*`, `/voices` bake-off, `/architecture`,
-  `/admin/usage`, `/mode-samples/*`, and the public share page (#28), which
-  needs preview tags rendered on the server.
+- Stays in Next: `/api/*`, `/voices` bake-off, `/admin/usage`,
+  `/mode-samples/*`, and the public share page (#28), which needs preview
+  tags rendered on the server. The `/architecture` page was removed
+  (Tim, 2026-11-25) and redirects to `/`.
 
 ## Versions
 
@@ -113,8 +114,9 @@ page (#28) with links that open the app, Android.
   best."
 - The live website is cut over when the new build reaches parity (end of
   Phase 2), not earlier. "Accept both"
-- `/voices`, `/architecture`, `/admin/usage` and `/mode-samples` stay in Next
-  and are not ported. "Accept both"
+- `/voices`, `/admin/usage` and `/mode-samples` stay in Next and are not
+  ported. "Accept both" (`/architecture` was later dropped altogether, see
+  above.)
 
 - `native/` lives in this repo, reusing bundle `pckg.neville` and the EAS
   project.

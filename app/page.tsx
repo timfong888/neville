@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hashOf, neutralScript, scriptLines, titleFor, VARIANT_COUNT } from "@/lib/script";
-import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
+import { FREE_ANON_GENERATIONS } from "@/lib/limits";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";

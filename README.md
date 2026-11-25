@@ -11,7 +11,6 @@ Voice manifestation app. This repo holds the architecture spec and a clickable p
   - `/account` — create a free account with Google, move device work into it, sign out, delete the account.
   - `/settings` — choose a voice. The choice is kept on the device; no account.
   - `/voices` — voice bake-off: one script, several OpenRouter voices, price per clip.
-  - `/architecture` — the architecture and cost page.
 
 ## Voices on offer
 

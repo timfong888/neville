@@ -1,5 +1,7 @@
 # Neville architecture
 
+> **Note, 2026-11-25.** The `/architecture` page on the website is gone (Tim: "You can drop the architecture page"); this document is the written record only. It is also stale in two places: it describes Google-only sign-in (accounts now turn on with Sign in with Apple alone, Google is optional) and a Next-only web app (the client is now `native/`, one React Native codebase for iOS and web, with Next as the API; see `native-ios.md`).
+
 Status: proposed, 2026-11-17. Source of truth for product scope is the PRD (Google Doc "Neville"). This document starts fresh: nothing from the old Google project, FlutterFlow app, users or recordings is reused.
 
 ## Decision
