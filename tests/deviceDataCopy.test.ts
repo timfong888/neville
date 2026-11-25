@@ -17,3 +17,18 @@ describe("account page copy for data on this device (#100 follow-up)", () => {
     expect(deviceDataSummary(0, 0, false)).toBe("Nothing is saved in this browser yet.");
   });
 });
+
+describe("native delete-account prompt (#121)", () => {
+  it("says what is deleted and names what stays on the phone", async () => {
+    const { deleteAccountPrompt } = await import("@/lib/deviceDataCopy");
+    const p = deleteAccountPrompt({ manifestations: 2, playlists: 0, draft: true });
+    expect(p).toContain("deletes your account");
+    expect(p).toContain("It cannot be undone.");
+    expect(p.endsWith("Staying on this phone: 2 manifestations and the wish you were typing.")).toBe(true);
+  });
+  it("says so when nothing is on the phone, or when it cannot be counted", async () => {
+    const { deleteAccountPrompt } = await import("@/lib/deviceDataCopy");
+    expect(deleteAccountPrompt({ manifestations: 0, playlists: 0, draft: false }).endsWith("Nothing is saved on this phone.")).toBe(true);
+    expect(deleteAccountPrompt().endsWith("Anything saved on this phone stays on this phone.")).toBe(true);
+  });
+});

@@ -21,3 +21,21 @@ export function deviceDataSummary(manifestations: number, playlists: number, dra
 export function deleteDevicePrompt(manifestations: number, playlists: number, draft: boolean): string {
   return `Delete ${list(items(manifestations, playlists, draft))} from this device?`;
 }
+
+/** What is saved on the phone, when the app can count it. */
+export type DeviceData = { manifestations: number; playlists: number; draft: boolean };
+
+/**
+ * The native app's "delete my account" confirmation. In Phase 1 the library lives on the phone, so
+ * deleting the account leaves it there; the prompt says what goes and names what stays.
+ * `device` is undefined when the app cannot count what is on the phone.
+ */
+export function deleteAccountPrompt(device?: DeviceData): string {
+  const goes = "This deletes your account and every manifestation, recording and playlist saved in it, and signs you out. It cannot be undone.";
+  if (!device) return `${goes} Anything saved on this phone stays on this phone.`;
+  const xs = items(device.manifestations, device.playlists, device.draft);
+  return xs.length ? `${goes} Staying on this phone: ${list(xs)}.` : `${goes} Nothing is saved on this phone.`;
+}
+
+/** Shown after the account is gone. */
+export const ACCOUNT_DELETED = "Your account and everything saved in it have been deleted.";

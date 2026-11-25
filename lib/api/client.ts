@@ -119,9 +119,13 @@ export function createApi(opts: ApiOptions) {
     async account(): Promise<AccountState> {
       return (await (await call("/api/account")).json()) as AccountState;
     },
-    /** Deletes the signed-in account and everything in it. */
-    async deleteAccount(): Promise<void> {
-      await call("/api/account", { method: "DELETE" });
+    /**
+     * Deletes the signed-in account and everything in it. `appleAuthorizationCode` is a fresh code from
+     * the Sign in with Apple sheet; with it the server can revoke the Apple grant (#98).
+     */
+    async deleteAccount(opts: { appleAuthorizationCode?: string } = {}): Promise<void> {
+      const code = opts.appleAuthorizationCode;
+      await call("/api/account", code ? { ...json({ appleAuthorizationCode: code }), method: "DELETE" } : { method: "DELETE" });
     },
 
     /** A wish in; a script and its recording out. One paid request. */
