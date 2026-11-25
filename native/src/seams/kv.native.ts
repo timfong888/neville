@@ -17,21 +17,28 @@ function load(): Record<string, string> {
   return cache;
 }
 
+function save(next: Record<string, string>): boolean {
+  cache = next;
+  try {
+    const f = file();
+    if (!f.exists) f.create();
+    f.write(JSON.stringify(next));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const kv: KV = {
   async get(key) {
     const v = load()[key];
     return typeof v === "string" ? v : null;
   },
   async set(key, value) {
-    const next = { ...load(), [key]: value };
-    cache = next;
-    try {
-      const f = file();
-      if (!f.exists) f.create();
-      f.write(JSON.stringify(next));
-      return true;
-    } catch {
-      return false;
-    }
+    return save({ ...load(), [key]: value });
+  },
+  async remove(key) {
+    const { [key]: _gone, ...rest } = load();
+    save(rest);
   },
 };

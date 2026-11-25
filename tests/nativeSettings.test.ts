@@ -10,6 +10,7 @@ function memory(seed: Record<string, string> = {}, refuse = false): KV & { data:
     data,
     get: async (k) => data[k] ?? null,
     set: async (k, v) => (refuse ? false : ((data[k] = v), true)),
+    remove: async (k) => void delete data[k],
   };
 }
 

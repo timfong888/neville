@@ -17,4 +17,11 @@ export const kv: KV = {
       return false;
     }
   },
+  async remove(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Nothing to remove when storage is blocked.
+    }
+  },
 };
