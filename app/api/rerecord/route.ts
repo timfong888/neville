@@ -10,6 +10,7 @@ import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceB
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
+import { alertFailure } from "@/lib/server/alertFailure";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -166,8 +167,19 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    alertFailure("voice_failed", { route: "rerecord", model: voice.model, status: speech.status });
     await charged.refund();
-    return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
+    const wasCharged = charged.left !== null && charged.left !== "unlimited";
+    const balanceAfterRefund =
+      charged.left === "unlimited" ? "unlimited"
+      : charged.left !== null ? String(Number(charged.left) + 1)
+      : undefined;
+    return NextResponse.json({
+      code: "voice_failed",
+      error: "The voice could not be recorded just now.",
+      ...(wasCharged ? { creditReturned: true } : {}),
+      ...(balanceAfterRefund !== undefined ? { creditsBalance: balanceAfterRefund } : {}),
+    }, { status: 502 });
   }
   await record({
     route: "rerecord",
@@ -184,7 +196,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
-      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left, "X-Credits-Balance": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
     },
