@@ -7,7 +7,7 @@ import { api } from "./api";
 
 const store = createAccountView(() => api.account());
 
-export const refreshAccount = (): Promise<AccountState> => store.refresh();
+export const refreshAccount = (): Promise<AccountState | null> => store.refresh();
 export const clearUser = (): void => store.clearUser();
 /** What is known now, for code outside a component. */
 export const currentView = (): AccountView => store.get();

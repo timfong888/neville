@@ -28,10 +28,10 @@ export function createAccountView(lookup: () => Promise<AccountState>, opts: Acc
 
     /**
      * Asks who is signed in. Only the latest ask writes, so a slow older answer cannot undo a newer one.
-     * A failed ask keeps what was known, marks the lookup finished, and rejects so the caller can say why.
+     * A failed ask keeps what was known, marks the lookup finished, and rejects so the caller can say why; a replaced ask resolves quietly.
      * A first ask that hangs is marked finished after `waitMs`; its answer still lands if it comes later.
      */
-    async refresh(): Promise<AccountState> {
+    async refresh(): Promise<AccountState | null> {
       const mine = ++latest;
       if (!view.checked) setTimer(() => void (!view.checked && put({ ...view, checked: true })), waitMs);
       try {
@@ -39,7 +39,9 @@ export function createAccountView(lookup: () => Promise<AccountState>, opts: Acc
         if (mine === latest) put({ account: next, checked: true });
         return next;
       } catch (e) {
-        if (mine === latest) put({ ...view, checked: true });
+        // A replaced lookup reports nothing: a newer one is answering, and the view is its to set.
+        if (mine !== latest) return view.account;
+        put({ ...view, checked: true });
         throw e;
       }
     },

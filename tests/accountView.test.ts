@@ -47,10 +47,11 @@ describe("the shared account view (#164)", () => {
     const slow = later<AccountState>();
     const answers = [slow.p, Promise.resolve(signedIn)];
     const v = createAccountView(() => answers.shift()!);
-    const first = v.refresh().catch(() => undefined);
+    const first = v.refresh();
     await v.refresh();
     slow.no(new Error("late"));
-    await first;
+    // A replaced lookup does not report an error: a newer one has answered.
+    await expect(first).resolves.toEqual(signedIn);
     expect(v.get()).toEqual({ account: signedIn, checked: true });
   });
   it("a first lookup that hangs is marked checked after the wait, with nothing known", async () => {
