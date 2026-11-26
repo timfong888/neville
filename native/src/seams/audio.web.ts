@@ -1,3 +1,4 @@
+import { musicPlayer } from "./music";
 import type { AudioSeam } from "./types";
 
 const ARTIST = "Neville";
@@ -50,14 +51,8 @@ export const audio: AudioSeam = {
     const a = new Audio();
     const mine = [...new Set(srcs)];
     for (const u of mine) inUse.set(u, (inUse.get(u) ?? 0) + 1);
-    // The music is a second element that follows the session.
-    let bed: HTMLAudioElement | null = null;
-    if (o.music && typeof o.music.src === "string") {
-      bed = new Audio();
-      bed.loop = true;
-      bed.volume = o.music.volume;
-      bed.src = o.music.src;
-    }
+    // The music is the app's one other player; this session only tells it what the voice is doing.
+    const bed = o.music ? musicPlayer.attach() : null;
     let index = 0;
     let open = true;
     // What the listener asked for. The element also pauses by itself at the end of each clip.
@@ -88,6 +83,7 @@ export const audio: AudioSeam = {
         if (!open || loaded) return;
         want = false;
         a.pause();
+        bed?.close();
         o.onState({ playing: false, index, ended: false, failed: true });
       }, LOAD_TIMEOUT_MS);
     };
@@ -96,15 +92,17 @@ export const audio: AudioSeam = {
     const start = () =>
       void a.play().catch((e: { name?: string }) => {
         want = false;
-        if (open && !everPlayed && (e?.name === "NotAllowedError" || e?.name === "NotSupportedError")) o.onState({ playing: false, index, ended: false, failed: true });
-        else emit();
+        if (open && !everPlayed && (e?.name === "NotAllowedError" || e?.name === "NotSupportedError")) {
+          bed?.close();
+          o.onState({ playing: false, index, ended: false, failed: true });
+        } else emit();
       });
     const session = {
       play() {
         if (!open) return;
         want = true;
         start();
-        void bed?.play().catch(() => undefined);
+        bed?.voice(true);
         guard();
         emit();
       },
@@ -112,7 +110,7 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = false;
         a.pause();
-        bed?.pause();
+        bed?.voice(false);
         emit();
       },
       stop() {
@@ -131,10 +129,7 @@ export const audio: AudioSeam = {
         a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = a.onloadeddata = a.oncanplay = a.onplaying = null;
         a.pause();
         a.removeAttribute("src");
-        if (bed) {
-          bed.pause();
-          bed.removeAttribute("src");
-        }
+        bed?.close();
         for (const u of mine) {
           const n = (inUse.get(u) ?? 1) - 1;
           if (n > 0) inUse.set(u, n);
@@ -153,7 +148,7 @@ export const audio: AudioSeam = {
     a.onended = () => {
       if (index + 1 >= srcs.length && !o.loop) {
         want = false;
-        bed?.pause();
+        bed?.close();
         return emit(true);
       }
       switching = true;
@@ -177,6 +172,7 @@ export const audio: AudioSeam = {
     a.onerror = () => {
       if (!open) return;
       want = false;
+      bed?.close();
       o.onState({ playing: false, index, ended: false, failed: true });
       const m = media();
       if (m) m.playbackState = "none";
