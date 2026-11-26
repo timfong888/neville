@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, type PressableInstance, type ScrollViewInstance, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
+import { playingItemId } from "@/lib/playingItemId";
 import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
@@ -39,9 +40,37 @@ export default function LibraryScreen() {
     playAll.prepare().then(done, done);
     return () => void (live = false);
   }, [key, made]);
+
+  // Scroll the playing row into view (#204).
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const rowRefs = useRef(new Map<string, PressableInstance | null>());
+  const isDragging = useRef(false);
+  const playingId = playingItemId(np, items);
+  const prevPlayingId = useRef<string | null>(null);
+  useEffect(() => {
+    if (playingId === prevPlayingId.current) return;
+    prevPlayingId.current = playingId;
+    if (!playingId || isDragging.current) return;
+    const row = rowRefs.current.get(playingId);
+    const sv = scrollRef.current;
+    if (!row || !sv) return;
+    const innerView = sv.getInnerViewRef();
+    if (!innerView) return;
+    row.measureLayout(
+      innerView,
+      (_x, y) => sv.scrollTo({ y: Math.max(0, y - 80), animated: true }),
+      () => {},
+    );
+  }, [playingId]);
+
   const busy = now.status !== "idle";
   return (
-    <Screen title="My manifestations">
+    <Screen
+      title="My manifestations"
+      scrollRef={scrollRef}
+      onScrollBeginDrag={() => { isDragging.current = true; }}
+      onScrollEndDrag={() => { isDragging.current = false; }}
+    >
       <Text style={type.muted}>Everything you have saved, newest first. Saved on this device only.</Text>
       {recordings.length > 0 ? (
         <View style={s.card}>
@@ -74,14 +103,23 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <View accessibilityRole="list" style={s.list}>
-          {items.map((m) => (
-            <Link key={m.id} href={`/library/${m.id}`} asChild>
-              <Pressable accessibilityRole="link" accessibilityLabel={m.title} style={s.row}>
-                <Text style={type.body} numberOfLines={2}>{m.title}</Text>
-                <Text style={type.muted}>{itemMeta(m)}</Text>
-              </Pressable>
-            </Link>
-          ))}
+          {items.map((m) => {
+            const isPlaying = playingId === m.id;
+            return (
+              <Link key={m.id} href={`/library/${m.id}`} asChild>
+                <Pressable
+                  ref={(r) => { rowRefs.current.set(m.id, r); }}
+                  accessibilityRole="link"
+                  accessibilityLabel={isPlaying ? `${m.title}, Now playing` : m.title}
+                  accessibilityState={{ selected: isPlaying }}
+                  style={[s.row, isPlaying && s.rowPlaying]}
+                >
+                  <Text style={type.body} numberOfLines={2}>{m.title}</Text>
+                  <Text style={type.muted}>{itemMeta(m)}</Text>
+                </Pressable>
+              </Link>
+            );
+          })}
         </View>
       )}
     </Screen>
@@ -92,4 +130,6 @@ const s = StyleSheet.create({
   list: { gap: space.sm },
   card: { gap: space.md, padding: space.lg, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
   row: { gap: 2, padding: space.md, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
+  // Accent outline + low-alpha tint; white text contrast on this bg is well above 4.5:1 (#204).
+  rowPlaying: { borderColor: colors.accent, backgroundColor: "rgba(16, 93, 251, 0.12)" },
 });
