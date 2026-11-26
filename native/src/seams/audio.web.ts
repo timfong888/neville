@@ -124,12 +124,13 @@ export const audio: AudioSeam = {
       },
     };
     a.onended = () => {
-      if (index + 1 >= srcs.length) {
+      if (index + 1 >= srcs.length && !o.loop) {
         want = false;
         return emit(true);
       }
       switching = true;
-      a.src = srcs[++index];
+      index = (index + 1) % srcs.length;
+      a.src = srcs[index];
       start();
       emit();
     };

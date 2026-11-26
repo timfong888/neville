@@ -44,7 +44,7 @@ export const audio: AudioSeam = {
     }
   },
   open(srcs, o) {
-    const list = createAudioPlaylist({ sources: srcs, loop: "none", updateInterval: 500 });
+    const list = createAudioPlaylist({ sources: srcs, loop: o.loop ? "all" : "none", updateInterval: 500 });
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };
     list.setActiveForLockScreen(true, meta, opts);
@@ -64,7 +64,7 @@ export const audio: AudioSeam = {
         } catch {}
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
-      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1, progress });
+      o.onState({ playing: s.playing, index: s.currentIndex, ended: !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1, progress });
     });
     const guard = () => {
       if (loaded || watch) return;

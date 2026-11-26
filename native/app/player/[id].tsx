@@ -4,8 +4,10 @@ import { useLocalSearchParams } from "expo-router";
 import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
-import type { Manifestation } from "@/lib/library/model";
+import { type Manifestation, newestFirst } from "@/lib/library/model";
 import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
+import { DEFAULT_LOOP, LOOP_GAP_MS, LOOP_MODES, type LoopItem, type LoopMode, loopQueue, makeLoopStore } from "../../src/player/loop";
+import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
 import type { PlaySession } from "../../src/seams/types";
 import { colors } from "../../src/theme";
@@ -15,6 +17,8 @@ type Phase = "idle" | "playing" | "paused";
 
 // Copies are made one at a time and in order, so an old load can never replace a newer load's copy.
 let copying: Promise<unknown> = Promise.resolve();
+const loopStore = makeLoopStore(kv);
+const LOOP_LABEL: Record<LoopMode, string> = { off: "Off", one: "One", all: "All" };
 
 // The Player (#122): one saved item, opened by id. It plays the recording, then
 // plays it again for the chosen minutes with an optional bell between plays.
@@ -28,6 +32,9 @@ export default function Player() {
   const [index, setIndex] = useState(0);
   const [plays, setPlays] = useState(1);
   const [note, setNote] = useState("");
+  // Off, one or all (#157). `order` is the titles in a looping session's play order.
+  const [loop, setLoop] = useState<LoopMode>(DEFAULT_LOOP);
+  const [order, setOrder] = useState<string[]>([]);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const session = useRef<PlaySession | null>(null);
   const starting = useRef(false);
@@ -51,6 +58,7 @@ export default function Player() {
     setIndex(0);
     setNote("");
     audio.configure().catch(() => {});
+    void loopStore.read().then((m) => live && setLoop(m));
     (async () => {
       // `/player/demo` is a built-in test tone. Every other id comes from the library seam.
       const demo = String(id) === DEMO_ID;
@@ -85,14 +93,24 @@ export default function Player() {
     starting.current = true;
     const mine = shown.current;
     try {
-      const repeats = repeatsFor(v.seconds, minutes);
-      const gap = repeats ? await audio.save(bellOn ? "player-gap-bell.wav" : "player-gap.wav", gapClip(bellOn), "audio/wav") : "";
-      // The screen closed or moved to another item while the gap clip was being made.
+      const looping = loop !== "off";
+      const repeats = looping ? 0 : repeatsFor(v.seconds, minutes);
+      const gapMs = looping ? LOOP_GAP_MS : undefined;
+      const gap = repeats || looping ? await audio.save(`player-gap${looping ? "-loop" : ""}${bellOn ? "-bell" : ""}.wav`, gapClip(bellOn, gapMs), "audio/wav") : "";
+      let clips = buildQueue(v.src, gap, repeats);
+      if (looping) {
+        const me: LoopItem<string> = { id: loaded.id, src: v.src, title: loaded.title || "Untitled" };
+        const q = loopQueue(loop, loop === "all" ? await libraryItems(me, () => shown.current !== mine) : [], loaded.id, gap, me);
+        clips = q.clips;
+        setOrder(q.items.map((i) => i.title));
+      } else setOrder([]);
+      // The screen closed or moved to another item while the clips were being made.
       if (shown.current !== mine) return;
       setPlays(repeats + 1);
       setNote("");
-      const s = audio.open(buildQueue(v.src, gap, repeats), {
-        title: loaded.title || "Neville",
+      const s = audio.open(clips, {
+        title: loop === "all" ? "Neville" : loaded.title || "Neville",
+        loop: looping,
         onState: (st) => {
           if (session.current !== s) return;
           if (st.failed) return stop("This recording could not be played.");
@@ -117,6 +135,10 @@ export default function Player() {
   const item = loaded;
   const active = phase !== "idle";
   const at = roundAt(index);
+  const pick = (m: LoopMode) => {
+    setLoop(m);
+    void loopStore.write(m);
+  };
   return (
     <Screen>
       <Text style={s.h1} accessibilityRole="header">{item.title || "Untitled"}</Text>
@@ -146,21 +168,39 @@ export default function Player() {
       )}
       {active ? (
         <Text style={s.p} accessibilityLiveRegion="polite">
-          {plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? (bellOn ? ", bell" : ", pause") : ""}` : "Playing once"}
+          {loop !== "off" ? `${loop === "all" ? `Manifestation ${at.round} of ${order.length}: ` : "Repeating: "}${order[at.round - 1] ?? ""}${at.inGap ? ", pause" : ""}`
+            : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? (bellOn ? ", bell" : ", pause") : ""}` : "Playing once"}
         </Text>
       ) : note ? (
         <Text style={s.p}>{note}</Text>
       ) : null}
 
-      <Text style={s.label}>Repetition after the first play{active ? " (stop to change)" : ""}</Text>
+      <Text style={s.label}>Loop{active ? " (stop to change)" : ""}</Text>
+      <View style={s.row}>
+        {LOOP_MODES.map((m) => (
+          <Pressable
+            key={m}
+            disabled={active}
+            style={[s.chip, loop === m && s.on, active && s.off]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: loop === m, disabled: active }}
+            accessibilityLabel={`Loop ${LOOP_LABEL[m]}`}
+            onPress={() => pick(m)}
+          >
+            <Text style={s.btnText}>{LOOP_LABEL[m]}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={s.dim}>{loop === "all" ? "Plays all your saved recordings, newest first, and starts again after the last." : loop === "one" ? "Repeats this recording until you stop it." : "Plays once, then repeats for the minutes below."}</Text>
+      <Text style={s.label}>Repetition after the first play{loop !== "off" ? " (Off while looping)" : active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>
         {REPEAT_MINUTES.map((m) => (
           <Pressable
             key={m}
-            disabled={active}
-            style={[s.chip, minutes === m && s.on, active && s.off]}
+            disabled={active || loop !== "off"}
+            style={[s.chip, minutes === m && s.on, (active || loop !== "off") && s.off]}
             accessibilityRole="radio"
-            accessibilityState={{ selected: minutes === m, disabled: active }}
+            accessibilityState={{ selected: minutes === m, disabled: active || loop !== "off" }}
             accessibilityLabel={m ? `${m} minutes` : "Off"}
             onPress={() => setMinutes(m)}
           >
@@ -170,7 +210,7 @@ export default function Player() {
       </View>
       <View style={[s.row, s.spread]}>
         <Text style={s.p}>A soft bell between plays</Text>
-        <Switch accessibilityLabel="A soft bell between plays" value={bellOn} onValueChange={setBellOn} disabled={active || minutes === 0} />
+        <Switch accessibilityLabel="A soft bell between plays" value={bellOn} onValueChange={setBellOn} disabled={active || (minutes === 0 && loop === "off")} />
       </View>
 
       <View style={s.script}>
@@ -180,6 +220,17 @@ export default function Player() {
       </View>
     </Screen>
   );
+}
+
+// Every saved recording in the Library's order, each with its own copy. `me` is the open item, already copied.
+async function libraryItems(me: LoopItem<string>, gone: () => boolean): Promise<LoopItem<string>[]> {
+  const out: LoopItem<string>[] = [];
+  for (const m of newestFirst((await library.load()).manifestations)) {
+    if (!m.hasAudio || gone()) continue;
+    const uri = m.id === me.id ? me.src : await library.audioUri(m.id).then((u) => (u ? audio.keep(`player-loop-${out.length}`, u) : null)).catch(() => null);
+    if (uri) out.push({ id: m.id, src: uri, title: m.title || "Untitled" });
+  }
+  return out;
 }
 
 const s = StyleSheet.create({
