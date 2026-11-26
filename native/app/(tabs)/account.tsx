@@ -3,7 +3,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { ACCOUNT_DELETED, type DeviceData, deleteAccountPrompt } from "@/lib/deviceDataCopy";
 import { api } from "../../src/api";
-import { refreshAccount, useAccount } from "../../src/accountStore";
+import { clearUser, refreshAccount, useAccount } from "../../src/accountStore";
 import { appleCodeForDeletion, authClient, signInWithApple, signInWithAppleOnWeb } from "../../src/auth";
 import { deviceData } from "../../src/deviceData";
 import { colors, radius, space, type } from "../../src/theme";
@@ -43,7 +43,10 @@ export default function Account() {
     setBusy("Signing out…");
     const r = await authClient.signOut().catch(() => null);
     setBusy("");
-    setNote(!r || r.error ? "Could not sign out just now. Try again." : "");
+    const out = !!r && !r.error;
+    // Signed out on this phone now, even if the lookup that follows cannot reach the server.
+    if (out) clearUser();
+    setNote(out ? "" : "Could not sign out just now. Try again.");
     await refresh();
   };
 
@@ -64,6 +67,7 @@ export default function Account() {
     }
     // The server session is gone; this clears the copy kept on the phone.
     await authClient.signOut().catch(() => undefined);
+    clearUser();
     setBusy("");
     setNote(ACCOUNT_DELETED);
     await refresh();
