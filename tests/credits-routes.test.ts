@@ -13,6 +13,7 @@ let accountsOn = true;
 let voiceOk = true;
 let refundFailures = 0;
 let underCeilingOk = true;
+let lookupFails = false;
 const synth = vi.fn();
 const takeSlot = vi.fn();
 const release = vi.fn();
@@ -32,7 +33,10 @@ vi.mock("@/lib/server/db", () => ({
 }));
 vi.mock("@/lib/server/accounts", () => ({
   accountsEnabled: () => accountsOn,
-  currentUser: async () => user,
+  currentUser: async () => {
+    if (lookupFails) throw new Error("auth database down");
+    return user;
+  },
 }));
 vi.mock("@/lib/server/openrouter", () => ({ apiKey: () => "k", OPENROUTER: "https://x" }));
 vi.mock("@/lib/server/limits", () => ({
@@ -105,6 +109,7 @@ beforeEach(async () => {
   voiceOk = true;
   refundFailures = 0;
   underCeilingOk = true;
+  lookupFails = false;
   synth.mockReset();
   synth.mockImplementation(async () =>
     voiceOk
@@ -298,6 +303,13 @@ describe("POST /api/manifest with the paywall on", () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callManifest()).status).toBe(429);
   });
+  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+    lookupFails = true;
+    await expect(callManifest()).rejects.toThrow("auth database down");
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(synth).not.toHaveBeenCalled();
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
   it("runs the spend-ceiling guard before the sign-in check", async () => {
     user = null;
     underCeilingOk = false;
@@ -396,6 +408,12 @@ describe("POST /api/rerecord with the paywall on", () => {
     user = null;
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callRerecord()).status).toBe(429);
+  });
+  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+    lookupFails = true;
+    await expect(callRerecord()).rejects.toThrow("auth database down");
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(synth).not.toHaveBeenCalled();
   });
   it("answers 402 no_credits at balance 0, and records nothing", async () => {
     await pg.query(`insert into credit_ledger (user_id, delta, reason, once_key) values ('alice', 1, 'free', 'free')`);

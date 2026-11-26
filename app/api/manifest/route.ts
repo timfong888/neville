@@ -73,7 +73,14 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
   // Sign-in comes after the IP, daily and spend-ceiling guards, which stay the backstop for every request. A
   // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
-  const who = await whoIsAsking(req);
+  let who: Awaited<ReturnType<typeof whoIsAsking>>;
+  try {
+    who = await whoIsAsking(req);
+  } catch (e) {
+    // The sign-in lookup failed (an auth or database error): give the slot back, so an outage does not use up the daily limits.
+    await slot.release();
+    throw e;
+  }
   if ("response" in who) {
     if (who.response.status !== 401) await slot.release();
     return who.response;
