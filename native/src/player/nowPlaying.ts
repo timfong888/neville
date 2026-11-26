@@ -17,8 +17,10 @@ export type NowPlayingState = {
   loop: boolean;
   /** Why it ended or did not start, or "". */
   note: string;
+  /** How far through the current clip, 0–1. Retained while paused; 0 when idle. */
+  progress: number;
 };
-const IDLE: NowPlayingState = { status: "idle", id: "", title: "", route: "", index: 0, position: 0, total: 0, loop: false, note: "" };
+const IDLE: NowPlayingState = { status: "idle", id: "", title: "", route: "", index: 0, position: 0, total: 0, loop: false, note: "", progress: 0 };
 
 export type Prepared = { clips: string[]; loop: boolean; /** Put the music player under this session. */ music?: boolean; at(index: number): { title: string; position: number; total: number } };
 /** What to play. `title` is the lock screen's; `at` gives the title and place shown for a position. */
@@ -65,7 +67,7 @@ export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "op
             if (mine !== run) return;
             if (st.failed) return end({ id: job.id, note: "This recording could not be played." });
             if (st.ended) return end(st.replaced ? {} : { id: job.id, note: "Finished." });
-            set({ status: st.playing ? "playing" : "paused", index: st.index, ...p.at(st.index) });
+            set({ status: st.playing ? "playing" : "paused", index: st.index, progress: st.progress ?? state.progress, ...p.at(st.index) });
           },
         });
         session = s;

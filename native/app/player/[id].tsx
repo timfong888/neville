@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { lineForProgress } from "@/lib/create";
+import { lineStarts } from "@/lib/audio";
 import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
@@ -13,6 +15,7 @@ import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, pla
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
 import { colors } from "../../src/theme";
+import { CurrentLinePanel } from "../../src/ui/CurrentLinePanel";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 
@@ -34,11 +37,14 @@ export default function Player() {
   // Set once the listener picks a mode, so the stored choice, read later, does not replace it.
   const picked = useRef(false);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
+  const lastLineRef = useRef(0);
   const np = useNowPlaying();
+  const starts = useMemo(() => (loaded ? lineStarts(loaded.lines) : []), [loaded]);
 
   useEffect(() => {
     let live = true;
     voice.current = null;
+    lastLineRef.current = 0;
     setLoaded(undefined);
     audio.configure().catch(() => {});
     picked.current = false;
@@ -86,6 +92,14 @@ export default function Player() {
   // The controller plays one thing at a time; this screen shows it only when it is this item.
   const mine = np.id === item.id;
   const phase = mine && (np.status === "playing" || np.status === "paused") ? np.status : "idle";
+
+  // Track which script line is being spoken. The queue alternates recording (even index) and
+  // gap clips (odd index); lineForProgress returns null on a gap so we hold the last line.
+  if (mine && phase !== "idle") {
+    const l = lineForProgress(np.index, np.progress, starts);
+    if (l !== null) lastLineRef.current = l;
+  }
+  const currentLine: number | null = mine && phase !== "idle" ? lastLineRef.current : null;
   const busy = mine && np.status === "preparing";
   const note = mine && np.status === "idle" ? np.note : "";
   const active = phase !== "idle";
@@ -134,6 +148,8 @@ export default function Player() {
         <Text style={s.p}>{note}</Text>
       ) : null}
 
+      {currentLine !== null ? <CurrentLinePanel line={item.lines[currentLine] ?? ""} /> : null}
+
       <Text style={s.label}>Loop{active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>
         {PLAYER_LOOPS.map((m) => (
@@ -175,7 +191,7 @@ export default function Player() {
 
       <View style={s.script}>
         {item.lines.map((l, i) => (
-          <Text key={i} style={s.line}>{l}</Text>
+          <Text key={i} style={[s.line, currentLine === i && s.activeLine]}>{l}</Text>
         ))}
       </View>
     </Screen>
@@ -198,4 +214,5 @@ const s = StyleSheet.create({
   off: { opacity: 0.5 },
   script: { gap: 10, marginTop: 8 },
   line: { color: "#e6e9ef", fontSize: 18, lineHeight: 26 },
+  activeLine: { color: colors.accentText, fontWeight: "600" },
 });
