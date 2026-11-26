@@ -6,6 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
+import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,13 @@ function visitor(req: Request): string {
 // Records a script the person edited. Same guards as /api/manifest: the kill
 // switch, the daily slots, and the spend ceiling. The text model vets the
 // script but does not rewrite it. Nothing is stored.
+// With PAYWALL_ENABLED=true it also needs sign-in and spends credits (config/credits.json, costs.rerecord);
+// the credits are given back if no recording is made (#168).
 export async function POST(req: Request) {
+  return runPaid((state) => handle(req, state));
+}
+
+async function handle(req: Request, state: PaidState): Promise<Response> {
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -64,6 +71,37 @@ export async function POST(req: Request) {
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
+  // Sign-in comes after the IP, daily and spend-ceiling guards, which stay the backstop for every request. A
+  // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
+  let who: Awaited<ReturnType<typeof whoIsAsking>>;
+  try {
+    who = await whoIsAsking(req);
+  } catch (e) {
+    // The sign-in lookup failed (an auth or database error): give the slot back, so an outage does not use up the daily limits.
+    await slot.release();
+    throw e;
+  }
+  if ("response" in who) {
+    if (who.response.status !== 401) await slot.release();
+    return who.response;
+  }
+
+  // Taken before the first paid call (the vet); given back below unless a recording is made.
+  state.charging = true;
+  const charged = await charge(who, "rerecord").finally(() => {
+    state.charging = false;
+  });
+  if ("response" in charged) {
+    await slot.release();
+    return charged.response;
+  }
+  state.charged = charged;
+  if (state.timedOut) {
+    // The deadline already passed while the credit was being taken: give it back and stop.
+    await charged.refund();
+    return timeoutResponse(true);
+  }
+
   const vet = await vetScript(key, lines);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
@@ -73,6 +111,7 @@ export async function POST(req: Request) {
     // caller could loop rejected scripts past the daily limits. Only a check
     // that never answered gives the slot back.
     if (vet.reason === "unavailable") await slot.release();
+    await charged.refund();
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
@@ -83,10 +122,16 @@ export async function POST(req: Request) {
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
     await slot.release();
+    await charged.refund();
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
   const text = lines.join(" ");
+  // The deadline passed during the check: do not start the voice, the credit is already refunded.
+  if (state.timedOut) return timeoutResponse(true);
+  // With the paywall on, the voice call also ends before the paywall's deadline (50 s); with it off the budget is the same 42 s as before.
+  const voiceMs = voiceBudget(state, 42_000);
+  if (voiceMs === null) return timeoutAnswer(state);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -94,7 +139,7 @@ export async function POST(req: Request) {
     text,
     instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
     compact: true,
-    timeoutMs: 42_000,
+    timeoutMs: voiceMs,
     // Voices flagged atomic record the edited lines in one request with a
     // pause after each, at the default pace's speed, style and pause, as
     // /api/manifest does (#76). Other voices keep the one-request text above.
@@ -105,6 +150,7 @@ export async function POST(req: Request) {
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    await charged.refund();
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
   await record({
@@ -116,10 +162,13 @@ export async function POST(req: Request) {
     chars: speech.sentChars,
     estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
+  // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
+  if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
     },

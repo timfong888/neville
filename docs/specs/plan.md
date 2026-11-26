@@ -22,6 +22,7 @@ A calm voice that reads you a short script about your wish as if it is already t
 | 5 | Programming mode: script, then the refrain looped in the app with an optional bell, then the closing | #77 | Tim's chosen technique for the short script. Needs the refrain from step 2. | Minutes: Off (default), 1, 3, 5 or 10. Tim set 10 as the maximum on every device (2026-11-24) |
 | 6 | Sign-in inside the iOS shell | #70 | Saving and playlists need an account on the phone. | — |
 | 7 | Native app: one UI codebase. `native/` (Expo Router) serves iOS and web, Next stays as the API (Tim, 2026-11-24) | #71; phases #89, #91, #92, #93; spec `native-ios.md` | Approved. Phase 0 is in progress (#83 to #86). The website is cut over at parity, end of Phase 2. | — |
+| 8 | Paywall, server first: sign-in and one credit per recording, two packs (Starter 3 for $2.99 once; 10 for $6.99), credits in Postgres, RevenueCat webhook adds them, `PAYWALL_ENABLED` off by default (Tim, 2026-11-26) | #168 (payments PR, Tim reviews, never auto-merged) | "It is no longer creating free recordings: set up a working paywall." Phase 1 is the server. Phase 2 (App Store Connect, RevenueCat dashboard, the app's paywall screen) follows. | Tim turns `PAYWALL_ENABLED` on after a sandbox purchase works on TestFlight |
 
 The background issue for steps 2 to 5 is #74 (findings: the fallback script, and the method not being in the prompt).
 

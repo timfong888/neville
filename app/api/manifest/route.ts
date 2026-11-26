@@ -6,6 +6,7 @@ import { writeScript } from "@/lib/server/writer";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
+import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,8 +25,14 @@ function visitor(req: Request): string {
 }
 
 // The app's one paid path: a wish in, a script and its recording out.
-// Nothing is stored. Guards are in lib/server/limits.ts.
+// Nothing is stored. Guards are in lib/server/limits.ts. With PAYWALL_ENABLED=true it also needs
+// sign-in and one credit per recording (lib/server/paywall.ts, #168); a credit is given back if
+// the recording fails after it was taken.
 export async function POST(req: Request) {
+  return runPaid((state) => handle(req, state));
+}
+
+async function handle(req: Request, state: PaidState): Promise<Response> {
   // The route has 60 s in all (maxDuration), counted from here: guards, script, voice and the ledger writes.
   const started = Date.now();
   if (!generationEnabled()) {
@@ -66,6 +73,37 @@ export async function POST(req: Request) {
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
+  // Sign-in comes after the IP, daily and spend-ceiling guards, which stay the backstop for every request. A
+  // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
+  let who: Awaited<ReturnType<typeof whoIsAsking>>;
+  try {
+    who = await whoIsAsking(req);
+  } catch (e) {
+    // The sign-in lookup failed (an auth or database error): give the slot back, so an outage does not use up the daily limits.
+    await slot.release();
+    throw e;
+  }
+  if ("response" in who) {
+    if (who.response.status !== 401) await slot.release();
+    return who.response;
+  }
+
+  // The last gate before anything is paid for: the guards above are the backstop, this is the account's quota.
+  state.charging = true;
+  const charged = await charge(who, "manifest").finally(() => {
+    state.charging = false;
+  });
+  if ("response" in charged) {
+    await slot.release();
+    return charged.response;
+  }
+  state.charged = charged;
+  if (state.timedOut) {
+    // The deadline already passed while the credit was being taken: give it back and stop.
+    await charged.refund();
+    return timeoutResponse(true);
+  }
+
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
@@ -83,6 +121,11 @@ export async function POST(req: Request) {
     // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
     await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
+  // The deadline passed while the script was being written: do not start the voice, the credit is already refunded.
+  if (state.timedOut) return timeoutResponse(true);
+  // With the paywall on, the voice call also ends before the paywall's deadline (50 s): the route's own 52 s budget alone could pass it.
+  const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
+  if (voiceMs === null) return timeoutAnswer(state);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -97,7 +140,7 @@ export async function POST(req: Request) {
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
-    timeoutMs: Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))),
+    timeoutMs: voiceMs,
     atomic: voice.atomic === true,
   });
   if (!speech.ok) {
@@ -106,6 +149,7 @@ export async function POST(req: Request) {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    await charged.refund();
     return NextResponse.json(
       {
         code: "voice_failed",
@@ -127,6 +171,8 @@ export async function POST(req: Request) {
     chars: speech.sentChars,
     estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
+  // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
+  if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
@@ -140,6 +186,7 @@ export async function POST(req: Request) {
       // and was left out ("skipped").
       ...(body.repeat === true && !repeat ? { "X-Repeat": "unsupported" } : {}),
       ...(repeat && speech.tailDropped ? { "X-Repeat": "skipped" } : {}),
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,
