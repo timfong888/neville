@@ -39,9 +39,8 @@
     "node_modules",
     "native",
     "ios-shell",
-    "tests/nativeBackgroundAudio.test.ts",
+    "tests/native*.test.ts",
     "tests/webAudioSeam.test.ts",
-    "tests/nativeVoiceSample.test.ts",
     "tests/stubs"
   ]
 }
