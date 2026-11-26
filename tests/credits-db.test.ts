@@ -10,6 +10,8 @@ import { runMigrations } from "../scripts/migrate-core.mjs";
 import { CREDITS, availablePacks, isUnlimited, paywallEnabled, unlimitedEmails } from "@/lib/credits";
 import {
   creditBalance,
+  markFulfilled,
+  reconcileUnfulfilledSpends,
   ensureFreeCredit,
   firstExistingUser,
   grantPurchase,
@@ -149,6 +151,78 @@ describe("the cost of an action", () => {
       { reason: "refund", delta: 2, route: "/api/rerecord", action: "rerecord" },
       { reason: "tester", delta: 0, route: "/api/rerecord", action: "rerecord" },
     ]);
+  });
+});
+
+describe("spends the function never finished (killed after the spend committed)", () => {
+  const spendAt = async (userId: string, secondsAgo: number, opts: { fulfilled?: boolean } = {}) => {
+    const r = await db.query(
+      `insert into credit_ledger (user_id, delta, reason, route, action, created_at, fulfilled_at)
+       values ($1, -1, 'spend', '/api/manifest', 'manifest', now() - ($2::int * interval '1 second'), ${opts.fulfilled ? "now()" : "null"}) returning id`,
+      [userId, secondsAgo],
+    );
+    return String(r.rows[0].id);
+  };
+  const refunds = async () => Number((await db.query(`select count(*)::int as n from credit_ledger where reason = 'refund'`)).rows[0].n);
+
+  beforeEach(async () => {
+    await tx((d) => ensureFreeCredit(d, "alice", 5));
+  });
+
+  it("refunds an old spend that was never marked fulfilled, once, with its route and action", async () => {
+    await spendAt("alice", 600);
+    expect(await creditBalance(db, "alice")).toBe(4);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(1);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(0);
+    expect(await creditBalance(db, "alice")).toBe(5);
+    const r = await db.query(`select delta, route, action from credit_ledger where reason = 'refund'`);
+    expect(r.rows).toEqual([{ delta: 1, route: "/api/manifest", action: "manifest" }]);
+  });
+  it("leaves a fulfilled spend, a recent spend and an already refunded spend alone", async () => {
+    await spendAt("alice", 600, { fulfilled: true });
+    await spendAt("alice", 10);
+    const gone = await spendAt("alice", 600);
+    await refundCredit(db, "alice", M, gone);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(0);
+    expect(await refunds()).toBe(1);
+    expect(await creditBalance(db, "alice")).toBe(3); // 5 - three spends + one refund
+  });
+  it("marks a spend fulfilled when the recording was delivered, so it is never refunded", async () => {
+    const spent = await tx((d) => spendCredit(d, "alice", M));
+    await markFulfilled(db, spent.spendId!);
+    await db.query(`update credit_ledger set created_at = now() - interval '1 hour' where reason = 'spend'`);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(0);
+  });
+  it("does not touch tester rows, and refunds at the spend's own cost", async () => {
+    await logTesterSpend(db, "alice", M);
+    await db.query(`update credit_ledger set created_at = now() - interval '1 hour'`);
+    await db.query(
+      `insert into credit_ledger (user_id, delta, reason, route, action, created_at) values ('alice', -2, 'spend', '/api/rerecord', 'rerecord', now() - interval '1 hour')`,
+    );
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(1);
+    expect(await creditBalance(db, "alice")).toBe(5);
+  });
+});
+
+describe("the cap on sandbox purchases", () => {
+  const buy = (productId: string, eventId: string, environment: string) =>
+    tx((d) => grantPurchase(d, { userId: "alice", productId, eventId, environment }));
+
+  it("stops sandbox grants once an account holds the capped total, and says so", async () => {
+    expect(CREDITS.sandboxGrantCap).toBe(100);
+    for (let i = 0; i < 10; i++) expect(await buy("pack10", `sb${i}`, "SANDBOX")).toBe("granted");
+    expect(await creditBalance(db, "alice")).toBe(100);
+    expect(await buy("pack10", "sb10", "SANDBOX")).toBe("sandbox_capped");
+    expect(await buy("pack10", "sb10", "SANDBOX")).toBe("duplicate"); // a retry of the capped event is still idempotent
+    expect(await creditBalance(db, "alice")).toBe(100);
+  });
+  it("never caps production grants", async () => {
+    for (let i = 0; i < 12; i++) expect(await buy("pack10", `pr${i}`, "PRODUCTION")).toBe("granted");
+    expect(await creditBalance(db, "alice")).toBe(120);
+  });
+  it("counts only sandbox grants towards the sandbox cap", async () => {
+    for (let i = 0; i < 12; i++) await buy("pack10", `pr${i}`, "PRODUCTION");
+    expect(await buy("pack10", "sb0", "SANDBOX")).toBe("granted");
   });
 });
 

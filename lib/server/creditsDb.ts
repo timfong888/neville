@@ -5,7 +5,7 @@
 // transaction (withTx): the lock is held to its end. Under READ COMMITTED a second statement
 // sees the first transaction's rows only after the lock is released, which is what makes two
 // spends at balance 1 safe.
-import { productOf } from "@/lib/credits";
+import { CREDITS, productOf } from "@/lib/credits";
 import type { Db } from "@/lib/server/libraryDb";
 
 const lock = (db: Db, userId: string) => db.query(`select pg_advisory_xact_lock(hashtextextended($1, 811027168))`, [userId]);
@@ -59,13 +59,40 @@ export async function logTesterSpend(db: Db, userId: string, c: Charge): Promise
   await db.query(`insert into credit_ledger (user_id, delta, reason, route, action) values ($1, 0, 'tester', $2, $3)`, [userId, c.route, c.action]);
 }
 
+/** Marks a spend as delivered: the recording was made and sent, so reconciliation never refunds it. */
+export async function markFulfilled(db: Db, spendId: string): Promise<void> {
+  await db.query(`update credit_ledger set fulfilled_at = now() where id = $1::bigint and reason = 'spend'`, [spendId]);
+}
+
+/**
+ * Refunds spends the function never finished: older than `olderThanSeconds` (use more than the routes' maxDuration),
+ * not marked fulfilled, and with no refund yet. The refund is keyed to the spend, so running this twice, or racing a
+ * late in-request refund, returns each credit once. Returns how many it refunded. Not scheduled anywhere: call it from a job or by hand.
+ */
+export async function reconcileUnfulfilledSpends(db: Db, o: { olderThanSeconds?: number; limit?: number } = {}): Promise<number> {
+  const { rows } = await db.query(
+    `insert into credit_ledger (user_id, delta, reason, route, action, source_id)
+     select s.user_id, -s.delta, 'refund', s.route, s.action, 'refund:' || s.id::text
+       from credit_ledger s
+      where s.reason = 'spend' and s.fulfilled_at is null
+        and s.created_at < now() - ($1::int * interval '1 second')
+        and not exists (select 1 from credit_ledger r where r.source_id = 'refund:' || s.id::text)
+      order by s.id
+      limit $2::int
+     on conflict (source_id) do nothing
+     returning id`,
+    [o.olderThanSeconds ?? 120, o.limit ?? 500],
+  );
+  return rows.length;
+}
+
 /** True once a real (production) Starter was bought. A sandbox Starter, from a TestFlight test, does not count. */
 export async function hasStarter(db: Db, userId: string): Promise<boolean> {
   const { rows } = await db.query(`select 1 from credit_ledger where user_id = $1 and once_key = 'starter' limit 1`, [userId]);
   return rows.length > 0;
 }
 
-export type GrantResult = "granted" | "duplicate" | "already_owned" | "unknown_product";
+export type GrantResult = "granted" | "duplicate" | "already_owned" | "unknown_product" | "sandbox_capped";
 
 /**
  * Adds a purchased pack's credits. The RevenueCat event id is the idempotency key: a repeated event adds nothing.
@@ -83,14 +110,22 @@ export async function grantPurchase(
   // Once-per-account packs are owned per environment: a sandbox purchase (a TestFlight test) must never make the real one grant nothing.
   const onceKey = product.oncePerAccount ? (p.environment === "SANDBOX" ? `${p.productId}:sandbox` : p.productId) : null;
   const owned = onceKey !== null && (await db.query(`select 1 from credit_ledger where user_id = $1 and once_key = $2`, [p.userId, onceKey])).rows.length > 0;
+  // Sandbox purchases are free, so what an account can hold from them is capped; production grants never are.
+  let capped = false;
+  if (!owned && p.environment === "SANDBOX") {
+    const held = Number(
+      (await db.query(`select coalesce(sum(delta), 0)::int as n from credit_ledger where user_id = $1 and reason = 'purchase' and environment = 'SANDBOX'`, [p.userId])).rows[0].n,
+    );
+    capped = held + product.credits > CREDITS.sandboxGrantCap;
+  }
   const { rows } = await db.query(
     `insert into credit_ledger (user_id, delta, reason, product_id, source_id, once_key, environment)
      values ($1, $2, 'purchase', $3, $4, $5, $6)
      on conflict do nothing returning id`,
-    [p.userId, owned ? 0 : product.credits, p.productId, p.eventId, owned ? null : onceKey, p.environment ?? null],
+    [p.userId, owned || capped ? 0 : product.credits, p.productId, p.eventId, owned || capped ? null : onceKey, p.environment ?? null],
   );
   if (!rows.length) return "duplicate";
-  return owned ? "already_owned" : "granted";
+  return capped ? "sandbox_capped" : owned ? "already_owned" : "granted";
 }
 
 /** The first of these ids that is an account, in order, or null. Maps a RevenueCat app user id (and its aliases) to our account id. */

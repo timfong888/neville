@@ -11,6 +11,8 @@
 --   source_id   the store transaction id ('txn:...'), or the RevenueCat event id when there is none; unique, so a repeat or restore can never grant twice
 --   route, action  what the row paid for (e.g. /api/rerecord, rerecord), on spend, refund and tester rows, so the
 --                  real cost per action can be compared later (#181)
+--   fulfilled_at  set on a spend row when the recording was delivered. A spend that is old and has neither this nor a
+--                 refund row was cut off (the function was killed): reconcileUnfulfilledSpends() refunds it.
 --   once_key    set on a grant that may happen once per account ('free', 'starter', 'starter:sandbox'); unique per account
 create table if not exists credit_ledger (
   id           bigint generated always as identity primary key,
@@ -23,6 +25,7 @@ create table if not exists credit_ledger (
   route        text,
   action       text,
   environment  text,
+  fulfilled_at timestamptz,
   created_at   timestamptz not null default now(),
   constraint credit_ledger_delta_matches_reason check (
     (reason in ('free', 'purchase', 'refund') and delta >= 0)
@@ -33,3 +36,5 @@ create table if not exists credit_ledger (
   constraint credit_ledger_once_unique unique (user_id, once_key)
 );
 create index if not exists credit_ledger_user_idx on credit_ledger (user_id, created_at);
+-- Spends still waiting to be fulfilled or refunded, for reconcileUnfulfilledSpends().
+create index if not exists credit_ledger_unfulfilled_idx on credit_ledger (created_at) where reason = 'spend' and fulfilled_at is null;

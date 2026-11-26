@@ -89,6 +89,9 @@ export async function POST(req: Request) {
       console.warn("[revenuecat] product not sold, ignored", JSON.stringify({ eventId, productId }));
       return NextResponse.json({ ok: true, status: "ignored", reason: "product" });
     }
+    if (result.status === "sandbox_capped") {
+      console.warn("[revenuecat] sandbox grant cap reached, nothing added", JSON.stringify({ eventId, userId: result.userId }));
+    }
     if (result.status === "already_owned") {
       console.warn("[revenuecat] starter bought twice, nothing added", JSON.stringify({ eventId, userId: result.userId }));
     }

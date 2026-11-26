@@ -6,7 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
-import { type Charged, charge, whoIsAsking } from "@/lib/server/paywall";
+import { type PaidState, charge, runPaid, timeoutResponse, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
@@ -40,16 +40,10 @@ function visitor(req: Request): string {
 // With PAYWALL_ENABLED=true it also needs sign-in and spends credits (config/credits.json, costs.rerecord);
 // the credits are given back if no recording is made (#168).
 export async function POST(req: Request) {
-  const state: { charged?: Charged } = {};
-  try {
-    return await handle(req, state);
-  } catch (e) {
-    await state.charged?.refund();
-    throw e;
-  }
+  return runPaid((state) => handle(req, state));
 }
 
-async function handle(req: Request, state: { charged?: Charged }): Promise<Response> {
+async function handle(req: Request, state: PaidState): Promise<Response> {
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -92,6 +86,11 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
     return charged.response;
   }
   state.charged = charged;
+  if (state.timedOut) {
+    // The deadline already passed while the credit was being taken: give it back and stop.
+    await charged.refund();
+    return timeoutResponse(true);
+  }
 
   const vet = await vetScript(key, lines);
   if (vet.ok || vet.reason !== "unavailable") {
@@ -148,6 +147,8 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
     chars: speech.sentChars,
     estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
+  // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
+  await charged.fulfil();
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,

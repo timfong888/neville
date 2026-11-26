@@ -186,6 +186,15 @@ describe("POST /api/revenuecat/webhook", () => {
     expect(await real.json()).toMatchObject({ status: "granted" });
     expect(await balance("alice")).toBe(6);
   });
+  it("answers 200 and adds nothing once a sandbox account is at the cap, and logs it", async () => {
+    for (let i = 0; i < 10; i++) await callHook(hook(purchase({ id: `c${i}`, environment: "SANDBOX", transaction_id: `t${i}` })));
+    const res = await callHook(hook(purchase({ id: "c10", environment: "SANDBOX", transaction_id: "t10" })));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "sandbox_capped" });
+    expect(await balance("alice")).toBe(100);
+    await callHook(hook(purchase({ id: "real", environment: "PRODUCTION", transaction_id: "treal" })));
+    expect(await balance("alice")).toBe(110);
+  });
   it("handles INITIAL_PURCHASE too", async () => {
     await callHook(hook(purchase({ type: "INITIAL_PURCHASE", id: "i1" })));
     expect(await balance("alice")).toBe(10);
@@ -304,6 +313,11 @@ describe("POST /api/manifest with the paywall on", () => {
     expect(await second.json()).toMatchObject({ code: "no_credits", balance: 0 });
     expect(synth).toHaveBeenCalledTimes(1);
   });
+  it("marks the spend fulfilled when the recording is delivered, and not when it fails", async () => {
+    expect((await callManifest()).status).toBe(200);
+    const rows = (await pg.query(`select fulfilled_at is not null as done from credit_ledger where reason = 'spend'`)).rows;
+    expect(rows).toEqual([{ done: true }]);
+  });
   it("lets only one of several simultaneous requests record at balance 1", async () => {
     const out = await Promise.all(Array.from({ length: 5 }, () => callManifest()));
     expect(out.filter((r) => r.status === 200)).toHaveLength(1);
@@ -413,6 +427,10 @@ describe("POST /api/rerecord with the paywall on", () => {
     const out = await Promise.all(Array.from({ length: 4 }, () => callRerecord()));
     expect(out.filter((r) => r.status === 200)).toHaveLength(1);
     expect(out.filter((r) => r.status === 402)).toHaveLength(3);
+  });
+  it("marks the spend fulfilled when the recording is delivered", async () => {
+    expect((await callRerecord()).status).toBe(200);
+    expect((await pg.query(`select fulfilled_at is not null as done from credit_ledger where reason = 'spend'`)).rows).toEqual([{ done: true }]);
   });
   it("is unchanged with the paywall off", async () => {
     vi.stubEnv("PAYWALL_ENABLED", "");

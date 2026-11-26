@@ -6,7 +6,7 @@ import { writeScript } from "@/lib/server/writer";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
-import { type Charged, charge, whoIsAsking } from "@/lib/server/paywall";
+import { type PaidState, charge, runPaid, timeoutResponse, whoIsAsking } from "@/lib/server/paywall";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,16 +29,10 @@ function visitor(req: Request): string {
 // sign-in and one credit per recording (lib/server/paywall.ts, #168); a credit is given back if
 // the recording fails after it was taken.
 export async function POST(req: Request) {
-  const state: { charged?: Charged } = {};
-  try {
-    return await handle(req, state);
-  } catch (e) {
-    await state.charged?.refund();
-    throw e;
-  }
+  return runPaid((state) => handle(req, state));
 }
 
-async function handle(req: Request, state: { charged?: Charged }): Promise<Response> {
+async function handle(req: Request, state: PaidState): Promise<Response> {
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -92,6 +86,11 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
     return charged.response;
   }
   state.charged = charged;
+  if (state.timedOut) {
+    // The deadline already passed while the credit was being taken: give it back and stop.
+    await charged.refund();
+    return timeoutResponse(true);
+  }
 
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
   // Programming mode (#77): the refrain is recorded once, as one more line at
@@ -154,6 +153,8 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
     chars: speech.sentChars,
     estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
+  // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
+  await charged.fulfil();
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,

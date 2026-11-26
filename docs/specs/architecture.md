@@ -228,6 +228,7 @@ credit_ledger (
   source_id   text unique,     -- store transaction id ('txn:…'; the event id when there is none): a repeat or restore can never grant twice
   once_key    text,            -- 'free', 'starter' or 'starter:sandbox'; unique with user_id, so each is granted once per account (sandbox and production apart)
   environment text,            -- SANDBOX | PRODUCTION, from the event
+  fulfilled_at timestamptz,    -- a spend whose recording was delivered
   route       text,            -- what a spend, refund or tester row paid for: /api/manifest, /api/rerecord
   action      text,            -- key in config/credits.json costs: manifest | rerecord
   created_at  timestamptz not null default now()
@@ -238,7 +239,8 @@ credit_ledger (
 - **Spend:** the action's cost in credits (`costs` in `config/credits.json`: manifest 1, rerecord 1; Tim 2026-11-26 "re-record costs a credit"), so a cost-plus model can change it without code, taken after the network and spend-ceiling guards pass and before any paid call, under a per-account lock, so two requests at balance 1 cannot both record. A recording that fails after the credit was taken gives it back (`refund`). The network, global and ceiling guards stay as the backstop.
 - **Testers:** `UNLIMITED_USER_EMAILS` (comma list) skips the spend for a signed-in account whose email, from the server-side session and verified by the sign-in provider, is on the list. `UNLIMITED_USER_IDS` (Better Auth user ids) does the same by id, for accounts with a private-relay email. Each such recording writes a `tester` row with delta 0, so the cost stays countable. Nothing from the client is trusted.
 - **Order on the paid routes:** network slot, spend ceiling, then sign-in, then the credit spend, so the original guards stay the backstop for every request, signed in or not. A flood of signed-out requests can use up the network and daily slots; a separate signed-out limiter is the fix if that happens.
-- **Sandbox:** SANDBOX purchase events are ignored unless `REVENUECAT_ACCEPT_SANDBOX=true`.
+- **Sandbox:** SANDBOX purchase events are ignored unless `REVENUECAT_ACCEPT_SANDBOX=true`, and even then an account can hold at most `sandboxGrantCap` (100) credits from them.
+- **Cut-off recordings:** a paid route has a 50 s deadline (of `maxDuration` 60) that refunds and answers 504. A spend carries `fulfilled_at`, set just before the recording is returned; `reconcileUnfulfilledSpends()` refunds spends older than 120 s with neither `fulfilled_at` nor a `refund:<id>` row (a killed function). No schedule yet.
 - **Switch:** `PAYWALL_ENABLED` (default off). Off, `/api/manifest` is as it was before.
 - **RevenueCat id mapping:** the RevenueCat app user id is our account id (`"user".id`). The app calls `Purchases.logIn(id)` right after sign-in. The webhook (`POST /api/revenuecat/webhook`, header checked against `REVENUECAT_WEBHOOK_AUTH`) handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE`, and tries the event's aliases when `app_user_id` is not an account.
 - **Deleting an account** deletes its ledger rows with it (cascade), like every other user-owned row.
