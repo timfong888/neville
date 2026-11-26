@@ -517,3 +517,46 @@ describe("POST /api/manifest with the paywall off (the default)", () => {
     expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
   });
 });
+
+describe("tester daily-slot bypass", () => {
+  const routes = [
+    ["manifest", callManifest],
+    ["rerecord", callRerecord],
+  ] as const;
+
+  it.each(routes)("skips slots for a tester on %s with the paywall on", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("skips slots for a tester on %s with the paywall off", async (_name, call) => {
+    vi.stubEnv("PAYWALL_ENABLED", "");
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("keeps slots for non-testers and signed-out users on %s", async (_name, call) => {
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+    takeSlot.mockClear();
+    user = null;
+    expect((await call()).status).toBe(401);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(routes)("keeps slots for an unverified tester email on %s", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    user = { ...alice, emailVerified: false };
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(routes)("still applies the spend ceiling to a tester on %s", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    underCeilingOk = false;
+    expect((await call()).status).toBe(503);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+});

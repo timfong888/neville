@@ -8,6 +8,8 @@ import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
+import { isUnlimited } from "@/lib/credits";
+import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -61,13 +63,17 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const { lines } = parsed.value;
   const voice = resolveVoice(parsed.value.voiceId);
 
-  const ip = visitor(req);
-  const slot = await takeSlot(ip);
-  if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
+  // A configured tester must be signed in before their network slot is skipped.
+  // This lookup happens even while the paywall is off, so tester access stays useful during testing.
+  const session = await currentUser(req);
+  const tester = isUnlimited(session);
+  if (tester && session) console.info("[tester]", session.id);
+  const slot = tester ? null : await takeSlot(visitor(req));
+  if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    await slot.release();
+    await slot?.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
@@ -75,14 +81,14 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
   let who: Awaited<ReturnType<typeof whoIsAsking>>;
   try {
-    who = await whoIsAsking(req);
+    who = await whoIsAsking(req, session);
   } catch (e) {
     // The sign-in lookup failed (an auth or database error): give the slot back, so an outage does not use up the daily limits.
-    await slot.release();
+    await slot?.release();
     throw e;
   }
   if ("response" in who) {
-    if (who.response.status !== 401) await slot.release();
+    if (who.response.status !== 401) await slot?.release();
     return who.response;
   }
 
@@ -92,7 +98,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     state.charging = false;
   });
   if ("response" in charged) {
-    await slot.release();
+    await slot?.release();
     return charged.response;
   }
   state.charged = charged;
@@ -110,7 +116,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // A rejection was a paid model call, so it keeps its slot: otherwise a
     // caller could loop rejected scripts past the daily limits. Only a check
     // that never answered gives the slot back.
-    if (vet.reason === "unavailable") await slot.release();
+    if (vet.reason === "unavailable") await slot?.release();
     await charged.refund();
     return vet.reason === "rejected"
       ? NextResponse.json(
@@ -121,7 +127,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
-    await slot.release();
+    await slot?.release();
     await charged.refund();
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }

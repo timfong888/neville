@@ -11,13 +11,13 @@ import type { Db } from "@/lib/server/libraryDb";
 export type Who = { enabled: false } | { enabled: true; user: SignedIn | null };
 
 /** Step 1, before any guard counts the request: who is asking, or the refusal to send. */
-export async function whoIsAsking(req: Request): Promise<Who | { response: Response }> {
+export async function whoIsAsking(req: Request, session?: SignedIn | null): Promise<Who | { response: Response }> {
   if (!paywallEnabled()) return { enabled: false };
   // With the paywall on, accounts and the database must both be there, or nobody could sign in or be charged.
   if (!accountsEnabled() || !dbConfigured()) {
     return { response: NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 }) };
   }
-  const user = await currentUser(req);
+  const user = session === undefined ? await currentUser(req) : session;
   if (!user && CREDITS.signInRequired) {
     return { response: NextResponse.json({ code: "sign_in_required", error: "Sign in to create a recording." }, { status: 401 }) };
   }
