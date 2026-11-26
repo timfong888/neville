@@ -183,7 +183,7 @@ export default async function CreditsPage({
           <strong>Sandbox-capped rows:</strong> {special.sandboxCapped}{" "}
           <span className="small muted">
             (sandbox purchase rejected: account reached the {CREDITS.sandboxGrantCap}-credit cap;
-            identified by reason=purchase, delta=0, environment=SANDBOX)
+            delta=0, environment=SANDBOX, no prior once_key grant for the same product)
           </span>
         </p>
         <p>

@@ -208,6 +208,30 @@ describe("creditsSpecialCounts", () => {
     expect((await creditsSpecialCounts(db)).alreadyOwned).toBe(1);
   });
 
+  it("second sandbox starter counts as already_owned, not sandbox_capped", async () => {
+    // First sandbox starter: granted
+    await tx((d) =>
+      grantPurchase(d, {
+        userId: "alice",
+        productId: "starter",
+        eventId: "sb_s1",
+        environment: "SANDBOX",
+      }),
+    );
+    // Second sandbox starter: already_owned (same once_key path in grantPurchase)
+    await tx((d) =>
+      grantPurchase(d, {
+        userId: "alice",
+        productId: "starter",
+        eventId: "sb_s2",
+        environment: "SANDBOX",
+      }),
+    );
+    const counts = await creditsSpecialCounts(db);
+    expect(counts.alreadyOwned).toBe(1);
+    expect(counts.sandboxCapped).toBe(0);
+  });
+
   it("counts sandbox_capped rows", async () => {
     // Exhaust the sandbox cap (100 credits) then try one more
     for (let i = 0; i < 10; i++) {

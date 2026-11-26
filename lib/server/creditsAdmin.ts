@@ -74,9 +74,9 @@ export async function creditsPerAccount(db: Db): Promise<AccountSummary[]> {
 
 export type SpecialCounts = {
   refunds: number;
-  // purchase rows where delta=0 and environment=SANDBOX (best proxy; see notes in page)
+  // purchase rows where delta=0 and SANDBOX, with no prior once_key grant for the same user+product
   sandboxCapped: number;
-  // purchase rows where delta=0 and environment is not SANDBOX (best proxy)
+  // purchase rows where delta=0 and either non-SANDBOX, or SANDBOX with a prior once_key grant
   alreadyOwned: number;
 };
 
@@ -84,8 +84,21 @@ export async function creditsSpecialCounts(db: Db): Promise<SpecialCounts> {
   const { rows } = await db.query(`
     select
       count(case when reason = 'refund' then 1 end)::int as refunds,
-      count(case when reason = 'purchase' and delta = 0 and environment = 'SANDBOX' then 1 end)::int as sandbox_capped,
-      count(case when reason = 'purchase' and delta = 0 and (environment is null or environment <> 'SANDBOX') then 1 end)::int as already_owned
+      count(case when reason = 'purchase' and delta = 0 and environment = 'SANDBOX'
+        and not exists (
+          select 1 from credit_ledger o
+          where o.user_id = credit_ledger.user_id
+            and o.once_key = credit_ledger.product_id || ':sandbox'
+        )
+        then 1 end)::int as sandbox_capped,
+      count(case when reason = 'purchase' and delta = 0 and (
+        (environment is null or environment <> 'SANDBOX')
+        or (environment = 'SANDBOX' and exists (
+          select 1 from credit_ledger o
+          where o.user_id = credit_ledger.user_id
+            and o.once_key = credit_ledger.product_id || ':sandbox'
+        ))
+      ) then 1 end)::int as already_owned
     from credit_ledger
   `);
   const r = rows[0];
