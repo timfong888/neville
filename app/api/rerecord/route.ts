@@ -6,7 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
-import { type PaidState, charge, runPaid, timeoutResponse, whoIsAsking } from "@/lib/server/paywall";
+import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
@@ -129,6 +129,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const text = lines.join(" ");
   // The deadline passed during the check: do not start the voice, the credit is already refunded.
   if (state.timedOut) return timeoutResponse(true);
+  // With the paywall on, the voice call also ends before the paywall's deadline (50 s); with it off the budget is the same 42 s as before.
+  const voiceMs = voiceBudget(state, 42_000);
+  if (voiceMs === null) return timeoutAnswer(state);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -136,7 +139,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     text,
     instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
     compact: true,
-    timeoutMs: 42_000,
+    timeoutMs: voiceMs,
     // Voices flagged atomic record the edited lines in one request with a
     // pause after each, at the default pace's speed, style and pause, as
     // /api/manifest does (#76). Other voices keep the one-request text above.

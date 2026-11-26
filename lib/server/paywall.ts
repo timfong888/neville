@@ -96,7 +96,7 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
 }
 
 /** What a paid route holds while it runs, so a deadline or an error can give the credit back. */
-export type PaidState = { charged?: Charged; charging?: boolean; timedOut?: boolean };
+export type PaidState = { charged?: Charged; charging?: boolean; timedOut?: boolean; deadlineAt?: number };
 
 /**
  * The answer when the work did not finish before the deadline. `creditReturned` is true only once the refund was written,
@@ -108,6 +108,32 @@ export function timeoutResponse(creditReturned?: boolean): Response {
   return NextResponse.json({ code: "timeout", error, ...(creditReturned === undefined ? {} : { creditReturned }) }, { status: 504 });
 }
 
+/** Time kept between the end of the voice call and the deadline, for the ledger writes and the refund. */
+const VOICE_MARGIN_MS = 2_000;
+/** A voice call given less than this is not started: it could not finish a recording. */
+const VOICE_MIN_MS = 3_000;
+
+/**
+ * The budget for the voice call. With the paywall off it is `base`, as it always was. With it on, it is also capped at the
+ * time left before the deadline minus a 2 s margin, so a recording that is billed is never thrown away by the deadline.
+ * Null when less than 3 s would be left: do not start the voice call, call timeoutAnswer() instead.
+ */
+export function voiceBudget(state: PaidState, base: number): number | null {
+  if (state.deadlineAt === undefined) return base;
+  const left = state.deadlineAt - Date.now() - VOICE_MARGIN_MS;
+  return left < VOICE_MIN_MS ? null : Math.min(base, left);
+}
+
+/** Gives the credit back and answers with the timeout, for a deadline that passed or a voice call that could not be started. */
+export async function timeoutAnswer(state: PaidState): Promise<Response> {
+  state.timedOut = true;
+  // The credit is still being taken: nothing is known yet. handle() refunds it as soon as it lands.
+  if (!state.charged && state.charging) return timeoutResponse(undefined);
+  const returned = state.charged ? await state.charged.refund() : false;
+  const refundable = Boolean(state.charged && state.charged.left !== null && state.charged.left !== "unlimited");
+  return timeoutResponse(refundable ? returned : false);
+}
+
 /**
  * Runs a paid route's work with a deadline just under the platform's maxDuration (config deadlineMs, 50 s of 60). If the
  * deadline passes, the credit is refunded (keyed, so a late finish cannot refund twice) and a clear 504 is returned; an
@@ -117,20 +143,14 @@ export function timeoutResponse(creditReturned?: boolean): Response {
 export async function runPaid(work: (state: PaidState) => Promise<Response>): Promise<Response> {
   const state: PaidState = {};
   if (!paywallEnabled()) return work(state);
+  state.deadlineAt = Date.now() + CREDITS.deadlineMs;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), CREDITS.deadlineMs);
   });
   try {
     const out = await Promise.race([work(state), deadline]);
-    if (out === "timeout") {
-      state.timedOut = true;
-      // The credit is still being taken: nothing is known yet. handle() refunds it as soon as it lands.
-      if (!state.charged && state.charging) return timeoutResponse(undefined);
-      const returned = state.charged ? await state.charged.refund() : false;
-      const refundable = Boolean(state.charged && state.charged.left !== null && state.charged.left !== "unlimited");
-      return timeoutResponse(refundable ? returned : false);
-    }
+    if (out === "timeout") return await timeoutAnswer(state);
     return out;
   } catch (e) {
     await state.charged?.refund();

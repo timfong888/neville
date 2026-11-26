@@ -23,8 +23,8 @@ export type Playback = {
   foregroundOnly: boolean;
 };
 
-/** Optional: repeat the recording until stopped, and play a music track under it (#157, #163). */
-export type PlayOptions = { loop?: boolean; /** A soft bell in the pause between rounds; only with `loop`. */ bell?: boolean; music?: { src: string | number; volume: number } };
+/** Optional: repeat the recording until stopped, and put the music player under it (#157, #163, #184). */
+export type PlayOptions = { loop?: boolean; /** A soft bell in the pause between rounds; only with `loop`. */ bell?: boolean; music?: boolean };
 
 /** Starts playback. No event fires after `stop`. */
 export function play(made: Made, ev: Events, opts: PlayOptions = {}): Playback {

@@ -12,6 +12,13 @@ vi.mock("@/config/credits.json", async (orig) => {
   return { default: { ...real, deadlineMs: 150 } };
 });
 
+// This file tests the deadline race with a 150 ms deadline, so the voice budget (a 2 s margin, 3 s minimum) is passed
+// through here; it is tested on its own in credits-voice-budget.test.ts.
+vi.mock("@/lib/server/paywall", async (orig) => ({
+  ...(await orig<typeof import("@/lib/server/paywall")>()),
+  voiceBudget: (_state: unknown, base: number) => base,
+}));
+
 let pg: PGlite;
 let hang = false;
 let late: (() => void) | null = null;

@@ -20,7 +20,7 @@ export type NowPlayingState = {
 };
 const IDLE: NowPlayingState = { status: "idle", id: "", title: "", route: "", index: 0, position: 0, total: 0, loop: false, note: "" };
 
-export type Prepared = { clips: string[]; loop: boolean; music?: { src: string | number; volume: number }; at(index: number): { title: string; position: number; total: number } };
+export type Prepared = { clips: string[]; loop: boolean; /** Put the music player under this session. */ music?: boolean; at(index: number): { title: string; position: number; total: number } };
 /** What to play. `title` is the lock screen's; `at` gives the title and place shown for a position. */
 export type PlayJob = { id: string; title: string; route: string; empty: string; prepare(): Promise<Prepared | null> };
 

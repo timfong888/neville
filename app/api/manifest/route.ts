@@ -6,7 +6,7 @@ import { writeScript } from "@/lib/server/writer";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
-import { type PaidState, charge, runPaid, timeoutResponse, whoIsAsking } from "@/lib/server/paywall";
+import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, state: PaidState): Promise<Response> {
+  // The route has 60 s in all (maxDuration), counted from here: guards, script, voice and the ledger writes.
+  const started = Date.now();
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -114,13 +116,16 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
   const spoken = recorded.join(" ").length;
-  if (script.source === "model") {
-    // Text-model cost is not returned by the writer; at these prices it is a
-    // few thousandths of a cent, so it is recorded as unpriced.
-    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: null });
+  // A template script after paid tries is recorded too: those tries were billed.
+  if (script.source === "model" || (script.costUsd ?? 0) > 0) {
+    // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
+    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
   // The deadline passed while the script was being written: do not start the voice, the credit is already refunded.
   if (state.timedOut) return timeoutResponse(true);
+  // With the paywall on, the voice call also ends before the paywall's deadline (50 s): the route's own 52 s budget alone could pass it.
+  const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
+  if (voiceMs === null) return timeoutAnswer(state);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -134,7 +139,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
-    timeoutMs: 42_000,
+    // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
+    timeoutMs: voiceMs,
     atomic: voice.atomic === true,
   });
   if (!speech.ok) {

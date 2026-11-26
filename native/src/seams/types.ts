@@ -45,9 +45,10 @@ export interface AudioSeam {
    * is shown on the lock screen. With `loop`, the first clip plays again after the last,
    * the session never ends by itself, and `stop` is the only way out.
    * One session at a time: opening one ends the one before it, which gets `ended` and `replaced`.
-   * `music` is a looping track under the voice, at `volume` (0 to 1). It starts, pauses and stops with the session.
+   * `music` puts the app's one music player under the voice (seams/music). Which track, and at what level, is the
+   * stored choice, followed live. The music plays, pauses and stops with the session, and goes when it ends or fails.
    */
-  open(srcs: string[], o: { title: string; loop?: boolean; music?: { src: string | number; volume: number }; onState(s: PlayState): void }): PlaySession;
+  open(srcs: string[], o: { title: string; loop?: boolean; music?: boolean; onState(s: PlayState): void }): PlaySession;
   /** How many sessions have opened so far. A caller that sees it change while it waits knows another session took over. */
   opened(): number;
 
