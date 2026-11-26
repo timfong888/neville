@@ -1,7 +1,7 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, toManifestation, voiceFor } from "@/lib/create";
+import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { newId } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
@@ -50,13 +50,12 @@ export const canSpeak = (): boolean => typeof (globalThis as { speechSynthesis?:
 /** The state for a voice id: its id and the name to show. */
 const voice = (id: string) => ({ voiceId: id, voiceName: resolveVoice(id).name });
 
-// A pick on Create lasts until the Settings voice changes: a newer choice there wins.
+// The Settings voice last seen; the rules are in lib/create.ts.
 let settingsVoice: string | null = null;
 function voiceNow(settingsVoiceId: string) {
-  const changed = settingsVoice !== null && settingsVoice !== settingsVoiceId;
-  settingsVoice = settingsVoiceId;
-  const picked = changed ? null : state.picked;
-  return { picked, ...voice(voiceFor(picked, settingsVoiceId)) };
+  const next = seeSettingsVoice({ picked: state.picked, settingsVoice }, settingsVoiceId);
+  settingsVoice = next.settingsVoice;
+  return { picked: next.picked, ...voice(next.voiceId) };
 }
 
 let typed = false;
@@ -76,12 +75,10 @@ export function edit(p: { want?: string; name?: string }): void {
 
 /** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice. */
 export async function pickVoice(id: string, asDefault = false): Promise<boolean> {
-  const voiceId = voiceFor(id, state.voiceId);
-  set({ picked: voiceId, ...voice(voiceId) });
-  if (!asDefault) return true;
-  // Our own write is not a newer Settings choice, so it must not clear the pick.
-  settingsVoice = voiceId;
-  return settings.write({ voiceId });
+  const next = pickOnCreate({ picked: state.picked, settingsVoice }, id, state.voiceId, asDefault);
+  settingsVoice = next.settingsVoice;
+  set({ picked: next.picked, ...voice(next.voiceId) });
+  return asDefault ? settings.write({ voiceId: next.voiceId }) : true;
 }
 
 let run = 0;

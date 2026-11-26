@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { ENABLED_VOICES, TIER_LABEL, voiceBlurb } from "@/lib/voices";
-import { pickVoice, useCreate } from "../../src/create/session";
+import { load, pickVoice, useCreate } from "../../src/create/session";
 import { Button } from "../../src/create/ui";
 import { useSample } from "../../src/create/useSample";
 import { useSettings } from "../../src/seams/settings";
@@ -18,6 +18,8 @@ export default function VoicePicker() {
   const { settings: saved } = useSettings();
   const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
+  // Opened cold (a deep link, a refresh), the wish step has not read Settings yet.
+  useEffect(() => void load(), []);
   const isDefault = c.voiceId === saved.voiceId;
 
   const makeDefault = async () => {

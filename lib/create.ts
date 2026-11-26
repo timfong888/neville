@@ -44,6 +44,29 @@ export function voiceFor(picked: string | null | undefined, settingsVoiceId: str
   return picked && resolveVoice(picked).id === picked ? picked : resolveVoice(settingsVoiceId).id;
 }
 
+/** What Create remembers about the voice: its own pick, and the Settings voice it last saw. */
+export type VoicePick = { picked: string | null; settingsVoice: string | null };
+export const NO_PICK: VoicePick = { picked: null, settingsVoice: null };
+
+/**
+ * Called with the Settings voice each time it is read. A pick on Create lasts until the
+ * Settings voice changes: a newer choice there wins. The first reading clears nothing.
+ */
+export function seeSettingsVoice(p: VoicePick, settingsVoiceId: string): VoicePick & { voiceId: string } {
+  const changed = p.settingsVoice !== null && p.settingsVoice !== settingsVoiceId;
+  const picked = changed ? null : p.picked;
+  return { picked, settingsVoice: settingsVoiceId, voiceId: voiceFor(picked, settingsVoiceId) };
+}
+
+/**
+ * A voice picked on Create. `asDefault` means the caller also saves it to Settings, so it is
+ * recorded as the Settings voice here and that write does not clear the pick.
+ */
+export function pickOnCreate(p: VoicePick, id: string, current: string, asDefault = false): VoicePick & { voiceId: string } {
+  const voiceId = voiceFor(id, current);
+  return { picked: voiceId, settingsVoice: asDefault ? voiceId : p.settingsVoice, voiceId };
+}
+
 /** The wish as typed, and the choices from Settings. */
 export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
 
