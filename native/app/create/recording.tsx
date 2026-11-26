@@ -26,8 +26,18 @@ export default function Recording() {
   // For the reason shown when the system paused playback while the app was away.
   const pausedRef = useRef(false);
 
+  // The pause note is on screen, so Resume takes it away; other messages stay.
+  const pauseNote = useRef(false);
+  const clearPauseNote = () => {
+    if (!pauseNote.current) return;
+    pauseNote.current = false;
+    setToast("");
+  };
   const watch = useRef(
-    pauseWatch(() => setToast("Playback was paused while Neville was in the background. Tap Play to continue.")),
+    pauseWatch(() => {
+      pauseNote.current = true;
+      setToast("Playback was paused while Neville was in the background. Tap Resume to continue.");
+    }),
   ).current;
   const stop = useCallback(() => {
     stopper.current?.stop();
@@ -66,7 +76,7 @@ export default function Recording() {
       onLine: setIdx,
       onEnd: () => (setPlaying(false), setPaused(false), setIdx(made.lines.length)),
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
-      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), watch.playing(p)),
+      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), p && clearPauseNote(), watch.playing(p)),
       onWarn: setToast,
     });
   };
@@ -102,7 +112,7 @@ export default function Recording() {
         <Text style={s.spoken}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
       </View>
       <View style={s.row}>
-        {paused ? <Button label="▶ Resume" onPress={() => (setPaused(false), stopper.current?.resume())} /> : null}
+        {paused ? <Button label="▶ Resume" onPress={() => (setPaused(false), clearPauseNote(), stopper.current?.resume())} /> : null}
         {playing ? <Button label="■ Stop" onPress={stop} /> : <Button label={done ? "▶ Play again" : "▶ Play"} onPress={start} />}
         <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
         <Button small label="New variation" onPress={again} />
