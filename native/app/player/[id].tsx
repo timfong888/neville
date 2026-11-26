@@ -17,6 +17,12 @@ type Phase = "idle" | "playing" | "paused";
 
 // Copies are made one at a time and in order, so an old load can never replace a newer load's copy.
 let copying: Promise<unknown> = Promise.resolve();
+// Runs `fn` after the copies already queued, so a cancelled start's late copy cannot replace a newer one's.
+const inOrder = <T,>(fn: () => Promise<T>): Promise<T> => {
+  const next = copying.then(fn);
+  copying = next.catch(() => {});
+  return next;
+};
 const loopStore = makeLoopStore(kv);
 const LOOP_LABEL: Record<LoopMode, string> = { off: "Off", one: "One", all: "All" };
 
@@ -254,7 +260,7 @@ async function libraryItems(me: LoopItem<string>, gone: () => boolean): Promise<
   const out: LoopItem<string>[] = [];
   for (const m of newestFirst((await library.load()).manifestations)) {
     if (!m.hasAudio || gone()) continue;
-    const uri = m.id === me.id ? me.src : await library.audioUri(m.id).then((u) => (u ? audio.keep(`player-loop-${out.length}`, u) : null)).catch(() => null);
+    const uri = m.id === me.id ? me.src : await library.audioUri(m.id).then((u) => (u ? inOrder(() => audio.keep(`player-loop-${out.length}`, u)) : null)).catch(() => null);
     if (uri) out.push({ id: m.id, src: uri, title: m.title || "Untitled" });
   }
   return out;
