@@ -87,6 +87,8 @@ export default function Player() {
   const busy = mine && np.status === "preparing";
   const note = mine && np.status === "idle" ? np.note : "";
   const active = phase !== "idle";
+  // While this item plays, the running job's loop, not the stored choice, which another item may have changed.
+  const shownLoop: LoopMode = active ? (np.loop ? "one" : "off") : loop;
   const at = roundAt(mine ? np.index : 0);
   const plays = np.total;
   const pick = (m: LoopMode) => {
@@ -123,7 +125,7 @@ export default function Player() {
       )}
       {active ? (
         <Text style={s.p} accessibilityLiveRegion="polite">
-          {loop === "one" ? `Repeating${at.inGap ? ", pause" : ""}`
+          {shownLoop === "one" ? `Repeating${at.inGap ? ", pause" : ""}`
             : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? ", pause" : ""}` : "Playing once"}
         </Text>
       ) : note ? (
@@ -136,9 +138,9 @@ export default function Player() {
           <Pressable
             key={m}
             disabled={active || busy}
-            style={[s.chip, loop === m && s.on, (active || busy) && s.off]}
+            style={[s.chip, shownLoop === m && s.on, (active || busy) && s.off]}
             accessibilityRole="radio"
-            accessibilityState={{ selected: loop === m, disabled: active || busy }}
+            accessibilityState={{ selected: shownLoop === m, disabled: active || busy }}
             accessibilityLabel={`Loop ${LOOP_LABEL[m]}`}
             onPress={() => pick(m)}
           >
@@ -146,8 +148,8 @@ export default function Player() {
           </Pressable>
         ))}
       </View>
-      <Text style={s.dim}>{loop === "one" ? "Repeats this recording until you stop it. To loop everything, use Play all on loop in the Library." : "Plays once, then repeats for the minutes below."}</Text>
-      <Text style={s.label}>Repetition after the first play{loop !== "off" ? " (Off while looping)" : active ? " (stop to change)" : ""}</Text>
+      <Text style={s.dim}>{shownLoop === "one" ? "Repeats this recording until you stop it. To loop everything, use Play all on loop in the Library." : "Plays once, then repeats for the minutes below."}</Text>
+      <Text style={s.label}>Repetition after the first play{shownLoop !== "off" ? " (Off while looping)" : active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>
         {REPEAT_MINUTES.map((m) => (
           <Pressable

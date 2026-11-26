@@ -60,7 +60,7 @@ describe("the app-level controller", () => {
     expect(f.opens).toHaveLength(1);
     expect(f.opens[0]).toMatchObject({ srcs: ["all.wav", "gap", "all.wav"], o: { title: "Lock all", loop: true } });
     expect(f.opens[0].play).toHaveBeenCalledTimes(1);
-    expect(f.np.state()).toMatchObject({ status: "playing", id: "all", title: "Tall0", route: "/player/all", position: 1, total: 3 });
+    expect(f.np.state()).toMatchObject({ status: "playing", id: "all", title: "Tall0", route: "/player/all", position: 1, total: 3, loop: true });
   });
 
   it("keeps playing and following the session with no screen involved (acceptance 1)", async () => {
