@@ -52,8 +52,32 @@ the browser sends only the two ids and the server turns them into speech setting
 
 ## Tests
 
-`npm test` runs the unit tests for the limit decisions, the script rules, the
-fallback script and voice choice. `npm run typecheck` checks types.
+Tests come in three levels. CI runs one job for each, named `unit`,
+`integration` and `acceptance`, so a red check names the failing layer.
+
+| Command | Level | Needs |
+| --- | --- | --- |
+| `npm run test:unit` | Pure functions. No network, no database server. | Nothing |
+| `npm run test:integration` | One real boundary: Postgres. Today all four files run on in-process PGlite. A test that needs a real server must skip without `DATABASE_URL`; the first one arrives with #182. | Nothing today. A server test needs `DATABASE_URL`, after `npm run migrate` |
+| `npm run test:acceptance` | One test per story criterion, named `AT-<ticket>-<n>`. | Nothing yet |
+
+`npm test` runs all three. A file's level comes from its name: `*Db.test.ts`,
+`*-db.test.ts`, `*concurrency*.test.ts` and `tests/integration/` are integration;
+`AT-*.test.ts` and `tests/acceptance/` are acceptance; the rest are unit (see
+`vitest.config.ts`).
+
+`npm run test:native` runs the tests of `native/` code (`tests/native*.test.ts`,
+`tests/webAudioSeam.test.ts`). It installs `native/` first, because they need the
+Expo modules. CI runs them, with `npm run typecheck --prefix native`, in a
+`native` job on PRs that touch native code. `npm run typecheck` checks the web types.
+
+To run the server tests locally:
+
+```
+docker run --rm -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
+npm run migrate && npm run test:integration
+```
 
 ## Paid calls and what bounds them
 
