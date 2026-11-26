@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 //
 // Id mapping: RevenueCat's app user id is our account id, the Better Auth "user".id. The app calls
 // Purchases.logIn(<that id>) right after sign-in and never buys while anonymous. If app_user_id is not an
-// account (an anonymous id), the event's aliases are tried in order. No match: 200 and a log line, nothing granted.
+// account (an anonymous id), the event's aliases are tried in order. No match: 503 so RevenueCat retries (the
+// account may not exist yet), with one log line per event id; nothing is granted.
 //
 // Auth: RevenueCat sends the Authorization header exactly as typed in its dashboard; it must equal
 // REVENUECAT_WEBHOOK_AUTH. Not set: every call is refused.
@@ -18,8 +19,17 @@ export const dynamic = "force-dynamic";
 // redelivered event and a restored purchase under a new event id never grant twice. An event with no
 // transaction id falls back to its event id. Starter is a non-consumable, so the store allows one
 // purchase per Apple ID; the once-per-account check in grantPurchase is the second guard. A repeated event, an
-// ignored event type and an unknown product all answer 200 so RevenueCat stops retrying; only a server
-// fault answers 5xx, so RevenueCat retries it.
+// ignored event type and an unknown product answer 200 so RevenueCat stops retrying; a server fault and an unknown
+// user answer 5xx, so RevenueCat retries them.
+// Event ids already logged as "unknown user" by this server instance, so retries do not repeat the line (best effort, per instance).
+const loggedUnknown = new Set<string>();
+function logUnknownUser(eventId: string, productId: string) {
+  if (loggedUnknown.has(eventId)) return;
+  if (loggedUnknown.size >= 500) loggedUnknown.clear();
+  loggedUnknown.add(eventId);
+  console.warn("[revenuecat] unknown user, will be retried", JSON.stringify({ eventId, productId }));
+}
+
 const HANDLED = new Set(["NON_RENEWING_PURCHASE", "INITIAL_PURCHASE"]);
 
 function sameSecret(got: string | null, want: string): boolean {
@@ -65,10 +75,14 @@ export async function POST(req: Request) {
       const environment = typeof event.environment === "string" ? event.environment : null;
       return { status: await grantPurchase(db, { userId, productId, eventId: key, environment }), userId };
     });
-    if (result.status === "ignored" || result.status === "unknown_product") {
-      // The purchase may be real and unmatched: leave a trail to fix by hand.
-      console.warn("[revenuecat] not granted", JSON.stringify({ eventId, productId, why: "reason" in result ? result.reason : result.status }));
-      return NextResponse.json({ ok: true, status: "ignored", reason: "reason" in result ? result.reason : "product" });
+    if (result.status === "ignored") {
+      // A purchase with no account yet: 5xx so RevenueCat retries it, in case the account is created first.
+      logUnknownUser(eventId, productId);
+      return NextResponse.json({ code: "unknown_user", error: "No account for this purchase yet." }, { status: 503 });
+    }
+    if (result.status === "unknown_product") {
+      console.warn("[revenuecat] product not sold, ignored", JSON.stringify({ eventId, productId }));
+      return NextResponse.json({ ok: true, status: "ignored", reason: "product" });
     }
     if (result.status === "already_owned") {
       console.warn("[revenuecat] starter bought twice, nothing added", JSON.stringify({ eventId, userId: result.userId }));

@@ -166,14 +166,16 @@ Connect, not here. Environment variables (names only):
 |---|---|
 | `PAYWALL_ENABLED` | `true` turns the paywall on. Anything else, or unset, leaves recording as it was. |
 | `UNLIMITED_USER_EMAILS` | comma list of tester emails that skip the spend. Matched against the signed-in account's own verified email on the server; each recording still writes a `tester` row. |
+| `UNLIMITED_USER_IDS` | second list, of Better Auth user ids, for accounts whose email is not usable (Sign in with Apple can return a private-relay address). Matched against the session's user id; same `tester` rows. |
 | `REVENUECAT_WEBHOOK_AUTH` | the exact `Authorization` header value RevenueCat sends to `POST /api/revenuecat/webhook`. Unset: the webhook refuses every call. |
 
 - `GET /api/credits` (signed in): `{ balance, unlimited, paywallEnabled, signInRequired, packs }`. `starter` is listed only until it has been bought. The free credit is given the first time an account is seen here or spends.
 - **Cost per action:** `costs` in `config/credits.json` (`manifest` 1, `rerecord` 1, Tim 2026-11-26: re-record costs a credit). Change a number to change the price; no code change. Every spend, refund and tester row records `route` and `action`, so real cost per action can be compared later (#181).
 - `POST /api/rerecord` follows the same rules as `/api/manifest`: sign-in, `402 no_credits`, tester skip, refund when no recording is made.
 - `POST /api/manifest` with the paywall on: `401 {code:"sign_in_required"}` signed out; `402 {code:"no_credits", balance}` at zero; `X-Credits-Left` on success. A recording that fails after the credit was taken gives it back.
-- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The store transaction id (the event id when there is none) is the idempotency key, so a repeat or a restore answers 200 and adds nothing. `starter` is a non-consumable in the store (one purchase per Apple ID); `pack10` is a consumable.
+- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The store transaction id (the event id when there is none) is the idempotency key, so a repeat or a restore answers 200 and adds nothing. A purchase whose user is not an account yet answers 503 (RevenueCat retries; one log line per event id). `starter` is a non-consumable in the store (one purchase per Apple ID); `pack10` is a consumable.
 - **Id mapping:** RevenueCat's app user id must be our account id (`"user".id`). The app calls `Purchases.logIn(<that id>)` after sign-in and does not buy while anonymous.
+- Concurrency: `tests/credits-concurrency.test.ts` runs the spend and grant races on separate real connections when `DATABASE_URL` is set (a throwaway Neon branch with migration 004 applied, never production). It must pass there before `PAYWALL_ENABLED` goes on.
 - Roll back migration 004 by hand with `db/rollback/004_credit_ledger.down.sql`.
 
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A

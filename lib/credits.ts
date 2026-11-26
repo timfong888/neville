@@ -19,16 +19,30 @@ export function unlimitedEmails(raw: string | undefined): Set<string> {
   );
 }
 
+/** UNLIMITED_USER_IDS: a comma list of Better Auth user ids, for accounts whose email is not usable (Apple private relay). */
+export function unlimitedIds(raw: string | undefined): Set<string> {
+  return new Set(
+    (raw ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean),
+  );
+}
+
 /**
- * True when the signed-in account's own email is on the list. The user comes from the server-side session,
- * never from the request body or headers. An email the sign-in provider did not verify never counts.
+ * True when the signed-in account is a tester: its id is on UNLIMITED_USER_IDS, or its own email is on
+ * UNLIMITED_USER_EMAILS and the sign-in provider verified it. The user comes from the server-side session,
+ * never from the request body or headers.
  */
 export function isUnlimited(
-  user: { email?: string | null; emailVerified?: boolean } | null | undefined,
-  raw: string | undefined = process.env.UNLIMITED_USER_EMAILS,
+  user: { id?: string | null; email?: string | null; emailVerified?: boolean } | null | undefined,
+  rawEmails: string | undefined = process.env.UNLIMITED_USER_EMAILS,
+  rawIds: string | undefined = process.env.UNLIMITED_USER_IDS,
 ): boolean {
-  if (!user?.email || user.emailVerified !== true) return false;
-  return unlimitedEmails(raw).has(user.email.trim().toLowerCase());
+  if (!user) return false;
+  if (user.id && unlimitedIds(rawIds).has(user.id)) return true;
+  if (!user.email || user.emailVerified !== true) return false;
+  return unlimitedEmails(rawEmails).has(user.email.trim().toLowerCase());
 }
 
 export type Pack = { id: string; credits: number };

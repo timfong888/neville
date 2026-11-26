@@ -79,6 +79,7 @@ beforeEach(async () => {
   vi.stubEnv("REVENUECAT_WEBHOOK_AUTH", SECRET);
   vi.stubEnv("PAYWALL_ENABLED", "true");
   vi.stubEnv("UNLIMITED_USER_EMAILS", "");
+  vi.stubEnv("UNLIMITED_USER_IDS", "");
   pg = new PGlite();
   await runMigrations(
     { query: async (t: string, p?: unknown[]) => (p ? pg.query(t, p) : ((await pg.exec(t)).at(-1) ?? { rows: [] })) },
@@ -160,8 +161,22 @@ describe("POST /api/revenuecat/webhook", () => {
     await callHook(hook(purchase({ id: "a1", app_user_id: "$RCAnonymousID:zzz", aliases: ["$RCAnonymousID:zzz", "bob"] })));
     expect(await balance("bob")).toBe(10);
   });
-  it("answers 200 and grants nothing for an unknown user, an unknown product or another event type", async () => {
-    expect(await (await callHook(hook(purchase({ id: "u1", app_user_id: "$RCAnonymousID:nobody" })))).json()).toMatchObject({ status: "ignored" });
+  it("answers 503 for a purchase by an unknown user so RevenueCat retries, and logs it once per event id", async () => {
+    const warn = vi.mocked(console.warn);
+    warn.mockClear();
+    const unknown = purchase({ id: "u1", app_user_id: "$RCAnonymousID:nobody" });
+    for (let i = 0; i < 3; i++) {
+      const res = await callHook(hook(unknown));
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ code: "unknown_user" });
+    }
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("unknown user"))).toHaveLength(1);
+    // The user shows up later (the account exists now): the retry is granted.
+    await pg.query(`insert into "user" (id, name, email, "emailVerified") values ('late', 'late', 'late@x.test', true)`);
+    expect((await callHook(hook({ ...unknown, app_user_id: "late" }))).status).toBe(200);
+    expect(await balance("late")).toBe(10);
+  });
+  it("answers 200 and grants nothing for an unknown product or another event type", async () => {
     expect(await (await callHook(hook(purchase({ id: "p1", product_id: "gold" })))).json()).toMatchObject({ status: "ignored" });
     expect((await callHook(hook(purchase({ id: "t1", type: "CANCELLATION" })))).status).toBe(200);
     expect((await callHook(hook(purchase({ id: "t2", type: "TEST" })))).status).toBe(200);
@@ -211,6 +226,11 @@ describe("GET /api/credits", () => {
     expect((await (await get()).json()).unlimited).toBe(true);
     user = { ...alice, emailVerified: false };
     expect((await (await get()).json()).unlimited).toBe(false);
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "");
+    vi.stubEnv("UNLIMITED_USER_IDS", "alice");
+    user = { ...alice, emailVerified: false };
+    expect((await (await get()).json()).unlimited).toBe(true);
+    vi.stubEnv("UNLIMITED_USER_IDS", "");
     const forged = new Request("https://getneville.vercel.app/api/credits?unlimited=1", { headers: { "x-unlimited": "true" } });
     user = { ...alice };
     vi.stubEnv("UNLIMITED_USER_EMAILS", "");
@@ -250,6 +270,12 @@ describe("POST /api/manifest with the paywall on", () => {
     expect(rows).toEqual([{ reason: "tester", n: 3 }]);
     expect((await pg.query(`select distinct route, action from credit_ledger`)).rows).toEqual([{ route: "/api/manifest", action: "manifest" }]);
     expect(await balance("alice")).toBe(0);
+  });
+  it("treats a listed account id as a tester even when the email is a private relay and unverified", async () => {
+    vi.stubEnv("UNLIMITED_USER_IDS", "alice");
+    user = { ...alice, email: "x@privaterelay.appleid.com", emailVerified: false };
+    for (let i = 0; i < 2; i++) expect((await callManifest()).status).toBe(200);
+    expect((await pg.query(`select reason, count(*)::int as n from credit_ledger group by reason`)).rows).toEqual([{ reason: "tester", n: 2 }]);
   });
   it("does not treat an unverified email as a tester", async () => {
     vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");

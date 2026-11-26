@@ -60,6 +60,12 @@ describe("config helpers", () => {
     expect(isUnlimited(null, "tim@x.com")).toBe(false);
     expect(isUnlimited({ email: "tim@x.com", emailVerified: true }, "")).toBe(false);
   });
+  it("is unlimited for a listed account id, whatever the email (Apple private relay), verified or not", () => {
+    expect(isUnlimited({ id: "u-tim", email: "abc@privaterelay.appleid.com", emailVerified: false }, "", "u-tim, u-other")).toBe(true);
+    expect(isUnlimited({ id: "u-eve", email: "eve@x.com", emailVerified: true }, "", "u-tim")).toBe(false);
+    expect(isUnlimited({ email: "eve@x.com", emailVerified: true }, "", "u-tim")).toBe(false);
+    expect(isUnlimited({ id: "", email: "e@x.com" }, "", ",")).toBe(false);
+  });
   it("is off unless PAYWALL_ENABLED is exactly true", () => {
     expect(paywallEnabled({})).toBe(false);
     expect(paywallEnabled({ PAYWALL_ENABLED: "false" })).toBe(false);
