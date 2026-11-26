@@ -42,6 +42,12 @@ export type Script = {
 /** Why the last try did not give a script. */
 type Failure = { reason: "http_status" | "timeout" | "unusable_reply" | "exception" | "no_model"; status?: number; error?: string };
 
+/** A timeout or abort is a timeout; anything else is an exception, named by class only. */
+function classify(e: unknown): Failure {
+  const name = e instanceof Error ? e.name : "unknown";
+  return name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
+}
+
 export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
@@ -91,8 +97,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
           signal: AbortSignal.timeout(Math.min(12_000, left)),
         });
       } catch (e) {
-        const name = e instanceof Error ? e.name : "unknown";
-        failure = name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
+        failure = classify(e);
         m++; // timed out or dropped: try the next model
         continue;
       }
@@ -114,7 +119,8 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     }
     return template();
   } catch (e) {
-    failure = { reason: "exception", error: e instanceof Error ? e.name : "unknown" };
+    // The abort signal stays live while the body is read, so a timeout can surface here too.
+    failure = classify(e);
     return template();
   }
 }

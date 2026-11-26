@@ -201,6 +201,18 @@ describe("writeScript fallback log (#176)", () => {
     expect(fallback()).toMatchObject({ reason: "exception", error: "SyntaxError", model: "google/gemini-2.5-flash-lite", attempt: 1 });
   });
 
+  it("logs a timeout that hits while the reply body is read as a timeout, not an exception", async () => {
+    const real = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (!String(input).includes("/chat/completions")) return real(input, init);
+      return { ok: true, status: 200, json: async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); } } as unknown as Response;
+    });
+    expect((await write(0, WISH)).source).toBe("template");
+    const line = fallback();
+    expect(line).toMatchObject({ reason: "timeout", model: "google/gemini-2.5-flash-lite", attempt: 1 });
+    expect(line).not.toHaveProperty("error");
+  });
+
   it("logs a dropped connection as an exception", async () => {
     const real = globalThis.fetch;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
