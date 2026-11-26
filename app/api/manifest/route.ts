@@ -67,10 +67,6 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
   const pace = resolvePace(body.pace);
   const tone = resolveTone(body.tone);
 
-  // Signed-out requests stop here when sign-in is required, before they use up a network slot.
-  const who = await whoIsAsking(req);
-  if ("response" in who) return who.response;
-
   const ip = visitor(req);
   const slot = await takeSlot(ip);
   if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
@@ -79,6 +75,14 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
   if (!budget.ok) {
     await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
+  }
+
+  // Sign-in comes after the IP, daily and spend-ceiling guards, which stay the backstop for every request. A
+  // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
+  const who = await whoIsAsking(req);
+  if ("response" in who) {
+    if (who.response.status !== 401) await slot.release();
+    return who.response;
   }
 
   // The last gate before anything is paid for: the guards above are the backstop, this is the account's quota.

@@ -67,12 +67,17 @@ export async function POST(req: Request) {
   const txn = typeof event.transaction_id === "string" ? event.transaction_id.trim() : "";
   const key = txn && txn.length <= 200 ? `txn:${txn}` : eventId;
 
+  // Sandbox purchases are free, so they are accepted only while REVENUECAT_ACCEPT_SANDBOX=true (a TestFlight test), never by default.
+  const environment = typeof event.environment === "string" ? event.environment : null;
+  if (environment === "SANDBOX" && process.env.REVENUECAT_ACCEPT_SANDBOX?.trim().toLowerCase() !== "true") {
+    return NextResponse.json({ ok: true, status: "ignored", reason: "sandbox" });
+  }
+
   const ids = [event.app_user_id, ...(Array.isArray(event.aliases) ? event.aliases : [])].filter((i): i is string => typeof i === "string");
   try {
     const result = await withTx(async (db) => {
       const userId = await firstExistingUser(db, ids);
       if (!userId) return { status: "ignored" as const, reason: "unknown_user" };
-      const environment = typeof event.environment === "string" ? event.environment : null;
       return { status: await grantPurchase(db, { userId, productId, eventId: key, environment }), userId };
     });
     if (result.status === "ignored") {

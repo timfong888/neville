@@ -12,6 +12,7 @@ let user: { id: string; name: string; email: string; image: null; emailVerified:
 let accountsOn = true;
 let voiceOk = true;
 let refundFailures = 0;
+let underCeilingOk = true;
 const synth = vi.fn();
 const takeSlot = vi.fn();
 const release = vi.fn();
@@ -38,7 +39,7 @@ vi.mock("@/lib/server/limits", () => ({
   LIMITS: { maxWantChars: 280 },
   generationEnabled: () => true,
   takeSlot: (ip: string) => takeSlot(ip),
-  underCeiling: async () => ({ ok: true, usage: 0 }),
+  underCeiling: async () => (underCeilingOk ? { ok: true, usage: 0 } : { ok: false, refusal: { status: 503, code: "budget_unknown", error: "Paused." } }),
 }));
 vi.mock("@/lib/server/writer", () => ({ writeScript: async () => ({ lines: ["It is done."], refrain: "r", source: "model", model: "m" }) }));
 vi.mock("@/lib/server/vet", () => ({ vetScript: async () => ({ ok: true, model: "m", costUsd: 0 }) }));
@@ -89,6 +90,7 @@ beforeEach(async () => {
   vi.stubEnv("PAYWALL_ENABLED", "true");
   vi.stubEnv("UNLIMITED_USER_EMAILS", "");
   vi.stubEnv("UNLIMITED_USER_IDS", "");
+  vi.stubEnv("REVENUECAT_ACCEPT_SANDBOX", "true");
   pg = new PGlite();
   await runMigrations(
     { query: async (t: string, p?: unknown[]) => (p ? pg.query(t, p) : ((await pg.exec(t)).at(-1) ?? { rows: [] })) },
@@ -102,6 +104,7 @@ beforeEach(async () => {
   accountsOn = true;
   voiceOk = true;
   refundFailures = 0;
+  underCeilingOk = true;
   synth.mockReset();
   synth.mockImplementation(async () =>
     voiceOk
@@ -128,6 +131,20 @@ describe("POST /api/revenuecat/webhook", () => {
     vi.stubEnv("REVENUECAT_WEBHOOK_AUTH", "");
     expect((await callHook(hook(purchase()))).status).toBe(503);
     expect(await balance("alice")).toBe(0);
+  });
+  it("ignores SANDBOX purchases unless REVENUECAT_ACCEPT_SANDBOX=true, so test purchases cannot mint real credits", async () => {
+    vi.stubEnv("REVENUECAT_ACCEPT_SANDBOX", "");
+    const res = await callHook(hook(purchase({ id: "sb-off", environment: "SANDBOX" })));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "ignored", reason: "sandbox" });
+    expect(await balance("alice")).toBe(0);
+    // A production purchase is unaffected, and a missing environment counts as production.
+    await callHook(hook(purchase({ id: "pr-1", environment: "PRODUCTION" })));
+    await callHook(hook(purchase({ id: "pr-2", environment: undefined })));
+    expect(await balance("alice")).toBe(20);
+    vi.stubEnv("REVENUECAT_ACCEPT_SANDBOX", "true");
+    await callHook(hook(purchase({ id: "sb-on", environment: "SANDBOX" })));
+    expect(await balance("alice")).toBe(30);
   });
   it("adds 10 credits for a pack10 purchase, matched by the app user id", async () => {
     const res = await callHook(hook(purchase()));
@@ -257,13 +274,26 @@ describe("GET /api/credits", () => {
 });
 
 describe("POST /api/manifest with the paywall on", () => {
-  it("answers 401 sign_in_required when signed out, before any guard or spend", async () => {
+  it("answers 401 sign_in_required when signed out, after the IP and ceiling guards and before any spend", async () => {
     user = null;
     const res = await callManifest();
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ code: "sign_in_required" });
-    expect(takeSlot).not.toHaveBeenCalled();
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled(); // a signed-out request keeps its slot, so it counts against the limits
     expect(synth).not.toHaveBeenCalled();
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
+  it("lets the IP guard refuse a signed-out request first", async () => {
+    user = null;
+    takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
+    expect((await callManifest()).status).toBe(429);
+  });
+  it("runs the spend-ceiling guard before the sign-in check", async () => {
+    user = null;
+    underCeilingOk = false;
+    expect((await callManifest()).status).toBe(503);
+    expect(release).toHaveBeenCalled();
   });
   it("spends the free credit, then answers 402 no_credits with the balance", async () => {
     const first = await callManifest();
@@ -341,11 +371,17 @@ describe("POST /api/manifest with the paywall on", () => {
 });
 
 describe("POST /api/rerecord with the paywall on", () => {
-  it("answers 401 signed out, before any guard or spend", async () => {
+  it("answers 401 signed out, after the IP guard and before any spend, keeping its slot", async () => {
     user = null;
     expect((await callRerecord()).status).toBe(401);
-    expect(takeSlot).not.toHaveBeenCalled();
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
     expect(synth).not.toHaveBeenCalled();
+  });
+  it("lets the IP guard refuse a signed-out request first", async () => {
+    user = null;
+    takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
+    expect((await callRerecord()).status).toBe(429);
   });
   it("answers 402 no_credits at balance 0, and records nothing", async () => {
     await pg.query(`insert into credit_ledger (user_id, delta, reason, once_key) values ('alice', 1, 'free', 'free')`);

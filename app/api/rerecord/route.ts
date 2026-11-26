@@ -67,9 +67,6 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
   const { lines } = parsed.value;
   const voice = resolveVoice(parsed.value.voiceId);
 
-  const who = await whoIsAsking(req);
-  if ("response" in who) return who.response;
-
   const ip = visitor(req);
   const slot = await takeSlot(ip);
   if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
@@ -78,6 +75,14 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
   if (!budget.ok) {
     await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
+  }
+
+  // Sign-in comes after the IP, daily and spend-ceiling guards, which stay the backstop for every request. A
+  // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
+  const who = await whoIsAsking(req);
+  if ("response" in who) {
+    if (who.response.status !== 401) await slot.release();
+    return who.response;
   }
 
   // Taken before the first paid call (the vet); given back below unless a recording is made.

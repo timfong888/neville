@@ -157,7 +157,7 @@ values, and not on production).
 ## Credits and the paywall (#168)
 
 Off until `PAYWALL_ENABLED=true`. Then `/api/manifest` needs sign-in and spends one credit per
-recording; the IP, daily and spend-ceiling guards above still apply first. Credits live in
+recording; the IP, daily and spend-ceiling guards above run first, then the sign-in check. A signed-out request therefore uses up a network slot, as an anonymous one does today. Credits live in
 Postgres (`credit_ledger`, migration 004; balance is the sum of `delta`). Packs, the free
 allowance and "sign-in required" are in `config/credits.json`. Prices are set in App Store
 Connect, not here. Environment variables (names only):
@@ -167,13 +167,14 @@ Connect, not here. Environment variables (names only):
 | `PAYWALL_ENABLED` | `true` turns the paywall on. Anything else, or unset, leaves recording as it was. |
 | `UNLIMITED_USER_EMAILS` | comma list of tester emails that skip the spend. Matched against the signed-in account's own verified email on the server; each recording still writes a `tester` row. |
 | `UNLIMITED_USER_IDS` | second list, of Better Auth user ids, for accounts whose email is not usable (Sign in with Apple can return a private-relay address). Matched against the session's user id; same `tester` rows. |
+| `REVENUECAT_ACCEPT_SANDBOX` | `true` lets SANDBOX purchases (TestFlight tests) add credits. Off by default: sandbox purchases are free, so on a live paywall they would mint real credits. Turn it on for the sandbox test, off after. |
 | `REVENUECAT_WEBHOOK_AUTH` | the exact `Authorization` header value RevenueCat sends to `POST /api/revenuecat/webhook`. Unset: the webhook refuses every call. |
 
 - `GET /api/credits` (signed in): `{ balance, unlimited, paywallEnabled, signInRequired, packs }`. `starter` is listed only until it has been bought. The free credit is given the first time an account is seen here or spends.
 - **Cost per action:** `costs` in `config/credits.json` (`manifest` 1, `rerecord` 1, Tim 2026-11-26: re-record costs a credit). Change a number to change the price; no code change. Every spend, refund and tester row records `route` and `action`, so real cost per action can be compared later (#181).
 - `POST /api/rerecord` follows the same rules as `/api/manifest`: sign-in, `402 no_credits`, tester skip, refund when no recording is made.
 - `POST /api/manifest` with the paywall on: `401 {code:"sign_in_required"}` signed out; `402 {code:"no_credits", balance}` at zero; `X-Credits-Left` on success. A recording that fails after the credit was taken gives it back: the refund is keyed to the spend, so it is retried (3 tries) and can never happen twice; if every try fails the log line `[credits] refund failed` carries the spend id.
-- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The store transaction id (the event id when there is none) is the idempotency key, so a repeat or a restore answers 200 and adds nothing. Sandbox and production purchases are owned separately: a sandbox Starter (a TestFlight test) never stops the real Starter from granting, and `/api/credits` hides Starter only after a real one. Sandbox credits are spendable like any others. A purchase whose user is not an account yet answers 503 (RevenueCat retries; one log line per event id). `starter` is a non-consumable in the store (one purchase per Apple ID); `pack10` is a consumable.
+- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The store transaction id (the event id when there is none) is the idempotency key, so a repeat or a restore answers 200 and adds nothing. SANDBOX events are ignored (200) unless `REVENUECAT_ACCEPT_SANDBOX=true`. Sandbox and production purchases are owned separately: a sandbox Starter (a TestFlight test) never stops the real Starter from granting, and `/api/credits` hides Starter only after a real one. Sandbox credits are spendable like any others. A purchase whose user is not an account yet answers 503 (RevenueCat retries; one log line per event id). `starter` is a non-consumable in the store (one purchase per Apple ID); `pack10` is a consumable.
 - **Id mapping:** RevenueCat's app user id must be our account id (`"user".id`). The app calls `Purchases.logIn(<that id>)` after sign-in and does not buy while anonymous.
 - Concurrency: `tests/credits-concurrency.test.ts` runs the spend and grant races on separate real connections when `DATABASE_URL` is set (a throwaway Neon branch with migration 004 applied, never production). It must pass there before `PAYWALL_ENABLED` goes on.
 - Roll back migration 004 by hand with `db/rollback/004_credit_ledger.down.sql`.
