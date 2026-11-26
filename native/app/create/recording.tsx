@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { AppState, Platform, Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { freeLeft } from "@/lib/create";
 import { CLOSING } from "@/lib/prompt";
@@ -36,7 +36,8 @@ export default function Recording() {
     const sub = AppState.addEventListener("change", (st) => {
       // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
       const pb = stopper.current;
-      if (st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
+      // A browser keeps reading and running timers in a hidden tab; only a phone suspends them.
+      if (Platform.OS === "web" || st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
       stop();
       setToast("Playback stopped when you left Neville. Tap Play to start again.");
     });
