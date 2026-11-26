@@ -53,7 +53,14 @@ export const audio: AudioSeam = {
       const ms = media();
       if (ms) ms.playbackState = ended ? "none" : want ? "playing" : "paused";
     };
-    const start = () => void a.play().catch(() => ((want = false), emit()));
+    // A play() the browser refuses (autoplay policy, unsupported source) is a failed start. Any other
+    // rejection, such as an AbortError from pausing straight after play, is not.
+    const start = () =>
+      void a.play().catch((e: { name?: string }) => {
+        want = false;
+        if (open && (e?.name === "NotAllowedError" || e?.name === "NotSupportedError")) o.onState({ playing: false, index, ended: false, failed: true });
+        else emit();
+      });
     const session = {
       play() {
         if (!open) return;

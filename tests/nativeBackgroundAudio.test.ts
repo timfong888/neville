@@ -153,6 +153,14 @@ describe("the Create step plays through the seam", () => {
       vi.useRealTimers();
     }
   });
+  it("is no longer active once the clip ends, so the screen does not treat it as playing", async () => {
+    const ev = events();
+    const pb = play(made(rec), ev);
+    await tick();
+    expect(pb.active()).toBe(true);
+    h.lists[0].emit({ playing: false, didJustFinish: true });
+    expect(pb.active()).toBe(false);
+  });
   it("stop frees the session and nothing fires after it", async () => {
     const ev = events();
     const pb = play(made(rec), ev);
@@ -172,7 +180,11 @@ describe("the Create step plays through the seam", () => {
 
 describe("the timer-only fallback", () => {
   it("is foreground only, so the screen can say so when the app leaves", () => {
-    expect(play(made(null), events()).foregroundOnly).toBe(true);
+    const pb = play(made(null), events());
+    expect(pb.foregroundOnly).toBe(true);
+    expect(pb.active()).toBe(true);
+    pb.stop();
+    expect(pb.active()).toBe(false);
   });
   it("a recording is not", async () => {
     const pb = play(made(rec), events());

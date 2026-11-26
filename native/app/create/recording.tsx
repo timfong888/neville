@@ -35,7 +35,8 @@ export default function Recording() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
       // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
-      if (st !== "background" || !stopper.current?.foregroundOnly) return;
+      const pb = stopper.current;
+      if (st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
       stop();
       setToast("Playback stopped when you left Neville. Tap Play to start again.");
     });

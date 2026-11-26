@@ -9,6 +9,8 @@ import type { PlaySession, PlayState } from "../seams/types";
 export type Events = { onLine(i: number): void; onEnd(): void; onError(message: string): void; onPlaying(playing: boolean): void };
 export type Playback = {
   stop(): void;
+  /** False once it has ended, failed or been stopped. */
+  active(): boolean;
   /** Continues after a pause that did not come from the screen: a call, the lock screen, another app. */
   resume(): void;
   /** True when the app leaving the foreground silences it, so the screen should stop it and say so. */
@@ -38,7 +40,7 @@ export function play(made: Made, ev: Events): Playback {
   } else end = readAloud(made.lines, guard);
   // A start that already failed or ended has stopped; release what it made.
   if (!live) end();
-  return { stop, resume: () => live && resume(), foregroundOnly: !made.recording };
+  return { stop, active: () => live, resume: () => live && resume(), foregroundOnly: !made.recording };
 }
 
 function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
