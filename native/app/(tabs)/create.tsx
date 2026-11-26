@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
-import { createAccess, freeNote, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
 import { create, edit, load, reset, useCreate } from "../../src/create/session";
 import { colors } from "../../src/theme";
@@ -16,7 +16,9 @@ export default function Wish() {
   // The same sign-in state the Account tab keeps; it updates here when that changes (#164).
   const { account, checked } = useAccountView();
   const signedIn = isSignedIn(account);
-  const checking = createAccess(account, checked, c.used) === "checking";
+  const access = createAccess(account, checked, c.used);
+  const checking = access === "checking";
+  const note = freeNoteFor(access, signedIn, c.used);
   // Each visit: the draft, the count, the voice, and who is signed in may have changed.
   useFocusEffect(
     useCallback(() => {
@@ -83,7 +85,7 @@ export default function Wish() {
           <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
         </View>
         <View style={s.row}>
-          {freeNote(signedIn, c.used) ? <Text style={s.muted}>{freeNote(signedIn, c.used)}</Text> : null}
+          {note ? <Text style={s.muted}>{note}</Text> : null}
           {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}
         </View>
       </View>

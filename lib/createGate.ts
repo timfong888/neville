@@ -37,5 +37,8 @@ export const createAccess = (account: AccountState | null, checked: boolean, use
 export const freeNote = (signedIn: boolean, used: number): string =>
   signedIn ? "" : freeLeft(used) > 0 ? freeBanner(used) : `${freeBanner(used)} Create a free account to keep going.`;
 
+/** The free-creations line for a screen. Nothing while the account is still unknown: signed out is not assumed. */
+export const freeNoteFor = (access: Access, signedIn: boolean, used: number): string => (access === "checking" ? "" : freeNote(signedIn, used));
+
 /** "Reset demo" is a test aid: development builds only, and only once something was used. */
 export const showResetDemo = (isDev: boolean, used: number): boolean => isDev && used > 0;

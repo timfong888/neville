@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountState } from "@/lib/api/client";
-import { canCreate, createAccess, freeNote, gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { canCreate, createAccess, freeNote, freeNoteFor, gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
 
 const user = { id: "u1", name: "Tim", email: "t@example.com", image: null };
 const on = (u: AccountState["user"]): AccountState => ({ enabled: true, user: u });
@@ -83,5 +83,17 @@ describe("Create before the account lookup returns (#164)", () => {
   });
   it("a known answer is kept while a newer lookup is pending", () => {
     expect(createAccess(on(user), false, 9)).toBe("allowed");
+  });
+});
+
+describe("the free-creations line while the account is unknown (#164)", () => {
+  it("shows nothing while checking, so a signed-in user never sees the sign-up line", () => {
+    expect(freeNoteFor("checking", false, 2)).toBe("");
+    expect(freeNoteFor("checking", false, 0)).toBe("");
+  });
+  it("otherwise says what freeNote says", () => {
+    expect(freeNoteFor("allowed", false, 1)).toBe(freeNote(false, 1));
+    expect(freeNoteFor("blocked", false, 2)).toBe(freeNote(false, 2));
+    expect(freeNoteFor("allowed", true, 5)).toBe("");
   });
 });
