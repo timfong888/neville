@@ -19,7 +19,13 @@ const media = () => (typeof navigator !== "undefined" && "mediaSession" in navig
 
 // The web audio seam: one <audio> element carries the whole session, as the
 // website's player does, and Media Session gives the lock-screen controls.
+const openers = new Set<() => void>();
+
 export const audio: AudioSeam = {
+  onOpen(fn) {
+    openers.add(fn);
+    return () => void openers.delete(fn);
+  },
   async configure() {},
   async save(name, bytes, mime) {
     return put(name, new Blob([bytes as BlobPart], { type: mime }));
@@ -40,6 +46,7 @@ export const audio: AudioSeam = {
     });
   },
   open(srcs, o) {
+    openers.forEach((fn) => fn());
     const a = new Audio();
     const mine = [...new Set(srcs)];
     for (const u of mine) inUse.set(u, (inUse.get(u) ?? 0) + 1);

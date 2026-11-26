@@ -20,8 +20,7 @@ export default function LibraryScreen() {
   // Copy the recordings ahead, and again when the Library changes, so Play all starts straight from the tap.
   const key = recordings.map((m) => `${m.id}:${m.updatedAt}`).join(",");
   useEffect(() => {
-    playlist.reset();
-    if (key) void playlist.prepare();
+    if (key) playlist.prepare().catch(() => {});
   }, [key]);
   const busy = now.status !== "idle";
   return (

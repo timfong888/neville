@@ -12,7 +12,13 @@ const LOAD_TIMEOUT_MS = 8000;
 export const AUDIO_MODE = { playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" } as const;
 let configured: Promise<void> | null = null;
 
+const openers = new Set<() => void>();
+
 export const audio: AudioSeam = {
+  onOpen(fn) {
+    openers.add(fn);
+    return () => void openers.delete(fn);
+  },
   // Once per launch; a failure is not remembered, so the next call tries again.
   configure() {
     configured ??= setAudioModeAsync(AUDIO_MODE).catch((e) => {
@@ -44,6 +50,7 @@ export const audio: AudioSeam = {
     }
   },
   open(srcs, o) {
+    openers.forEach((fn) => fn());
     const list = createAudioPlaylist({ sources: srcs, loop: o.loop ? "all" : "none", updateInterval: 500 });
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };

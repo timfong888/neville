@@ -7,7 +7,7 @@ import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { inOrder } from "../../src/player/copies";
 import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
-import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, playerLoop } from "../../src/player/loop";
+import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, playerGapName, playerLoop } from "../../src/player/loop";
 import { playlist } from "../../src/player/playlist";
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
@@ -101,7 +101,7 @@ export default function Player() {
       const looping = loop !== "off";
       const repeats = looping ? 0 : repeatsFor(v.seconds, minutes);
       const gapMs = looping ? LOOP_GAP_MS : undefined;
-      const gap = repeats || looping ? await audio.save(`player-gap${looping ? "-loop" : ""}${bellOn ? "-bell" : ""}.wav`, gapClip(bellOn, gapMs), "audio/wav") : "";
+      const gap = repeats || looping ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, gapMs), "audio/wav") : "";
       const clips = looping ? loopQueue("one", [], loaded.id, gap, { id: loaded.id, src: v.src, title: loaded.title }).clips : buildQueue(v.src, gap, repeats);
       // The screen closed or moved to another item while the clips were being made.
       if (shown.current !== mine) return;

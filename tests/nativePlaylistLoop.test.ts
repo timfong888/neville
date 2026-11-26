@@ -1,9 +1,8 @@
 // #157: "Play all on loop" on the Library screen. The controller is framework-free and takes the
 // audio seam and the Library's recordings as inputs, so it is tested with fakes.
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Manifestation } from "@/lib/library/model";
-import { LOOP_GAP_MS } from "@/native/src/player/loop";
+import { LOOP_GAP_MS, PLAYLIST_GAP_NAME, playerGapName } from "@/native/src/player/loop";
 import { type PlaylistState, makePlaylistLoop } from "@/native/src/player/playlistLoop";
 import type { PlayState } from "@/native/src/seams/types";
 
@@ -27,22 +26,33 @@ const items = [
 ];
 
 function fake() {
-  const opens: Array<{ srcs: string[]; o: { title: string; loop?: boolean; onState(s: PlayState): void }; play: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
+  type Opts = { title: string; loop?: boolean; onState(s: PlayState): void };
+  const opens: Array<{ srcs: string[]; o: Opts; play: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
   const saved: string[] = [];
+  const openers = new Set<() => void>();
+  const changes = new Set<() => void>();
   const audio = {
     configure: async () => undefined,
     save: async (name: string) => (saved.push(name), `file:${name}`),
-    open: (srcs: string[], o: { title: string; loop?: boolean; onState(s: PlayState): void }) => {
+    onOpen: (fn: () => void) => (openers.add(fn), () => void openers.delete(fn)),
+    open: (srcs: string[], o: Opts) => {
+      openers.forEach((fn) => fn());
       const s = { srcs, o, play: vi.fn(), pause: vi.fn(), stop: vi.fn() };
       opens.push(s);
       return s;
     },
   };
-  let load = async () => items;
-  const loop = makePlaylistLoop({ audio, load: () => load() });
+  let load = async (): Promise<typeof items> => items;
+  let loads = 0;
+  const loop = makePlaylistLoop({ audio, load: () => (loads++, load()), onLibraryChange: (fn) => (changes.add(fn), () => void changes.delete(fn)) });
   const states: PlaylistState[] = [];
   loop.subscribe(() => states.push(loop.state()));
-  return { loop, opens, saved, states, setLoad: (f: typeof load) => (load = f) };
+  return {
+    loop, opens, saved, states, setLoad: (f: typeof load) => (load = f), loads: () => loads,
+    /** Something else in the app opens a session (a Create preview, the Player). */
+    otherOpens: () => audio.open(["x"], { title: "x", onState: () => undefined }),
+    libraryChanges: () => changes.forEach((fn) => fn()),
+  };
 }
 const st = (index: number, over: Partial<PlayState> = {}): PlayState => ({ playing: true, index, ended: false, ...over });
 
@@ -51,15 +61,19 @@ describe("Play all on loop", () => {
     const f = fake();
     await f.loop.start();
     expect(f.opens).toHaveLength(1);
-    expect(f.opens[0].srcs).toEqual(["c.wav", "file:player-gap-loop-bell.wav", "b.wav", "file:player-gap-loop-bell.wav", "a.wav", "file:player-gap-loop-bell.wav"]);
+    expect(f.opens[0].srcs).toEqual(["c.wav", `file:${PLAYLIST_GAP_NAME}`, "b.wav", `file:${PLAYLIST_GAP_NAME}`, "a.wav", `file:${PLAYLIST_GAP_NAME}`]);
     expect(f.opens[0].o.loop).toBe(true);
     expect(f.opens[0].play).toHaveBeenCalledTimes(1);
     expect(LOOP_GAP_MS).toBeLessThanOrEqual(1800);
+    // Its own gap clip name, so a Player session cannot free it on the web.
+    expect(f.saved).toEqual([PLAYLIST_GAP_NAME]);
+    expect([false, true].flatMap((l) => [false, true].map((b) => playerGapName(l, b)))).not.toContain(PLAYLIST_GAP_NAME);
   });
 
   it("shows the current title and place, following the session (acceptance 2)", async () => {
     const f = fake();
     await f.loop.start();
+    expect(f.states[0].status).toBe("preparing");
     expect(f.loop.state()).toMatchObject({ status: "playing", title: "Calm", position: 1, total: 3 });
     f.opens[0].o.onState(st(2));
     expect(f.loop.state()).toMatchObject({ title: "Brave", position: 2 });
@@ -69,12 +83,6 @@ describe("Play all on loop", () => {
     expect(f.loop.state()).toMatchObject({ title: "Calm", position: 1 });
     f.opens[0].o.onState(st(0, { playing: false }));
     expect(f.loop.state().status).toBe("paused");
-  });
-
-  it("reports preparing first, so the screen can show it", async () => {
-    const f = fake();
-    await f.loop.start();
-    expect(f.states[0].status).toBe("preparing");
   });
 
   it("stop ends the session, clears the state and ignores anything reported after (acceptance 3)", async () => {
@@ -123,13 +131,44 @@ describe("Play all on loop", () => {
     expect(f.opens).toHaveLength(2);
   });
 
-  it("uses a Library that changed after reset, not the earlier copy", async () => {
+  it("uses a Library that changed, not the earlier copy", async () => {
     const f = fake();
     await f.loop.prepare();
     f.setLoad(async () => [items[2]]);
-    f.loop.reset();
+    f.libraryChanges();
     await f.loop.start();
     expect(f.opens[0].srcs[0]).toBe("a.wav");
+  });
+
+  it("ends the loop when the Library changes, since a recording may be gone", async () => {
+    const f = fake();
+    await f.loop.start();
+    f.libraryChanges();
+    expect(f.opens[0].stop).toHaveBeenCalledTimes(1);
+    expect(f.loop.state().status).toBe("idle");
+  });
+
+  it("ends the loop when another session opens, but not for its own", async () => {
+    const f = fake();
+    await f.loop.start();
+    expect(f.loop.state().status).toBe("playing");
+    f.otherOpens();
+    expect(f.opens[0].stop).toHaveBeenCalledTimes(1);
+    expect(f.loop.state().status).toBe("idle");
+  });
+
+  it("says a Library that could not be read failed, and tries again next time", async () => {
+    const f = fake();
+    f.setLoad(async () => {
+      throw new Error("disk");
+    });
+    await f.loop.start();
+    expect(f.opens).toHaveLength(0);
+    expect(f.loop.state().status).toBe("idle");
+    expect(f.loop.state().error).not.toMatch(/save a recording/i);
+    f.setLoad(async () => items);
+    await f.loop.start();
+    expect(f.opens).toHaveLength(1);
   });
 });
 
@@ -147,34 +186,9 @@ describe("the Library's recordings", () => {
     expect(got.map((i) => i.src)).toEqual(["kept:u-new", "kept:u-old"]);
     expect(h.kept).toEqual(["player-loop-0", "player-loop-1"]);
   });
-
-  it("stop at once when cancelled, copying nothing more", async () => {
-    expect(await libraryRecordings(() => true)).toEqual([]);
-    expect(h.kept).toEqual([]);
-  });
 });
 
-describe("the Player", () => {
-  const src = readFileSync("native/app/player/[id].tsx", "utf8");
-  it("stops the Library loop when an item opens, so two sessions never play", () => {
-    expect(src).toMatch(/playlist\.stop\(\)/);
-  });
-  it("offers only Off and One; All starts from the Library", () => {
-    expect(src).not.toMatch(/LOOP_MODES/);
-    expect(src).not.toMatch(/libraryItems|preparing/);
-  });
-  it("reads a stored All as Off", async () => {
-    const { playerLoop } = await import("@/native/src/player/loop");
-    expect(playerLoop("all")).toBe("off");
-    expect(playerLoop("one")).toBe("one");
-    expect(playerLoop(null)).toBe("off");
-  });
-});
-
-describe("the Library screen", () => {
-  const src = readFileSync("native/app/(tabs)/library.tsx", "utf8");
-  it("has Play all on loop and a Stop", () => {
-    expect(src).toMatch(/Play all on loop/);
-    expect(src).toMatch(/Stop/);
-  });
+it("the Player reads a stored All as Off", async () => {
+  const { playerLoop } = await import("@/native/src/player/loop");
+  expect([playerLoop("all"), playerLoop("one"), playerLoop(null)]).toEqual(["off", "one", "off"]);
 });

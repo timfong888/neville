@@ -1,6 +1,5 @@
-// Copies of recordings for the Player and the Library loop (#157). The library owns its addresses and may
-// free them at any time, so a session plays its own copy. Copies are made one at a time and in order, so a
-// cancelled start's late copy can never replace a newer one's.
+// Copies of recordings for the Player and the Library loop (#157): the library may free its addresses at
+// any time, so a session plays its own copy. Made one at a time, so a late copy never replaces a newer one.
 import { newestFirst } from "@/lib/library/model";
 import { audio } from "../seams/audio";
 import { library } from "../seams/library";
@@ -9,11 +8,10 @@ import type { LoopItem } from "./loop";
 let copying: Promise<unknown> = Promise.resolve();
 
 /** Runs `fn` after the copies already queued. */
-export function inOrder<T>(fn: () => Promise<T>): Promise<T> {
+export const inOrder = <T,>(fn: () => Promise<T>): Promise<T> => {
   const next = copying.then(fn);
-  copying = next.catch(() => {});
-  return next;
-}
+  return (copying = next.catch(() => {})), next;
+};
 
 /** Every saved recording in the Library's order (newest first), each copied once. `me` is already copied. */
 export async function libraryRecordings(gone: () => boolean, me?: LoopItem<string>): Promise<LoopItem<string>[]> {

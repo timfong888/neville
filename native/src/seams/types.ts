@@ -44,4 +44,6 @@ export interface AudioSeam {
    * the session never ends by itself, and `stop` is the only way out.
    */
   open(srcs: string[], o: { title: string; loop?: boolean; onState(s: PlayState): void }): PlaySession;
+  /** Calls `fn` each time any session opens in this app, before it starts. Returns the unsubscribe. */
+  onOpen(fn: () => void): () => void;
 }
