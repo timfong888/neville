@@ -92,6 +92,9 @@ export type Made = {
   recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
 };
 
+/** The server's words, plus when a daily limit lifts: its day is the UTC date (lib/limits.ts). */
+const withReset = (e: ApiError): string => (e.code === "visitor_full" || e.code === "day_full" ? `${e.message} It resets at midnight UTC.` : e.message);
+
 /**
  * One request writes the script and records it. A refusal or failure still gives
  * a script: the server's own when only the voice failed, else a general one. It
@@ -109,7 +112,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
     };
   } catch (e) {
-    const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? e.message : "Recording is not available just now.";
+    const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
     const written = e instanceof ApiError ? scriptLines(e.lines) : null;
     const how = deviceVoice ? "in your device's own voice" : "to read";
     return {

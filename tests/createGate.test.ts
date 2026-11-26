@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountState } from "@/lib/api/client";
-import { canCreate, freeNote, gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { canCreate, createAccess, freeNote, gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
 
 const user = { id: "u1", name: "Tim", email: "t@example.com", image: null };
 const on = (u: AccountState["user"]): AccountState => ({ enabled: true, user: u });
@@ -62,5 +62,26 @@ describe("Reset demo (#164)", () => {
   });
   it("is hidden when nothing was used", () => {
     expect(showResetDemo(true, 0)).toBe(false);
+  });
+});
+
+describe("Create before the account lookup returns (#164)", () => {
+  it("waits: it is neither allowed nor blocked while the lookup is pending", () => {
+    expect(createAccess(null, false, 0)).toBe("checking");
+    expect(createAccess(null, false, 9)).toBe("checking");
+  });
+  it("signed in: allowed whatever the device count", () => {
+    expect(createAccess(on(user), true, 9)).toBe("allowed");
+  });
+  it("signed out: the device count decides, with the exact limit", () => {
+    expect(createAccess(on(null), true, 1)).toBe("allowed");
+    expect(createAccess(on(null), true, 2)).toBe("blocked");
+  });
+  it("a lookup that failed falls back to the device count, not to waiting forever", () => {
+    expect(createAccess(null, true, 0)).toBe("allowed");
+    expect(createAccess(null, true, 2)).toBe("blocked");
+  });
+  it("a known answer is kept while a newer lookup is pending", () => {
+    expect(createAccess(on(user), false, 9)).toBe("allowed");
   });
 });

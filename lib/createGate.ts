@@ -23,6 +23,16 @@ export const gateCard = (signedIn: boolean): GateCard | null =>
  */
 export const canCreate = (signedIn: boolean, used: number): boolean => signedIn || freeLeft(used) > 0;
 
+export type Access = "checking" | "allowed" | "blocked";
+
+/**
+ * Whether Create may start. `checked` is true once an account lookup has finished, answered or failed.
+ * Until then, with nothing known, Create waits rather than guess signed out. A failed lookup falls back
+ * to the device count, so Create is never stuck waiting.
+ */
+export const createAccess = (account: AccountState | null, checked: boolean, used: number): Access =>
+  !account && !checked ? "checking" : canCreate(isSignedIn(account), used) ? "allowed" : "blocked";
+
 /** The line under the wish about free creations. Empty when signed in; says what lifts the limit when used up. */
 export const freeNote = (signedIn: boolean, used: number): string =>
   signedIn ? "" : freeLeft(used) > 0 ? freeBanner(used) : `${freeBanner(used)} Create a free account to keep going.`;

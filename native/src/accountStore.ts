@@ -3,25 +3,37 @@ import { useSyncExternalStore } from "react";
 import type { AccountState } from "@/lib/api/client";
 import { api } from "./api";
 
-let account: AccountState | null = null;
+/** `checked` is true once a lookup has finished, answered or failed; until then nothing is known. */
+type View = { account: AccountState | null; checked: boolean };
+let view: View = { account: null, checked: false };
 const subs = new Set<() => void>();
 const subscribe = (f: () => void) => (subs.add(f), () => void subs.delete(f));
-const snapshot = () => account;
+const snapshot = () => view;
+const put = (next: View) => {
+  view = next;
+  subs.forEach((f) => f());
+};
 
 /** Records the latest answer from the server and tells every screen that shows it. */
 export function setAccount(next: AccountState | null): void {
-  account = next;
-  subs.forEach((f) => f());
+  put({ account: next, checked: true });
 }
 
-/** Asks the server who is signed in. A failed ask keeps what was known. Rejects so the caller can say why. */
+/** Asks the server who is signed in. A failed ask keeps what was known, marks the lookup finished, and rejects so the caller can say why. */
 export async function refreshAccount(): Promise<AccountState> {
-  const next = await api.account();
-  setAccount(next);
-  return next;
+  try {
+    const next = await api.account();
+    setAccount(next);
+    return next;
+  } catch (e) {
+    put({ ...view, checked: true });
+    throw e;
+  }
 }
 
-/** The latest known account, for code outside a component. */
-export const currentAccount = (): AccountState | null => account;
+/** What is known now, for code outside a component. */
+export const currentView = (): View => view;
 
-export const useAccount = (): AccountState | null => useSyncExternalStore(subscribe, snapshot, snapshot);
+export const useAccountView = (): View => useSyncExternalStore(subscribe, snapshot, snapshot);
+/** The latest known account, or null while unknown or signed out. */
+export const useAccount = (): AccountState | null => useAccountView().account;

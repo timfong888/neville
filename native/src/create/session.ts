@@ -3,10 +3,10 @@
 import { useSyncExternalStore } from "react";
 import { FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
-import { canCreate, isSignedIn } from "@/lib/createGate";
+import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
-import { currentAccount } from "../accountStore";
+import { currentView } from "../accountStore";
 import { api } from "../api";
 import { kv } from "../seams/kv";
 import { library } from "../seams/library";
@@ -101,11 +101,15 @@ async function generate(variant: number): Promise<void> {
 
 /** Counts one free creation. False, with the gate shown, when a signed-out user has none left. A signed-in user is not held to the count (#164). */
 function spend(): boolean {
-  const signedIn = isSignedIn(currentAccount());
-  if (!canCreate(signedIn, state.used)) {
+  const { account, checked } = currentView();
+  const access = createAccess(account, checked, state.used);
+  // Still asking who is signed in: the button is disabled meanwhile, so this is only a guard.
+  if (access === "checking") return false;
+  if (access === "blocked") {
     set({ gate: true });
     return false;
   }
+  const signedIn = isSignedIn(account);
   set({ gate: false });
   if (!signedIn) {
     set({ used: state.used + 1 });

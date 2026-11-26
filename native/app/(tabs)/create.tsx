@@ -2,8 +2,8 @@ import { useCallback } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
-import { freeNote, isSignedIn, showResetDemo } from "@/lib/createGate";
-import { refreshAccount, useAccount } from "../../src/accountStore";
+import { createAccess, freeNote, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { refreshAccount, useAccountView } from "../../src/accountStore";
 import { create, edit, load, reset, useCreate } from "../../src/create/session";
 import { colors } from "../../src/theme";
 import { Button, Gate, s } from "../../src/create/ui";
@@ -14,7 +14,9 @@ export default function Wish() {
   const c = useCreate();
   const router = useRouter();
   // The same sign-in state the Account tab keeps; it updates here when that changes (#164).
-  const signedIn = isSignedIn(useAccount());
+  const { account, checked } = useAccountView();
+  const signedIn = isSignedIn(account);
+  const checking = createAccess(account, checked, c.used) === "checking";
   // Each visit: the draft, the count, the voice, and who is signed in may have changed.
   useFocusEffect(
     useCallback(() => {
@@ -34,7 +36,8 @@ export default function Wish() {
       footer={
         <>
           {c.gate ? <Gate signedIn={signedIn} /> : null}
-          <Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />
+          {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
+          <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
         </>
       }
     >

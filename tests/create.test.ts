@@ -42,10 +42,14 @@ describe("the Create flow (#120)", () => {
     const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
     expect(m.note).toBe("A personal script could not be written just now, so this is a general one.");
   });
-  it("shows a limit refusal in the server's words, with the general script", async () => {
+  it("says when the whole day's budget resets too", async () => {
+    const m = await makeManifestation(api(new ApiError("Today's free recordings are used up. Try again tomorrow.", 429, "day_full")), wish, true);
+    expect(m.note).toBe("Today's free recordings are used up. Try again tomorrow. It resets at midnight UTC. Here is a general version in your device's own voice.");
+  });
+  it("shows a limit refusal in the server's words and when it resets, with the general script", async () => {
     const m = await makeManifestation(api(new ApiError("You have used today's free recordings.", 429, "visitor_full")), wish, true);
     expect(m.recording).toBeNull();
-    expect(m.note).toBe("You have used today's free recordings. Here is a general version in your device's own voice.");
+    expect(m.note).toBe("You have used today's free recordings. It resets at midnight UTC. Here is a general version in your device's own voice.");
     expect(m.lines).toEqual(neutralScript("Tim"));
   });
   it("keeps the server's script when only the voice failed", async () => {
