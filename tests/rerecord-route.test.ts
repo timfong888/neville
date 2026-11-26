@@ -2,6 +2,7 @@
 // No real key, no network.
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import limits from "@/config/limits.json";
 
 vi.mock("server-only", () => ({}));
 
@@ -130,7 +131,7 @@ describe("POST /api/rerecord", () => {
   });
 
   it("refuses an over-long script before any paid call", async () => {
-    const res = await POST(req({ lines: ["a".repeat(800)] }));
+    const res = await POST(req({ lines: ["a".repeat(limits.maxScriptChars + 1)] }));
     expect(res.status).toBe(400);
     expect(calls).toHaveLength(0);
   });

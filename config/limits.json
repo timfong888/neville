@@ -4,8 +4,18 @@
   "perIpPerDay": 6,
   "globalPerDay": 150,
   "maxWantChars": 280,
-  "maxScriptChars": 700,
+  "maxScriptChars": 800,
+  "scriptMinLines": 8,
+  "scriptMinWords": 70,
   "scriptModels": [
+    "x-ai/grok-4.6",
+    "anthropic/claude-sonnet-5.5"
+  ],
+  "scriptReasoningEffort": "low",
+  "scriptMaxTokens": 3000,
+  "scriptTimeoutMs": 36000,
+  "scriptTryTimeoutMs": 24000,
+  "vetModels": [
     "google/gemini-2.5-flash-lite",
     "openai/gpt-4.1-nano",
     "openai/gpt-4o-mini",

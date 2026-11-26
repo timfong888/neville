@@ -26,6 +26,8 @@ function visitor(req: Request): string {
 // The app's one paid path: a wish in, a script and its recording out.
 // Nothing is stored. Guards are in lib/server/limits.ts.
 export async function POST(req: Request) {
+  // The route has 60 s in all (maxDuration), counted from here: guards, script, voice and the ledger writes.
+  const started = Date.now();
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -76,10 +78,10 @@ export async function POST(req: Request) {
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
   const spoken = recorded.join(" ").length;
-  if (script.source === "model") {
-    // Text-model cost is not returned by the writer; at these prices it is a
-    // few thousandths of a cent, so it is recorded as unpriced.
-    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: null });
+  // A template script after paid tries is recorded too: those tries were billed.
+  if (script.source === "model" || (script.costUsd ?? 0) > 0) {
+    // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
+    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
   const speech = await synthesize({
     key,
@@ -94,7 +96,8 @@ export async function POST(req: Request) {
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
-    timeoutMs: 42_000,
+    // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
+    timeoutMs: Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))),
     atomic: voice.atomic === true,
   });
   if (!speech.ok) {

@@ -2,7 +2,7 @@
 // Fails closed: no answer means no recording.
 import "server-only";
 import { OPENROUTER } from "@/lib/server/openrouter";
-import { scriptModels } from "@/lib/server/writer";
+import { vetModels } from "@/lib/server/writer";
 import { VET_SYSTEM, verdict } from "@/lib/rerecord";
 
 export type Vet =
@@ -14,7 +14,7 @@ export type Vet =
 export async function vetScript(key: string, lines: string[]): Promise<Vet> {
   let models: string[];
   try {
-    models = await scriptModels();
+    models = await vetModels();
   } catch {
     return { ok: false, reason: "unavailable" };
   }
