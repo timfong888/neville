@@ -234,7 +234,7 @@ describe("the Create step tells the person why playback paused", () => {
     const { explain, w } = setup();
     w.appState("background", true, false);
     w.appState("active", true, false);
-    vi.advanceTimersByTime(2500);
+    vi.advanceTimersByTime(800);
     w.playing(false);
     w.appState("background", false, true);
     w.appState("active", false, true);
@@ -246,9 +246,9 @@ describe("the Create step tells the person why playback paused", () => {
     const { explain, w } = setup();
     w.appState("background", true, false);
     w.appState("active", true, false);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(200);
     w.appState("background", true, false);
-    vi.advanceTimersByTime(1500);
+    vi.advanceTimersByTime(1000);
     w.playing(false);
     expect(explain).toHaveBeenCalledTimes(1);
     vi.useRealTimers();

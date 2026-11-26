@@ -1,6 +1,7 @@
 // Decides when the Create step should say that playback was paused while the app was away (#153).
 // The pause and the return to the foreground can arrive in either order, so the note waits briefly.
-const GRACE_MS = 2000;
+// The wait is short because a pause made in the foreground in that window cannot be told apart.
+const GRACE_MS = 500;
 
 export function pauseWatch(explain: () => void) {
   let left = false;
