@@ -223,3 +223,11 @@ describe("the Create recording step loops and carries music (acceptance 2)", () 
     expect(h.beds[0]).toMatchObject({ src: "m.mp3", loop: true, volume: 0.3 });
   });
 });
+
+describe("the TestFlight build turns music on (#163)", () => {
+  it("sets EXPO_PUBLIC_MUSIC=1 in the production profile, which musicEnabled reads as on", async () => {
+    const { readFileSync } = await import("node:fs");
+    const eas = JSON.parse(readFileSync("native/eas.json", "utf8")) as { build: { production: { env?: Record<string, string> } } };
+    expect(musicEnabled(eas.build.production.env?.EXPO_PUBLIC_MUSIC)).toBe(true);
+  });
+});
