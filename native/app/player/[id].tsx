@@ -5,65 +5,39 @@ import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
+import { nowPlaying, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { inOrder } from "../../src/player/copies";
 import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
 import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, playerGapName, playerLoop } from "../../src/player/loop";
-import { playlist } from "../../src/player/playlist";
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
-import type { PlaySession } from "../../src/seams/types";
 import { colors } from "../../src/theme";
 import { Screen } from "../../src/ui/Screen";
-
-type Phase = "idle" | "playing" | "paused";
 
 const loopStore = makeLoopStore(kv);
 // The Player loops this one item. Looping the whole Library starts from the Library screen.
 const PLAYER_LOOPS: readonly LoopMode[] = ["off", "one"];
 const LOOP_LABEL: Record<LoopMode, string> = { off: "Off", one: "One", all: "All" };
 
-// The Player (#122): one saved item, opened by id. It plays the recording, then
-// plays it again for the chosen minutes with an optional bell between plays.
-// All audio goes through the audio seam, so this screen is the same on iOS and web.
+// The Player (#122): one saved item, opened by id. It starts a job on the app-level controller (#161), which
+// plays the recording, then again for the chosen minutes with an optional bell, or on a loop. The playing
+// belongs to the controller, so it goes on when this screen closes and shows here again when it reopens.
 export default function Player() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loaded, setLoaded] = useState<Manifestation | null | undefined>(undefined);
   const [minutes, setMinutes] = useState<number>(DEFAULT_REPEAT_MINUTES);
   const [bellOn, setBellOn] = useState(true);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [index, setIndex] = useState(0);
-  const [plays, setPlays] = useState(1);
-  const [note, setNote] = useState("");
   // Off or one (#157): whether this item repeats until stopped.
   const [loop, setLoop] = useState<LoopMode>(DEFAULT_LOOP);
-  // True from Play until the session is open, so the Loop control cannot change under a start in progress.
-  const [busy, setBusy] = useState(false);
   // Set once the listener picks a mode, so the stored choice, read later, does not replace it.
   const picked = useRef(false);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
-  const session = useRef<PlaySession | null>(null);
-  const starting = useRef(false);
-  // Counts the items this screen has shown, so a start that began for an old item can tell.
-  const shown = useRef(0);
-
-  const stop = (message = "") => {
-    session.current?.stop();
-    session.current = null;
-    setPhase("idle");
-    setIndex(0);
-    setNote(message);
-  };
+  const np = useNowPlaying();
 
   useEffect(() => {
     let live = true;
     voice.current = null;
     setLoaded(undefined);
-    // A new item starts idle, whatever the last one was doing.
-    setPhase("idle");
-    setIndex(0);
-    setNote("");
-    // Two sessions must never play at once: opening an item ends the Library loop.
-    playlist.stop();
     audio.configure().catch(() => {});
     picked.current = false;
     void loopStore.read().then((m) => live && !picked.current && setLoop(playerLoop(m)));
@@ -81,60 +55,40 @@ export default function Player() {
       }
       if (live) setLoaded(it);
     })();
-    return () => {
-      live = false;
-      shown.current++;
-      session.current?.stop();
-      session.current = null;
-    };
+    return () => void (live = false);
   }, [id]);
 
-  const play = async () => {
-    if (session.current) return session.current.play();
+  const play = () => {
     const v = voice.current;
-    // A second tap while the first is still starting must not open a second session.
-    if (!v || !loaded || starting.current) return;
-    starting.current = true;
-    setBusy(true);
-    const mine = shown.current;
-    try {
-      const looping = loop !== "off";
-      const repeats = looping ? 0 : repeatsFor(v.seconds, minutes);
-      const gapMs = looping ? LOOP_GAP_MS : undefined;
-      const gap = repeats || looping ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, gapMs), "audio/wav") : "";
-      const clips = looping ? loopQueue("one", [], loaded.id, gap, { id: loaded.id, src: v.src, title: loaded.title }).clips : buildQueue(v.src, gap, repeats);
-      // The screen closed or moved to another item while the clips were being made.
-      if (shown.current !== mine) return;
-      setPlays(repeats + 1);
-      setNote("");
-      const s = audio.open(clips, {
-        title: loaded.title || "Neville",
-        loop: looping,
-        onState: (st) => {
-          if (session.current !== s) return;
-          if (st.failed) return stop("This recording could not be played.");
-          if (st.ended) return stop("Finished.");
-          setIndex(st.index);
-          setPhase(st.playing ? "playing" : "paused");
-        },
-      });
-      session.current = s;
-      setPhase("playing");
-      s.play();
-    } catch (e) {
-      stop(`Could not play: ${e instanceof Error ? e.message : e}`);
-    } finally {
-      starting.current = false;
-      setBusy(false);
-    }
+    if (!v || !loaded) return;
+    const item = loaded;
+    const looping = loop === "one";
+    const repeats = looping ? 0 : repeatsFor(v.seconds, minutes);
+    void nowPlaying.play({
+      id: item.id,
+      title: item.title || "Neville",
+      route: `/player/${item.id}`,
+      empty: "",
+      prepare: async () => {
+        const gap = repeats || looping ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, looping ? LOOP_GAP_MS : undefined), "audio/wav") : "";
+        const clips = looping ? loopQueue("one", [], item.id, gap, { id: item.id, src: v.src, title: item.title }).clips : buildQueue(v.src, gap, repeats);
+        return { clips, loop: looping, at: (i) => ({ title: item.title, position: roundAt(i).round, total: repeats + 1 }) };
+      },
+    });
   };
 
   if (loaded === undefined) return <Screen><Text style={s.p}>Loading…</Text></Screen>;
   if (loaded === null) return <Screen><Text style={s.p}>This item is not saved on this device.</Text></Screen>;
 
   const item = loaded;
+  // The controller plays one thing at a time; this screen shows it only when it is this item.
+  const mine = np.id === item.id;
+  const phase = mine && (np.status === "playing" || np.status === "paused") ? np.status : "idle";
+  const busy = mine && np.status === "preparing";
+  const note = mine && np.status === "idle" ? np.note : "";
   const active = phase !== "idle";
-  const at = roundAt(index);
+  const at = roundAt(mine ? np.index : 0);
+  const plays = np.total;
   const pick = (m: LoopMode) => {
     picked.current = true;
     setLoop(m);
@@ -150,12 +104,12 @@ export default function Player() {
             style={[s.btn, s.main]}
             accessibilityRole="button"
             accessibilityLabel={phase === "playing" ? "Pause" : "Play"}
-            onPress={() => (phase === "playing" ? session.current?.pause() : play())}
+            onPress={() => (phase === "idle" ? play() : nowPlaying.toggle())}
           >
             <Text style={s.mainText}>{phase === "playing" ? "Pause" : phase === "paused" ? "Resume" : "Play"}</Text>
           </Pressable>
           {active ? (
-            <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Stop" onPress={() => stop()}>
+            <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Stop" onPress={() => nowPlaying.stop()}>
               <Text style={s.btnText}>Stop</Text>
             </Pressable>
           ) : null}

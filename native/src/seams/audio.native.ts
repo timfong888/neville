@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
-import type { AudioSeam } from "./types";
+import type { AudioSeam, PlaySession } from "./types";
 
 const ARTIST = "Neville";
 /** How long a local clip may take to load before the session is reported as failed. */
@@ -12,13 +12,10 @@ const LOAD_TIMEOUT_MS = 8000;
 export const AUDIO_MODE = { playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" } as const;
 let configured: Promise<void> | null = null;
 
-const openers = new Set<() => void>();
+// Ends the open session. One at a time: a new session ends the one before it.
+let current: (() => void) | null = null;
 
 export const audio: AudioSeam = {
-  onOpen(fn) {
-    openers.add(fn);
-    return () => void openers.delete(fn);
-  },
   // Once per launch; a failure is not remembered, so the next call tries again.
   configure() {
     configured ??= setAudioModeAsync(AUDIO_MODE).catch((e) => {
@@ -50,7 +47,7 @@ export const audio: AudioSeam = {
     }
   },
   open(srcs, o) {
-    openers.forEach((fn) => fn());
+    current?.();
     const list = createAudioPlaylist({ sources: srcs, loop: o.loop ? "all" : "none", updateInterval: 500 });
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };
@@ -86,16 +83,17 @@ export const audio: AudioSeam = {
         o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
       }, LOAD_TIMEOUT_MS);
     };
-    return {
+    const session: PlaySession = {
       play() {
         if (!open) return;
         list.play();
         guard();
       },
-      pause: () => open && list.pause(),
+      pause: () => void (open && list.pause()),
       stop() {
         if (!open) return;
         open = false;
+        if (current === end) current = null;
         if (watch) clearTimeout(watch);
         sub.remove();
         try {
@@ -105,5 +103,11 @@ export const audio: AudioSeam = {
         } catch {}
       },
     };
+    const end = () => {
+      if (open) o.onState({ playing: false, index: list.currentIndex, ended: true, replaced: true });
+      session.stop();
+    };
+    current = end;
+    return session;
   },
 };
