@@ -44,9 +44,9 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: .github/scripts/neon-preview-cleanup.sh branch "$HEAD_REF"
 
-  # Pre-open guard: when a PR opens and the project is at or above 80% of the
-  # branch limit, sweep stale preview branches first so the PR's preview can
-  # still get a branch. Does nothing below the threshold.
+  # Pre-open guard: when a PR opens, gets a push or reopens and the project is at or
+  # above 80% of the branch limit, sweep stale preview branches first so the PR's
+  # preview can still get a branch. Does nothing below the threshold.
   pre-open-guard:
     permissions:
       contents: read
@@ -56,7 +56,7 @@ jobs:
     concurrency:
       group: neon-preview-cleanup-sweep
       cancel-in-progress: false
-    if: github.event_name == 'pull_request' && github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
