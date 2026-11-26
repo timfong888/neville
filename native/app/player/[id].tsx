@@ -161,7 +161,7 @@ export default function Player() {
             disabled={active || loop !== "off"}
             style={[s.chip, minutes === m && !active && s.on, (active || loop !== "off") && s.off]}
             accessibilityRole="radio"
-            accessibilityState={{ selected: minutes === m, disabled: active || loop !== "off" }}
+            accessibilityState={{ selected: minutes === m && !active, disabled: active || loop !== "off" }}
             accessibilityLabel={m ? `${m} minutes` : "Off"}
             onPress={() => setMinutes(m)}
           >

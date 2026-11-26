@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
@@ -24,8 +24,16 @@ export default function LibraryScreen() {
   const recordings = items.filter((m) => m.hasAudio);
   // Copy the recordings ahead, and again when the Library changes, so Play all starts straight from the tap.
   const key = recordings.map((m) => `${m.id}:${m.updatedAt}`).join(",");
+  // Play waits for the copies, so it starts inside the tap: on the web a wait after the tap loses its permission to play.
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
-    if (key) playAll.prepare().catch(() => {});
+    if (!key) return;
+    let live = true;
+    setCopied(false);
+    // A failed copy is tried again by the tap itself.
+    const done = () => live && setCopied(true);
+    playAll.prepare().then(done, done);
+    return () => void (live = false);
   }, [key]);
   const busy = now.status !== "idle";
   return (
@@ -42,7 +50,7 @@ export default function LibraryScreen() {
             </>
           ) : (
             <>
-              <Button kind="primary" label="Play all on loop" onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: musicNow(music) }; } })} />
+              <Button kind="primary" label={copied ? "Play all on loop" : "Preparing playlist…"} disabled={!copied} onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: musicNow(music) }; } })} />
               {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
               <PlayOptions />
             </>
