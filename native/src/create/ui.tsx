@@ -15,11 +15,12 @@ export function Button(p: { label: string; onPress: () => void; disabled?: boole
 /** Shown when the free creations are used up. No prices: purchases come in Phase 3. A signed-in user is not asked to sign up (#164). */
 export function Gate({ signedIn }: { signedIn: boolean }) {
   const card = gateCard(signedIn);
+  if (!card) return null;
   return (
     <View style={s.card}>
       <Text style={s.h3}>{card.title}</Text>
       <Text style={s.muted}>{card.body}</Text>
-      {card.link ? <Link href={card.link.href} style={s.link}>{card.link.label}</Link> : null}
+      <Link href={card.link.href} style={s.link}>{card.link.label}</Link>
     </View>
   );
 }

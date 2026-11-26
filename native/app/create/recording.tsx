@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform, Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
-import { freeLeft } from "@/lib/create";
+import { canCreate, isSignedIn } from "@/lib/createGate";
+import { useAccount } from "../../src/accountStore";
 import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
 import { pauseWatch } from "../../src/create/pauseWatch";
@@ -13,6 +14,7 @@ import { Screen } from "../../src/ui/Screen";
 // device reads the script, or shows the lines in time.
 export default function Recording() {
   const c = useCreate();
+  const signedIn = isSignedIn(useAccount());
   const router = useRouter();
   const made = c.made;
   const [playing, setPlaying] = useState(false);
@@ -138,7 +140,7 @@ export default function Recording() {
         </Text>
         <Button small label="Change voice" onPress={() => (stop(), router.push("/create/voice"))} />
       </View>
-      {c.gate || done || freeLeft(c.used) === 0 ? <Gate /> : null}
+      {c.gate || done || !canCreate(signedIn, c.used) ? <Gate signedIn={signedIn} /> : null}
       <View style={s.row}>
         <Button small label="← Create another" onPress={back} />
       </View>

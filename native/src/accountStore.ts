@@ -21,4 +21,7 @@ export async function refreshAccount(): Promise<AccountState> {
   return next;
 }
 
+/** The latest known account, for code outside a component. */
+export const currentAccount = (): AccountState | null => account;
+
 export const useAccount = (): AccountState | null => useSyncExternalStore(subscribe, snapshot, snapshot);

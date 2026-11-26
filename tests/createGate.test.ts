@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountState } from "@/lib/api/client";
-import { gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { canCreate, freeNote, gateCard, isSignedIn, showResetDemo } from "@/lib/createGate";
 
 const user = { id: "u1", name: "Tim", email: "t@example.com", image: null };
 const on = (u: AccountState["user"]): AccountState => ({ enabled: true, user: u });
@@ -24,11 +24,32 @@ describe("the card shown when the free creations are used up (#164)", () => {
       link: { label: "Create a free account", href: "/account" },
     });
   });
-  it("signed in: says it is saved, and has no link to sign up", () => {
-    const card = gateCard(true);
-    expect(card.title).toBe("Saved to your account");
-    expect(card.link).toBeNull();
-    expect(JSON.stringify(card)).not.toMatch(/free account/i);
+  it("signed in: no card at all, so no sign-up link", () => {
+    expect(gateCard(true)).toBeNull();
+  });
+});
+
+describe("who may create (#164)", () => {
+  it("signed out: two free creations on this device, then refused", () => {
+    expect(canCreate(false, 0)).toBe(true);
+    expect(canCreate(false, 1)).toBe(true);
+    expect(canCreate(false, 2)).toBe(false);
+    expect(canCreate(false, 9)).toBe(false);
+  });
+  it("signed in: the device count never refuses", () => {
+    expect(canCreate(true, 0)).toBe(true);
+    expect(canCreate(true, 2)).toBe(true);
+    expect(canCreate(true, 50)).toBe(true);
+  });
+});
+
+describe("the free-creations line (#164)", () => {
+  it("signed out: the count, or that they are used", () => {
+    expect(freeNote(false, 1)).toBe("1 free creation left without an account.");
+    expect(freeNote(false, 2)).toBe("You have used your free creations. Create a free account to keep going.");
+  });
+  it("signed in: no line about free creations", () => {
+    expect(freeNote(true, 5)).toBe("");
   });
 });
 

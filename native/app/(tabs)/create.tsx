@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { EXAMPLES, MAX_NAME, MAX_WANT, freeBanner } from "@/lib/create";
-import { isSignedIn, showResetDemo } from "@/lib/createGate";
+import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
+import { freeNote, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccount } from "../../src/accountStore";
 import { create, edit, load, reset, useCreate } from "../../src/create/session";
 import { colors } from "../../src/theme";
@@ -80,7 +80,7 @@ export default function Wish() {
           <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
         </View>
         <View style={s.row}>
-          <Text style={s.muted}>{freeBanner(c.used)}</Text>
+          {freeNote(signedIn, c.used) ? <Text style={s.muted}>{freeNote(signedIn, c.used)}</Text> : null}
           {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}
         </View>
       </View>
