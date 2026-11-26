@@ -1,6 +1,6 @@
 {
   "generationEnabled": true,
-  "spendCeilingUsd": 2.0,
+  "spendCeilingUsd": 10.0,
   "perIpPerDay": 60,
   "globalPerDay": 150,
   "maxWantChars": 280,
