@@ -71,13 +71,12 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   try {
     session = await currentUser(req);
   } catch (e) {
-    // Auth / DB outage. With the paywall on, whoIsAsking will retry currentUser
-    // and the slot catch releases the slot on failure. With it off there is no
-    // retry path, so an outage must not silently consume a daily slot — return
-    // 503 before takeSlot rather than proceeding as anonymous.
-    if (!paywallEnabled()) {
-      return NextResponse.json({ code: "unavailable", error: "Recording is paused for a moment." }, { status: 503 });
-    }
+    // With the paywall on, an auth/DB outage is fail-closed: re-throw so the route
+    // returns a 500 rather than silently treating the caller as a non-tester.
+    // With the paywall off, the route is public; treat the caller as signed-out so
+    // normal slot limits still apply and the outage does not cause a 500.
+    if (paywallEnabled()) throw e;
+    session = null;
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);

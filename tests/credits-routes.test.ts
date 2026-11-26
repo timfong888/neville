@@ -303,10 +303,10 @@ describe("POST /api/manifest with the paywall on", () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callManifest()).status).toBe(429);
   });
-  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+  it("throws and never takes a slot when the sign-in lookup throws with the paywall on", async () => {
     lookupFails = true;
     await expect(callManifest()).rejects.toThrow("auth database down");
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(takeSlot).not.toHaveBeenCalled();
     expect(synth).not.toHaveBeenCalled();
     expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
   });
@@ -454,10 +454,10 @@ describe("POST /api/rerecord with the paywall on", () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callRerecord()).status).toBe(429);
   });
-  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+  it("throws and never takes a slot when the sign-in lookup throws with the paywall on", async () => {
     lookupFails = true;
     await expect(callRerecord()).rejects.toThrow("auth database down");
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(takeSlot).not.toHaveBeenCalled();
     expect(synth).not.toHaveBeenCalled();
   });
   it("answers 402 no_credits at balance 0, and records nothing", async () => {
@@ -558,5 +558,13 @@ describe("tester daily-slot bypass", () => {
     underCeilingOk = false;
     expect((await call()).status).toBe(503);
     expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("does not 500 on auth outage with the paywall off on %s, treats caller as non-tester", async (_name, call) => {
+    vi.stubEnv("PAYWALL_ENABLED", "");
+    lookupFails = true;
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
   });
 });
