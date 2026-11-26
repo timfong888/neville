@@ -279,3 +279,24 @@ export function costPerRecording(range: Range): CostPerRecording {
 
   return { avg, trend, sparkline: spark7 };
 }
+
+export type ModelSpend = {
+  model: string;
+  kind: MockKind;
+  totalUsd: number;
+};
+
+export function spendByModel(range: Range): ModelSpend[] {
+  const recs = recordingsInRange(range);
+  const map = new Map<string, { kind: MockKind; totalUsd: number }>();
+  for (const rec of recs) {
+    for (const c of rec.calls) {
+      const existing = map.get(c.model) ?? { kind: c.kind, totalUsd: 0 };
+      existing.totalUsd += c.estUsd;
+      map.set(c.model, existing);
+    }
+  }
+  return [...map.entries()]
+    .map(([model, v]) => ({ model, ...v }))
+    .sort((a, b) => b.totalUsd - a.totalUsd);
+}

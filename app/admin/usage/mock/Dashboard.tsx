@@ -7,6 +7,8 @@ import {
   type DayBucket,
   type RevCostDay,
   type UserCost,
+  type MockKind,
+  type ModelSpend,
   type MockRecording,
   spendPerDay,
   revenueVsCost,
@@ -14,8 +16,11 @@ import {
   creditSummary,
   costPerRecording,
   recordingsInRange,
+  spendByModel,
   MOCK_DATA,
 } from "@/lib/mock/costData";
+
+const KIND_COLORS: Record<MockKind, string> = { script: "var(--accent)", speech: "var(--good)", image: "var(--warn)" };
 
 // --- SVG chart primitives ---
 
@@ -42,16 +47,15 @@ function niceMax(v: number) {
   return ceil * exp;
 }
 
-type StackedBarChartProps = { data: DayBucket[]; ceiling: number };
+type StackedBarChartProps = { data: DayBucket[]; ceiling: number; onSegmentClick?: (date: string, kind: MockKind) => void };
 
-function StackedBarChart({ data, ceiling }: StackedBarChartProps) {
+function StackedBarChart({ data, ceiling, onSegmentClick }: StackedBarChartProps) {
   const rawMax = Math.max(...data.map((d) => d.total), ceiling);
   const maxVal = niceMax(rawMax);
   const ys = yScale(maxVal);
   const barW = data.length > 0 ? Math.max(4, IW / data.length - 2) : 20;
   const xStep = data.length > 0 ? IW / data.length : 1;
 
-  const COLORS = { script: "var(--accent)", speech: "var(--good)", image: "var(--warn)" };
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxVal);
 
   return (
@@ -80,7 +84,17 @@ function StackedBarChart({ data, ceiling }: StackedBarChartProps) {
               {(["script", "speech", "image"] as const).map((kind) => {
                 const h = (d[kind] / maxVal) * IH;
                 y -= h;
-                return <rect key={kind} x={x} y={y} width={barW} height={h} fill={COLORS[kind]} opacity={0.9} rx={1} />;
+                return (
+                  <rect
+                    key={kind}
+                    x={x} y={y} width={barW} height={h}
+                    fill={KIND_COLORS[kind]} opacity={0.9} rx={1}
+                    style={onSegmentClick ? { cursor: "pointer" } : undefined}
+                    onClick={onSegmentClick ? () => onSegmentClick(d.date, kind) : undefined}
+                    role={onSegmentClick ? "button" : undefined}
+                    aria-label={onSegmentClick ? `${kind} ${d.date} ${usd(d[kind])}` : undefined}
+                  />
+                );
               })}
               {i % Math.max(1, Math.floor(data.length / 6)) === 0 && (
                 <text x={x + barW / 2} y={IH + 14} textAnchor="middle" fontSize={9} fill="var(--muted)">{d.date.slice(5)}</text>
@@ -179,9 +193,42 @@ function Sparkline({ values }: SparklineProps) {
   );
 }
 
+// --- Model spend chart ---
+
+type ModelSpendChartProps = { data: ModelSpend[] };
+
+function ModelSpendChart({ data }: ModelSpendChartProps) {
+  const rows = data.slice(0, 7);
+  const maxVal = Math.max(...rows.map((r) => r.totalUsd), 0.01);
+  const MW = 440;
+  const MH = 220;
+  const MP = { top: 8, right: 70, bottom: 8, left: 150 };
+  const IWM = MW - MP.left - MP.right;
+  const rowH = rows.length > 0 ? Math.min(28, (MH - MP.top - MP.bottom) / rows.length) : 28;
+
+  return (
+    <svg viewBox={`0 0 ${MW} ${MH}`} width="100%" style={{ display: "block", overflow: "visible" }} aria-label="Spend by model ID">
+      <g transform={`translate(${MP.left},${MP.top})`}>
+        {rows.map((r, i) => {
+          const barLen = (r.totalUsd / maxVal) * IWM;
+          const y = i * rowH;
+          const shortName = r.model.includes("/") ? r.model.split("/")[1] : r.model;
+          return (
+            <g key={r.model}>
+              <text x={-6} y={y + rowH * 0.68} textAnchor="end" fontSize={10} fill="var(--text)">{shortName}</text>
+              <rect x={0} y={y + 2} width={barLen} height={rowH - 6} fill={KIND_COLORS[r.kind]} rx={3} opacity={0.85} />
+              <text x={barLen + 4} y={y + rowH * 0.68} fontSize={10} fill="var(--muted)">{usd(r.totalUsd)}</text>
+            </g>
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
 // --- Drill-down table ---
 
-type DrillTarget = { type: "day"; date: string } | { type: "user"; userId: string } | null;
+type DrillTarget = { type: "day"; date: string; kind: MockKind | null } | { type: "user"; userId: string } | null;
 
 function DrillTable({ target, range }: { target: DrillTarget; range: Range }) {
   if (!target) return null;
@@ -190,17 +237,24 @@ function DrillTable({ target, range }: { target: DrillTarget; range: Range }) {
   let filtered: MockRecording[];
 
   if (target.type === "day") {
-    filtered = recs.filter((r) => new Date(r.at).toISOString().slice(0, 10) === target.date);
+    filtered = recs.filter((r) => {
+      if (new Date(r.at).toISOString().slice(0, 10) !== target.date) return false;
+      if (target.kind) return r.calls.some((c) => c.kind === target.kind);
+      return true;
+    });
   } else {
     filtered = recs.filter((r) => r.userId === target.userId);
   }
 
   const user = target.type === "user" ? MOCK_DATA.users.find((u) => u.id === target.userId) : null;
+  const kindLabel = target.type === "day" && target.kind
+    ? `${target.kind.charAt(0).toUpperCase() + target.kind.slice(1)} r`
+    : "R";
 
   return (
     <div style={{ marginTop: 24 }}>
       <h3 style={{ margin: "0 0 8px", fontSize: 14, color: "var(--muted)" }}>
-        {target.type === "day" ? `Recordings on ${target.date}` : `Recordings by ${user?.name ?? target.userId}`}
+        {target.type === "day" ? `${kindLabel}ecordings on ${target.date}` : `Recordings by ${user?.name ?? target.userId}`}
       </h3>
       <div className="tablewrap">
         <table>
@@ -253,10 +307,15 @@ export default function Dashboard() {
   const users = topUsers(range);
   const credits = creditSummary();
   const cpr = costPerRecording(range);
+  const models = spendByModel(range);
   const totalCost = days.reduce((s, d) => s + d.total, 0);
 
-  function handleBarClick(date: string) {
-    setDrill((prev) => prev?.type === "day" && prev.date === date ? null : { type: "day", date });
+  function handleBarClick(date: string, kind: MockKind) {
+    setDrill((prev) =>
+      prev?.type === "day" && prev.date === date && prev.kind === kind
+        ? null
+        : { type: "day", date, kind }
+    );
   }
 
   function handleUserClick(userId: string) {
@@ -306,7 +365,7 @@ export default function Dashboard() {
       </div>
 
       {/* Legend */}
-      <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
         {[
           { color: "var(--accent)", label: "Script" },
           { color: "var(--good)", label: "Speech" },
@@ -317,6 +376,7 @@ export default function Dashboard() {
             {label}
           </span>
         ))}
+        <span style={{ fontSize: 11, color: "var(--muted)", alignSelf: "center" }}>— click segment to filter by kind</span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--warn)" }}>
           <span style={{ width: 20, height: 2, background: "var(--warn)", display: "inline-block" }} /> $2.00 ceiling
         </span>
@@ -326,7 +386,7 @@ export default function Dashboard() {
       <div className="dash-top-row" style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 12, marginBottom: 12 }}>
         <div className="card" style={{ padding: 12 }}>
           <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>Spend / day — {range}</p>
-          <StackedBarChart data={days} ceiling={CEILING} />
+          <StackedBarChart data={days} ceiling={CEILING} onSegmentClick={handleBarClick} />
           <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--muted)", textAlign: "right" }}>
             Total in range: <strong>{usd(totalCost)}</strong>
           </p>
@@ -356,6 +416,14 @@ export default function Dashboard() {
         <div className="card" style={{ padding: 12 }}>
           <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--muted)" }}>Top users by cost — click to drill down</p>
           <HBarChart data={users} onClickUser={handleUserClick} />
+        </div>
+      </div>
+
+      {/* Model spend row */}
+      <div style={{ marginBottom: 12 }}>
+        <div className="card" style={{ padding: 12 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>Spend by model — {range}</p>
+          <ModelSpendChart data={models} />
         </div>
       </div>
 
