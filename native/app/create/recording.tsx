@@ -44,6 +44,7 @@ export default function Recording() {
     stopper.current = null;
     pausedRef.current = false;
     watch.reset();
+    pauseNote.current = false;
     setPlaying(false);
     setPaused(false);
   }, [watch]);
