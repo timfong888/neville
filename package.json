@@ -10,7 +10,8 @@
     "test": "vitest run",
     "migrate": "node scripts/migrate.mjs --force",
     "eval:scripts": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts",
-    "eval:compare": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts evals/scripts-compare.eval.ts"
+    "eval:compare": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts evals/scripts-compare.eval.ts",
+    "eval:audio": "NODE_USE_ENV_PROXY=1 vitest run --config evals/vitest.config.ts evals/audio-length.eval.ts"
   },
   "dependencies": {
     "@better-auth/expo": "^1.7.27",

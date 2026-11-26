@@ -78,7 +78,8 @@ export async function POST(req: Request) {
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
   const spoken = recorded.join(" ").length;
-  if (script.source === "model") {
+  // A template script after paid tries is recorded too: those tries were billed.
+  if (script.source === "model" || (script.costUsd ?? 0) > 0) {
     // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
     await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }

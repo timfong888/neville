@@ -78,7 +78,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   // model's reply, an error message (some echo the body) or the key.
   const template = (): Script => {
     console.warn("[script_fallback]", JSON.stringify({ ...failure, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
-    return { lines: neutralScript(opts.name), source: "template", refrain: DEFAULT_REFRAIN };
+    return { lines: neutralScript(opts.name), source: "template", costUsd: cost, refrain: DEFAULT_REFRAIN };
   };
   try {
     const models = await scriptModels();

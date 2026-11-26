@@ -208,10 +208,11 @@ describe("script setup, old vs new (#170)", async () => {
   it("no new script has a slogan or stacked abstract nouns", () => {
     expect(fresh.filter((r) => r.grammar).map((r) => `${r.wish}: ${r.grammar}`)).toEqual([]);
   });
-  it("new scripts end on the closing line and are longer than the old cap", () => {
+  it("new scripts end on the closing line, are longer than the old cap, and short enough to record (npm run eval:audio)", () => {
     for (const r of fresh.filter((x) => x.source === "model")) {
       expect(r.lines.at(-1), r.wish).toBe(CLOSING);
-      expect(r.words, r.wish).toBeGreaterThan(110);
+      expect(r.words, r.wish).toBeGreaterThan(70);
+      expect(r.lines.join(" ").length, r.wish).toBeLessThanOrEqual(limits.maxScriptChars);
     }
   });
   it("new scripts are at least as visual and as grammatical as the old ones, by the judge", () => {

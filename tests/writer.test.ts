@@ -52,7 +52,7 @@ beforeAll(async () => {
       }
       // A 200 that is not JSON, and carries text that must never reach a log.
       if (reply === "garbage") return res.end(`${GARBAGE} <html>`);
-      const content = reply === "badrefrain" ? GOOD + "\nRefrain: You feel sensual and seductive." : reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Thank you, thank you, thank you.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : GOOD;
+      const content = reply === "badrefrain" ? GOOD + "\nRefrain: You feel sensual and seductive." : reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Take a slow breath in, and let it go.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : GOOD;
       res.end(JSON.stringify({ choices: [{ message: { content } }] }));
     });
   });

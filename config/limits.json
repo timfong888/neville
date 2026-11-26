@@ -4,9 +4,9 @@
   "perIpPerDay": 6,
   "globalPerDay": 150,
   "maxWantChars": 280,
-  "maxScriptChars": 2400,
-  "scriptMinLines": 10,
-  "scriptMinWords": 120,
+  "maxScriptChars": 800,
+  "scriptMinLines": 8,
+  "scriptMinWords": 70,
   "scriptModels": [
     "x-ai/grok-4.6",
     "anthropic/claude-sonnet-5.5"
