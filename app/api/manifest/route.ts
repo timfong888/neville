@@ -79,7 +79,7 @@ export async function POST(req: Request) {
   if (script.source === "model") {
     // Text-model cost is not returned by the writer; at these prices it is a
     // few thousandths of a cent, so it is recorded as unpriced.
-    await record({ route: "manifest", kind: "script", model: script.model ?? null, chars: spoken, estUsd: null });
+    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: null });
   }
   const speech = await synthesize({
     key,
