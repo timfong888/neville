@@ -6,6 +6,7 @@ import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/crea
 import { refreshAccount, useAccountView } from "../../src/accountStore";
 import { create, clearPaywallError, edit, load, reset, useCreate } from "../../src/create/session";
 import { PAYWALL_ENABLED } from "../../src/config";
+import { shouldShowPaywall } from "@/lib/paywall";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
 import { PaywallSheet } from "../../src/paywall/PaywallSheet";
@@ -113,7 +114,7 @@ export default function Wish() {
           </View>
         </View>
       </Screen>
-      {PAYWALL_ENABLED && c.paywallError?.type === "no_credits" && credits ? (
+      {PAYWALL_ENABLED && c.paywallError?.type === "no_credits" && shouldShowPaywall(credits) ? (
         <PaywallSheet
           credits={credits}
           purchaseClient={mockPurchaseClient}
