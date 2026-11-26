@@ -132,6 +132,16 @@ export function lineAt(starts: number[], at: number): number {
   return i;
 }
 
+/**
+ * Which script line is spoken at progress `at` (0–1) in a Player queue clip at `index`.
+ * The queue alternates recording clips (even indices) and gap clips (odd indices).
+ * Returns null for a gap clip — the line display should hold its last value instead.
+ */
+export function lineForProgress(index: number, at: number, starts: number[]): number | null {
+  if (index % 2 === 1) return null; // gap clip between recordings
+  return lineAt(starts, at);
+}
+
 /** The Library item for a result, as the website's Save builds it. */
 export function toManifestation(made: Made, w: Draft, id: string, now = Date.now()): Manifestation {
   return {
