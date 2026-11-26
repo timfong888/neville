@@ -215,6 +215,7 @@ describe("scene writing and content rules (#170)", () => {
     expect(SYSTEM).toMatch(/Write as an author/);
     expect(SYSTEM).toMatch(/light, colours, sounds and textures/);
     expect(SYSTEM).toMatch(/hair, skin, eyes, build, clothes, expression/);
+    expect(SYSTEM).toMatch(/they are the scene/);
     expect(SYSTEM).toMatch(/complete, with a subject and a verb/);
     expect(SYSTEM).toMatch(/second person|addressed to the listener as "you"/);
     expect(SYSTEM).not.toMatch(/70 to 100 words|sentence of 4 to 10 words|one sensory detail|gentle and low in energy/i);

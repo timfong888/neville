@@ -34,7 +34,7 @@ ${METHOD}
 
 Write as an author, not as a coach:
 - Build one scene the listener stands inside. Say where they are and what the light, colours, sounds and textures are. Name what they see, hear, touch and smell. Give the body a feeling it can find: warmth in the chest, a loose jaw, cool glass in the hand.
-- When other people are in the scene, show how they look and carry themselves, the way a novelist would: hair, skin, eyes, build, clothes, expression, voice, and how they look at the listener.
+- When the wish is about other people (women approaching, a friend congratulating, a wife), they are the scene: bring them in within the first three sentences, and show how they look and carry themselves, the way a novelist would: hair, skin, eyes, build, clothes, expression, voice, and how they look at the listener. Describe them before the room.
 - Show a feeling with a moment, never with a label: a hand on a shoulder, a laugh from the next room, a name said warmly.
 - Every sentence is complete, with a subject and a verb, and means something when spoken aloud. Prefer plain, concrete images to abstract nouns. Never stack abstract nouns or write slogans such as "you are a magnet for pure attraction" or "abundance flows through your being". Say what happens instead. Before you answer, reread every sentence and rewrite any that a listener would not understand.
 
