@@ -6,6 +6,10 @@ import { library } from "../../src/seams/library";
 import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
+import { ImageGallery } from "../../src/image/Gallery";
+
+/** Off unless the build sets EXPO_PUBLIC_IMAGES=1. */
+const IMAGES_ENABLED = process.env.EXPO_PUBLIC_IMAGES === "1";
 
 // One saved item: play it, edit its title and script, or delete it. Re-record comes in Phase 2.
 export default function LibraryDetail() {
@@ -98,6 +102,7 @@ export default function LibraryDetail() {
             {m.hasAudio ? `Recorded in the voice of ${m.voiceName}.` : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`} Saved {new Date(m.createdAt).toLocaleDateString()}.
           </Text>
           <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
+          {IMAGES_ENABLED ? <ImageGallery wish={m.want} /> : null}
           <View style={s.script}>
             {m.lines.map((l, i) => (
               <Text key={i} style={type.body}>{l}</Text>
