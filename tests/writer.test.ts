@@ -121,6 +121,23 @@ describe("writeScript", () => {
     expect(asked).toHaveLength(2);
   });
 
+  it("never sends a romantic wish about a minor to a model: the neutral script, no call, no wish in the log", async () => {
+    plan = {};
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    const logged = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    warn.mockRestore();
+    expect(s.source).toBe("template");
+    expect(asked).toHaveLength(0);
+    expect(logged).toContain('"reason":"withheld"');
+    expect(logged).not.toMatch(/classmate|kiss|15/);
+  });
+
+  it("records no cost when the reply carries none, not a cost of zero", async () => {
+    plan = {};
+    expect((await write()).costUsd).toBeNull();
+  });
+
   it("never lets a neutral wish come back sensual: asks again, then uses the template", async () => {
     plan = { [M1]: ["sensual", "ok"] };
     const again = await write(0, "my journey across Japan");

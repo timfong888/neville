@@ -6,7 +6,7 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -57,7 +57,7 @@ export type Script = {
 };
 
 /** Why the last try did not give a script. */
-type Failure = { reason: "http_status" | "timeout" | "unusable_reply" | "exception" | "no_model"; status?: number; error?: string };
+type Failure = { reason: "http_status" | "timeout" | "unusable_reply" | "exception" | "no_model" | "withheld"; status?: number; error?: string };
 
 /** A timeout or abort is a timeout; anything else is an exception, named by class only. */
 function classify(e: unknown): Failure {
@@ -73,13 +73,19 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   let failure: Failure = { reason: "no_model" };
   // Billed so far across tries that gave no script, so the one that did reports the whole cost.
   let cost = 0;
+  let priced = false;
   // The fallback never repeats the wish: see neutralScript. It logs one line
   // saying why, from numbers and names only: never the wish, the name, the
   // model's reply, an error message (some echo the body) or the key.
   const template = (): Script => {
     console.warn("[script_fallback]", JSON.stringify({ ...failure, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
-    return { lines: neutralScript(opts.name), source: "template", costUsd: cost, refrain: DEFAULT_REFRAIN };
+    return { lines: neutralScript(opts.name), source: "template", costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
+  // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
+  if (wishSexualisesMinor(opts.want)) {
+    failure = { reason: "withheld" };
+    return template();
+  }
   try {
     const models = await scriptModels();
     // Up to two tries within the time box (config/limits.json scriptTimeoutMs). A model that is rate-limited or down
@@ -144,8 +150,11 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
-      cost += typeof json.usage?.cost === "number" ? json.usage.cost : 0;
-      if (lines) return { lines, source: "model", model, costUsd: cost, refrain: safeRefrain(parts?.refrain ?? null, opts.want) };
+      if (typeof json.usage?.cost === "number") {
+        cost += json.usage.cost;
+        priced = true;
+      }
+      if (lines) return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want) };
       failure = { reason: "unusable_reply", status: res.status };
       variant++;
     }

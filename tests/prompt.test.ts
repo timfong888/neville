@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -224,7 +224,7 @@ describe("scene writing and content rules (#170)", () => {
     expect(SYSTEM).not.toMatch(/anything hateful, harassing, or sexual|hateful or sexual/);
     expect(SYSTEM).toMatch(/Never turn a script toward sex or attraction on your own/);
     expect(SYSTEM).toMatch(/"sensual" field says whether sensual detail is allowed/);
-    expect(SYSTEM).toMatch(/Never write explicit sexual acts, nudity, or sexual content about anyone under 18/);
+    expect(SYSTEM).toMatch(/Never write explicit sexual acts or nudity/);
   });
   it("keeps the length limit and the models in config, not in code", () => {
     expect(limits.maxScriptChars).toBeGreaterThan(700);
@@ -316,6 +316,20 @@ describe("sexual content (#170)", () => {
   });
   it("book lovers and dog lovers are not sexual terms", () => {
     expect(sexualIn(["You and your wife are lovers of the sea.", "Book lovers fill the shop."], "I want a calm home by the sea")).toBeNull();
+  });
+  it("every way of writing an age under 18 blocks the exception, even with an adult cue", () => {
+    for (const wish of ["A romantic night with my partner, she is 16 yrs", "A romantic evening with my sixteen-year-old partner", "Romantic night with my partner who is 15 y.o.", "an intimate evening with my partner, 17 y/o", "a romantic evening with my partner, aged fourteen", "a romantic evening with my partner, thirteen years old"]) {
+      expect(wishAsksForIntimacy(wish), wish).toBe(false);
+      expect(wishSexualisesMinor(wish), wish).toBe(true);
+    }
+    expect(wishAsksForIntimacy("a romantic night with my wife of 30 years")).toBe(true);
+    expect(wishSexualisesMinor("a romantic night with my wife of 30 years")).toBe(false);
+    expect(wishSexualisesMinor("I want my daughter to sleep well")).toBe(false);
+    expect(wishSexualisesMinor("I want to kiss my 15 year old classmate")).toBe(true);
+  });
+  it("the prompt sends romantic wishes about minors to a peace affirmation, not a nearest scene", () => {
+    expect(SYSTEM).toMatch(/Never write anything romantic or sexual about anyone under 18[^]*gentle affirmation of peace/);
+    expect(SYSTEM).not.toMatch(/under 18\. If a wish asks for that, write the nearest/);
   });
   it("ordinary scene words are not sexual terms", () => {
     for (const l of ["A strip of morning light lies across the floor.", "The striped awning flaps.", "Her hair is lustrous in the lamplight.", "A sea breeze arouses the curtains.", "The wind moans in the chimney.", "A pen sits in his breast pocket.", "You eat chicken breast with rice."]) {
