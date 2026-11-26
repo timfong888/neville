@@ -8,8 +8,10 @@ export type PlayState = {
   playing: boolean;
   /** Position in the list of clips given to `open`. */
   index: number;
-  /** True once, when the last clip has finished. Never true in a looping session. */
+  /** True once, when the last clip has finished, or when another session replaced this one. Never true for a loop's own end. */
   ended: boolean;
+  /** True with `ended` when another session opened and ended this one. */
+  replaced?: boolean;
   /** True once, when a clip could not be loaded or decoded. The session has stopped playing. */
   failed?: boolean;
   /** How far through the current clip, 0 to 1, when the engine knows. */
@@ -42,6 +44,11 @@ export interface AudioSeam {
    * them, so it continues with the screen locked. It starts paused. The title
    * is shown on the lock screen. With `loop`, the first clip plays again after the last,
    * the session never ends by itself, and `stop` is the only way out.
+   * One session at a time: opening one ends the one before it, which gets `ended` and `replaced`.
+   * `music` is a looping track under the voice, at `volume` (0 to 1). It starts, pauses and stops with the session.
    */
-  open(srcs: string[], o: { title: string; loop?: boolean; onState(s: PlayState): void }): PlaySession;
+  open(srcs: string[], o: { title: string; loop?: boolean; music?: { src: string | number; volume: number }; onState(s: PlayState): void }): PlaySession;
+  /** How many sessions have opened so far. A caller that sees it change while it waits knows another session took over. */
+  opened(): number;
+
 }

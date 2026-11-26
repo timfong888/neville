@@ -1,8 +1,12 @@
+import { useEffect, useState } from "react";
 import { Link, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
+import { musicNow, useMusic } from "../../src/player/musicStore";
+import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
+import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
 
@@ -13,9 +17,49 @@ export default function LibraryScreen() {
   const { lib, ready, error, reload } = useLibrary();
   const router = useRouter();
   const items = newestFirst(lib.manifestations);
+  const np = useNowPlaying();
+  const music = useMusic();
+  // The controller plays one thing at a time; this card shows it only when it is the Library loop.
+  const now = np.id === "all" ? np : { ...np, status: "idle" as const, note: "" };
+  const recordings = items.filter((m) => m.hasAudio);
+  // Copy the recordings ahead, and again when the Library changes, so Play all starts straight from the tap.
+  const key = recordings.map((m) => `${m.id}:${m.updatedAt}`).join(",");
+  // Play waits for the copies, so it starts inside the tap: on the web a wait after the tap loses its permission to play.
+  const [copied, setCopied] = useState(false);
+  // Any Library change drops the copies, whether or not the recordings' key changed.
+  const [made, setMade] = useState(0);
+  useEffect(() => playAll.subscribe(() => setMade((n) => n + 1)), []);
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    setCopied(false);
+    // A failed copy is tried again by the tap itself.
+    const done = () => live && setCopied(true);
+    playAll.prepare().then(done, done);
+    return () => void (live = false);
+  }, [key, made]);
+  const busy = now.status !== "idle";
   return (
     <Screen title="My manifestations">
       <Text style={type.muted}>Everything you have saved, newest first. Saved on this device only.</Text>
+      {recordings.length > 0 ? (
+        <View style={s.card}>
+          {busy ? (
+            <>
+              <Text style={type.body} accessibilityLiveRegion="polite">
+                {now.status === "preparing" ? "Getting your playlist ready…" : `${now.status === "paused" ? "Paused" : "Playing all on loop"}: ${now.title} (${now.position} of ${now.total})`}
+              </Text>
+              <Button label="Stop" onPress={() => nowPlaying.stop()} />
+            </>
+          ) : (
+            <>
+              <Button kind="primary" label={copied ? "Play all on loop" : "Preparing playlist…"} disabled={!copied} onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: musicNow(music) }; } })} />
+              {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
+              <PlayOptions />
+            </>
+          )}
+        </View>
+      ) : null}
       {!ready ? null : error ? (
         <View style={s.card}>
           <Text style={type.body}>{error}</Text>

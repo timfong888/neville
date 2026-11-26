@@ -9,7 +9,7 @@ import type { KV } from "@/native/src/seams/kv.types";
 import type { PlayState } from "@/native/src/seams/types";
 
 const h = vi.hoisted(() => ({
-  made: [] as Array<{ opts: { sources: string[]; loop?: string }; emit(s: Record<string, unknown>): void }>,
+  made: [] as Array<{ opts: { sources: string[]; loop?: string }; emit(s: Record<string, unknown>): void; destroy: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock("expo-audio", () => ({
   setAudioModeAsync: vi.fn(),
@@ -127,6 +127,16 @@ describe("the phone seam", () => {
     expect(seen.at(-1)?.ended).toBe(true);
   });
 
+  it("one session at a time: opening one ends the one before, which is told it was replaced (#161)", async () => {
+    const { audio } = await import("@/native/src/seams/audio.native");
+    const first: PlayState[] = [];
+    audio.open(["a"], { title: "a", onState: (s) => first.push(s) });
+    audio.open(["b"], { title: "b", onState: () => undefined });
+    expect(h.made[0].destroy).toHaveBeenCalled();
+    expect(first.at(-1)).toMatchObject({ playing: false, ended: true, replaced: true });
+    expect(h.made[1].destroy).not.toHaveBeenCalled();
+  });
+
   it("loops the whole playlist and never reports an end, so the Player does not stop it", async () => {
     const { list, seen } = await open(true);
     expect(list.opts.loop).toBe("all");
@@ -174,6 +184,15 @@ describe("the web seam", () => {
     el.onended?.();
     return { el, seen };
   };
+
+  it("one session at a time: opening one ends the one before, which is told it was replaced (#161)", async () => {
+    const { audio } = await import("@/native/src/seams/audio.web");
+    const seen: PlayState[] = [];
+    audio.open(["a"], { title: "a", onState: (x) => seen.push(x) }).play();
+    audio.open(["b"], { title: "b", onState: () => undefined });
+    expect(FakeAudio.all[0].pause).toHaveBeenCalled();
+    expect(seen.at(-1)).toMatchObject({ playing: false, ended: true, replaced: true });
+  });
 
   it("stops at the end without loop", async () => {
     const { seen } = await run();

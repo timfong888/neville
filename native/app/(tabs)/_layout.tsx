@@ -1,6 +1,8 @@
 import { Tabs } from "expo-router";
+import { BottomTabBar } from "expo-router/build/layouts/Tabs";
 import { Platform, Text } from "react-native";
 import { colors } from "../../src/theme";
+import { NowPlayingBar } from "../../src/ui/NowPlayingBar";
 
 const TABS = [
   { name: "create", title: "Create", glyph: "＋" },
@@ -12,6 +14,13 @@ const TABS = [
 export default function TabsLayout() {
   return (
     <Tabs
+      // The now-playing bar (#161) sits just above the tab bar on every tab.
+      tabBar={(props) => (
+        <>
+          <NowPlayingBar />
+          <BottomTabBar {...props} />
+        </>
+      )}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
