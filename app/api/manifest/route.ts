@@ -7,7 +7,7 @@ import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
-import { isUnlimited } from "@/lib/credits";
+import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
@@ -70,9 +70,14 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   let session: Awaited<ReturnType<typeof currentUser>> | undefined;
   try {
     session = await currentUser(req);
-  } catch {
-    // Keep the existing guards and retry the lookup below, so an auth outage
-    // cannot spend a daily slot and still preserves its original refusal order.
+  } catch (e) {
+    // Auth / DB outage. With the paywall on, whoIsAsking will retry currentUser
+    // and the slot catch releases the slot on failure. With it off there is no
+    // retry path, so an outage must not silently consume a daily slot — return
+    // 503 before takeSlot rather than proceeding as anonymous.
+    if (!paywallEnabled()) {
+      return NextResponse.json({ code: "unavailable", error: "Recording is paused for a moment." }, { status: 503 });
+    }
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
