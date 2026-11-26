@@ -174,7 +174,7 @@ describe("POST /api/rerecord", () => {
         headers: { "Content-Type": "application/json", "x-real-ip": ip },
         body: JSON.stringify(script),
       });
-    for (let i = 0; i < 6; i++) expect((await POST(from("10.9.9.9"))).status).toBe(422);
+    for (let i = 0; i < limits.perIpPerDay; i++) expect((await POST(from("10.9.9.9"))).status).toBe(422);
     calls = [];
     expect((await POST(from("10.9.9.9"))).status).toBe(429);
     expect(paths()).not.toContain("/chat/completions");
