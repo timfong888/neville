@@ -7,3 +7,4 @@ import Constants from "expo-constants";
  */
 export const API_URL = Platform.OS === "web" ? "" : (process.env.EXPO_PUBLIC_API_URL ?? "https://getneville.vercel.app");
 export const appVersion = Constants.expoConfig?.version ?? "dev";
+export const PAYWALL_ENABLED = process.env.EXPO_PUBLIC_PAYWALL === "1";

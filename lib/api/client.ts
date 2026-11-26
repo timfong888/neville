@@ -4,6 +4,22 @@
 // keeps its session in secure storage rather than in a browser cookie jar.
 import { type Library, type Manifestation, type Playlist, parseLibrary } from "@/lib/library/model";
 
+export type PackInfo = { id: string; credits: number; price: string };
+export type CreditsResponse = {
+  balance: number;
+  unlimited: boolean;
+  paywallEnabled: boolean;
+  signInRequired: boolean;
+  packs: PackInfo[];
+};
+
+/** Safe fields retained from an unsuccessful API response. */
+export type ApiErrorData = {
+  code?: string;
+  balance?: number;
+  creditReturned?: boolean;
+};
+
 export type AccountState = {
   enabled: boolean;
   user: { id: string; name: string; email: string; image: string | null } | null;
@@ -30,6 +46,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly lines?: string[],
+    readonly data?: ApiErrorData,
   ) {
     super(message);
     this.name = "ApiError";
@@ -90,9 +107,16 @@ export function createApi(opts: ApiOptions) {
     const extra = (await opts.headers?.()) ?? {};
     const res = await doFetch(`${base}${path}`, { cache: "no-store", ...(opts.credentials ? { credentials: opts.credentials } : {}), ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
     if (res.ok) return res;
-    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown } | null;
+    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown } | null;
     const lines = Array.isArray(j?.lines) && j.lines.every((l) => typeof l === "string") ? (j.lines as string[]) : undefined;
-    throw new ApiError(j?.error ?? `Request failed (${res.status}).`, res.status, j?.code, lines);
+    const data = j
+      ? {
+          ...(typeof j.code === "string" ? { code: j.code } : {}),
+          ...(typeof j.balance === "number" ? { balance: j.balance } : {}),
+          ...(j.creditReturned === true ? { creditReturned: true } : {}),
+        }
+      : undefined;
+    throw new ApiError(j?.error ?? `Request failed (${res.status}).`, res.status, j?.code, lines, data);
   }
 
   const json = (body: unknown): RequestInit => ({
@@ -135,6 +159,10 @@ export function createApi(opts: ApiOptions) {
     /** Records an existing script again, in one voice. */
     async rerecord(lines: string[], voiceId: string): Promise<Recording> {
       return recording(await call("/api/rerecord", json({ lines, voiceId })), lines);
+    },
+
+    async credits(): Promise<CreditsResponse> {
+      return (await (await call("/api/credits")).json()) as CreditsResponse;
     },
 
     async voices(): Promise<unknown> {
