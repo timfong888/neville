@@ -232,6 +232,23 @@ describe("creditsSpecialCounts", () => {
     expect(counts.sandboxCapped).toBe(0);
   });
 
+  it("sandbox-capped row is not reclassified when a later grant creates the once_key", async () => {
+    // A capped row is written first (balance near cap; once_key stays null)
+    await pg.query(
+      `insert into credit_ledger (user_id, delta, reason, product_id, source_id, once_key, environment)
+       values ('alice', 0, 'purchase', 'starter', 'evt_capped', null, 'SANDBOX')`,
+    );
+    // A later successful sandbox starter grant writes the once_key
+    await pg.query(
+      `insert into credit_ledger (user_id, delta, reason, product_id, source_id, once_key, environment)
+       values ('alice', 20, 'purchase', 'starter', 'evt_granted', 'starter:sandbox', 'SANDBOX')`,
+    );
+    const counts = await creditsSpecialCounts(db);
+    // The earlier capped row must not be reclassified as alreadyOwned by the later grant
+    expect(counts.sandboxCapped).toBe(1);
+    expect(counts.alreadyOwned).toBe(0);
+  });
+
   it("counts sandbox_capped rows", async () => {
     // Exhaust the sandbox cap (100 credits) then try one more
     for (let i = 0; i < 10; i++) {
