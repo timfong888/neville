@@ -21,8 +21,8 @@ The sweep only deletes `preview/*` branches whose git branch has no open PR.
 It never touches `main`, the default, primary or protected Neon branch.
 
 **If the sweep deleted nothing** and the error persists, every branch belongs to an open
-PR. Do not delete Neon branches by hand. Report to the orchestrator: close or merge
-PRs until at most 6 are open, then re-run the deployment.
+PR. Do not delete Neon branches by hand. Report to the orchestrator: merging or closing
+PRs frees branches. Then re-run the deployment.
 
 ## Why it should be rare
 
