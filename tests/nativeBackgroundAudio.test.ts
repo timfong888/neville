@@ -59,6 +59,7 @@ vi.mock("expo-file-system", () => ({
 
 import { AUDIO_MODE, audio } from "@/native/src/seams/audio.native";
 import { play } from "@/native/src/create/playback";
+import { pauseWatch } from "@/native/src/create/pauseWatch";
 
 const made = (recording: Made["recording"]): Made => ({ lines: ["a", "b", "c"], title: "Calm", note: "", recording });
 const rec = { audio: new ArrayBuffer(8), mime: "audio/mpeg", voiceId: "v", voiceName: "Voice", starts: [0, 0.4, 0.8] };
@@ -115,6 +116,26 @@ describe("the Create step plays through the seam", () => {
     expect(spy).toHaveBeenCalled();
     expect(h.lists).toHaveLength(1);
     spy.mockRestore();
+  });
+  it("still plays, and says so on screen, when the background mode could not be set", async () => {
+    const spy = vi.spyOn(audio, "configure").mockRejectedValueOnce(new Error("no session"));
+    const onWarn = vi.fn();
+    const ev = { ...events(), onWarn };
+    play(made(rec), ev);
+    await tick();
+    expect(onWarn).toHaveBeenCalledWith(expect.stringMatching(/background/i));
+    expect(ev.onError).not.toHaveBeenCalled();
+    expect(h.lists[0].play).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+  it("puts the lock screen controls up again once playing starts, once", async () => {
+    play(made(rec), events());
+    await tick();
+    const set = h.lists[0].setActiveForLockScreen;
+    expect(set).toHaveBeenCalledTimes(1);
+    h.lists[0].emit({ playing: true });
+    h.lists[0].emit({ playing: true, currentTime: 1, duration: 10 });
+    expect(set).toHaveBeenCalledTimes(2);
   });
   it("follows the line from the playback position and ends when the clip ends", async () => {
     const ev = events();
@@ -175,6 +196,73 @@ describe("the Create step plays through the seam", () => {
     pb.stop();
     await tick();
     expect(h.lists).toHaveLength(0);
+  });
+});
+
+describe("the Create step tells the person why playback paused", () => {
+  const setup = () => {
+    vi.useFakeTimers();
+    const explain = vi.fn();
+    return { explain, w: pauseWatch(explain) };
+  };
+  it("explains a pause reported while away, once", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("explains a pause reported after the app is back in front, within the grace period", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    expect(explain).not.toHaveBeenCalled();
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("explains a pause already seen when the app returns", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", false, true);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("says nothing for a pause long after the return, or one that began before leaving", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    vi.advanceTimersByTime(800);
+    w.playing(false);
+    w.appState("background", false, true);
+    w.appState("active", false, true);
+    w.playing(false);
+    expect(explain).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it("keeps the note for a second trip away within the grace period of the first return", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    vi.advanceTimersByTime(200);
+    w.appState("background", true, false);
+    vi.advanceTimersByTime(1000);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("says nothing after the step resets", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.reset();
+    w.playing(false);
+    expect(explain).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it("the screen shows the player's warning", () => {
+    expect(readFileSync("native/app/create/recording.tsx", "utf8")).toMatch(/onWarn: setToast/);
   });
 });
 

@@ -45,17 +45,27 @@ export const audio: AudioSeam = {
   },
   open(srcs, o) {
     const list = createAudioPlaylist({ sources: srcs, loop: "none", updateInterval: 500 });
-    list.setActiveForLockScreen(true, { title: o.title, artist: ARTIST }, { showSeekBackward: false, showSeekForward: false });
+    const meta = { title: o.title, artist: ARTIST };
+    const opts = { showSeekBackward: false, showSeekForward: false };
+    list.setActiveForLockScreen(true, meta, opts);
+    // Now Playing is only taken up once the audio session is running, which is after Play. Say it again then.
+    let announced = false;
     // The playlist status has no error field. A clip that cannot be loaded or decoded
     // never reports isLoaded, so a session that has not loaded this long after Play has failed.
+    let open = true;
     let loaded = false;
     let watch: ReturnType<typeof setTimeout> | null = null;
     const sub = list.addListener("playlistStatusUpdate", (s) => {
       if (s.isLoaded || s.playing) loaded = true;
+      if (s.playing && !announced && open) {
+        announced = true;
+        try {
+          list.setActiveForLockScreen(true, meta, opts);
+        } catch {}
+      }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
       o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1, progress });
     });
-    let open = true;
     const guard = () => {
       if (loaded || watch) return;
       watch = setTimeout(() => {

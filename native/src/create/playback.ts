@@ -6,7 +6,11 @@ import { type Made, lineAt } from "@/lib/create";
 import { audio } from "../seams/audio";
 import type { PlaySession, PlayState } from "../seams/types";
 
-export type Events = { onLine(i: number): void; onEnd(): void; onError(message: string): void; onPlaying(playing: boolean): void };
+export type Events = {
+  onLine(i: number): void; onEnd(): void; onError(message: string): void; onPlaying(playing: boolean): void;
+  /** Something that will not stop playback now but may limit it, to show on screen. */
+  onWarn?(message: string): void;
+};
 export type Playback = {
   stop(): void;
   /** False once it has ended, failed or been stopped. */
@@ -31,6 +35,7 @@ export function play(made: Made, ev: Events): Playback {
     onEnd: () => live && (stop(), ev.onEnd()),
     onError: (m) => live && (stop(), ev.onError(m)),
     onPlaying: (p) => live && ev.onPlaying(p),
+    onWarn: (m) => live && ev.onWarn?.(m),
   };
   let resume = () => {};
   if (made.recording) {
@@ -63,7 +68,8 @@ function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
       const uri = await audio.save(`create.${ext}`, new Uint8Array(rec.audio), rec.mime);
       if (dead) return;
       // Normally done at launch; if that failed, try again so this plays as background audio too.
-      await audio.configure().catch(() => {});
+      // If it still fails the clip plays in the foreground only; say so instead of failing silently (#153).
+      await audio.configure().catch(() => ev.onWarn?.("Background playback could not be switched on, so this may stop when you leave Neville."));
       if (dead) return;
       session = audio.open([uri], { title: made.title || "Neville", onState });
       session.play();
