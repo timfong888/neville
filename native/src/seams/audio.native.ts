@@ -8,9 +8,18 @@ const LOAD_TIMEOUT_MS = 8000;
 
 // expo-audio, as proved in the spike (#85): background playback and lock-screen
 // controls need `doNotMix`, and the playlist sequences clips natively.
+// `setAudioModeAsync` sets the whole mode, so this is the only place that calls it (#153).
+export const AUDIO_MODE = { playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" } as const;
+let configured: Promise<void> | null = null;
+
 export const audio: AudioSeam = {
-  async configure() {
-    await setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" });
+  // Once per launch; a failure is not remembered, so the next call tries again.
+  configure() {
+    configured ??= setAudioModeAsync(AUDIO_MODE).catch((e) => {
+      configured = null;
+      throw e;
+    });
+    return configured;
   },
   async save(name, bytes) {
     const f = new File(Paths.cache, name);
@@ -43,7 +52,8 @@ export const audio: AudioSeam = {
     let watch: ReturnType<typeof setTimeout> | null = null;
     const sub = list.addListener("playlistStatusUpdate", (s) => {
       if (s.isLoaded || s.playing) loaded = true;
-      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1 });
+      const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
+      o.onState({ playing: s.playing, index: s.currentIndex, ended: s.didJustFinish && s.currentIndex >= s.trackCount - 1, progress });
     });
     let open = true;
     const guard = () => {

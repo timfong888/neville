@@ -1,14 +1,22 @@
-// Plays a Create result and reports the line being spoken. A recording plays through
-// expo-audio on both platforms. Without one, the device reads the script if it can speak,
-// else the lines are shown in time. Background audio and the lock screen belong to the Player.
-import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
+// Plays a Create result and reports the line being spoken. A recording plays through the
+// audio seam, so it has the same background and lock-screen audio as the Player (#153).
+// Without one, the device reads the script if it can speak, else the lines are shown in
+// time; both of those need the app in the foreground.
 import { type Made, lineAt } from "@/lib/create";
-import { audioFile } from "./audioFile";
+import { audio } from "../seams/audio";
+import type { PlaySession, PlayState } from "../seams/types";
 
-export type Events = { onLine(i: number): void; onEnd(): void; onError(message: string): void };
+export type Events = { onLine(i: number): void; onEnd(): void; onError(message: string): void; onPlaying(playing: boolean): void };
+export type Playback = {
+  stop(): void;
+  /** Continues after a pause that did not come from the screen: a call, the lock screen, another app. */
+  resume(): void;
+  /** True when the app leaving the foreground silences it, so the screen should stop it and say so. */
+  foregroundOnly: boolean;
+};
 
-/** Starts playback; the returned function stops it. No event fires after a stop. */
-export function play(made: Made, ev: Events): () => void {
+/** Starts playback. No event fires after `stop`. */
+export function play(made: Made, ev: Events): Playback {
   let live = true;
   // Set before the player starts: a player that fails at once reports through `guard` straight away.
   let end: () => void = () => undefined;
@@ -20,37 +28,51 @@ export function play(made: Made, ev: Events): () => void {
     onLine: (i) => live && ev.onLine(i),
     onEnd: () => live && (stop(), ev.onEnd()),
     onError: (m) => live && (stop(), ev.onError(m)),
+    onPlaying: (p) => live && ev.onPlaying(p),
   };
-  end = made.recording ? playFile(made.recording, guard) : readAloud(made.lines, guard);
+  let resume = () => {};
+  if (made.recording) {
+    const f = playFile(made, made.recording, guard);
+    end = f.stop;
+    resume = f.resume;
+  } else end = readAloud(made.lines, guard);
   // A start that already failed or ended has stopped; release what it made.
   if (!live) end();
-  return stop;
+  return { stop, resume: () => live && resume(), foregroundOnly: !made.recording };
 }
 
-function playFile(rec: NonNullable<Made["recording"]>, ev: Events): () => void {
-  let file: ReturnType<typeof audioFile> | null = null;
-  let player: ReturnType<typeof createAudioPlayer> | null = null;
-  try {
-    file = audioFile(rec.audio, rec.mime);
-    // Without this an iPhone's silent switch mutes the recording.
-    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
-    player = createAudioPlayer(file.uri, { updateInterval: 200 });
-    player.addListener("playbackStatusUpdate", (st) => {
-      if (st.didJustFinish) ev.onEnd();
-      else if (st.duration > 0) ev.onLine(lineAt(rec.starts, st.currentTime / st.duration));
-    });
-    player.play();
-  } catch {
-    ev.onError("The recording could not be played.");
-  }
-  return () => {
+function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
+  let session: PlaySession | null = null;
+  let dead = false;
+  // The first status updates are the load, not a pause: only a stop after playing began is reported.
+  let started = false;
+  const onState = (st: PlayState) => {
+    if (dead) return;
+    if (st.failed) return ev.onError("The recording could not be played.");
+    if (st.ended) return ev.onEnd();
+    if (st.playing) started = true;
+    if (started) ev.onPlaying(st.playing);
+    if (st.progress !== undefined && st.playing) ev.onLine(lineAt(rec.starts, st.progress));
+  };
+  void (async () => {
     try {
-      player?.pause();
-      player?.remove();
+      // The player picks its decoder from the extension.
+      const ext = /wav/.test(rec.mime) ? "wav" : /mp4|aac|m4a/.test(rec.mime) ? "m4a" : "mp3";
+      const uri = await audio.save(`create.${ext}`, new Uint8Array(rec.audio), rec.mime);
+      if (dead) return;
+      session = audio.open([uri], { title: made.title || "Neville", onState });
+      session.play();
     } catch {
-      /* already released */
+      if (!dead) ev.onError("The recording could not be played.");
     }
-    file?.release();
+  })();
+  return {
+    stop() {
+      dead = true;
+      session?.stop();
+      session = null;
+    },
+    resume: () => session?.play(),
   };
 }
 
