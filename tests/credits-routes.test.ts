@@ -303,10 +303,10 @@ describe("POST /api/manifest with the paywall on", () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callManifest()).status).toBe(429);
   });
-  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+  it("throws and never takes a slot when the sign-in lookup throws with the paywall on", async () => {
     lookupFails = true;
     await expect(callManifest()).rejects.toThrow("auth database down");
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(takeSlot).not.toHaveBeenCalled();
     expect(synth).not.toHaveBeenCalled();
     expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
   });
@@ -454,10 +454,10 @@ describe("POST /api/rerecord with the paywall on", () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
     expect((await callRerecord()).status).toBe(429);
   });
-  it("gives the network slot back when the sign-in lookup throws, and still throws", async () => {
+  it("throws and never takes a slot when the sign-in lookup throws with the paywall on", async () => {
     lookupFails = true;
     await expect(callRerecord()).rejects.toThrow("auth database down");
-    expect(release).toHaveBeenCalledTimes(1);
+    expect(takeSlot).not.toHaveBeenCalled();
     expect(synth).not.toHaveBeenCalled();
   });
   it("answers 402 no_credits at balance 0, and records nothing", async () => {
@@ -515,5 +515,56 @@ describe("POST /api/manifest with the paywall off (the default)", () => {
   it("spends nothing for a signed-in account either", async () => {
     expect((await callManifest()).status).toBe(200);
     expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
+});
+
+describe("tester daily-slot bypass", () => {
+  const routes = [
+    ["manifest", callManifest],
+    ["rerecord", callRerecord],
+  ] as const;
+
+  it.each(routes)("skips slots for a tester on %s with the paywall on", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("skips slots for a tester on %s with the paywall off", async (_name, call) => {
+    vi.stubEnv("PAYWALL_ENABLED", "");
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("keeps slots for non-testers and signed-out users on %s", async (_name, call) => {
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+    takeSlot.mockClear();
+    user = null;
+    expect((await call()).status).toBe(401);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(routes)("keeps slots for an unverified tester email on %s", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    user = { ...alice, emailVerified: false };
+    expect((await call()).status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(routes)("still applies the spend ceiling to a tester on %s", async (_name, call) => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    underCeilingOk = false;
+    expect((await call()).status).toBe(503);
+    expect(takeSlot).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)("does not 500 on auth outage with the paywall off on %s, treats caller as non-tester", async (_name, call) => {
+    vi.stubEnv("PAYWALL_ENABLED", "");
+    lookupFails = true;
+    const res = await call();
+    expect(res.status).toBe(200);
+    expect(takeSlot).toHaveBeenCalledTimes(1);
   });
 });

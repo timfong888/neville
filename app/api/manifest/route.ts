@@ -8,6 +8,8 @@ import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
+import { isUnlimited, paywallEnabled } from "@/lib/credits";
+import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -64,13 +66,27 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const pace = resolvePace(body.pace);
   const tone = resolveTone(body.tone);
 
-  const ip = visitor(req);
-  const slot = await takeSlot(ip);
-  if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
+  // A configured tester must be signed in before their network slot is skipped.
+  // This lookup happens even while the paywall is off, so tester access stays useful during testing.
+  let session: Awaited<ReturnType<typeof currentUser>> | undefined;
+  try {
+    session = await currentUser(req);
+  } catch (e) {
+    // With the paywall on, an auth/DB outage is fail-closed: re-throw so the route
+    // returns a 500 rather than silently treating the caller as a non-tester.
+    // With the paywall off, the route is public; treat the caller as signed-out so
+    // normal slot limits still apply and the outage does not cause a 500.
+    if (paywallEnabled()) throw e;
+    session = null;
+  }
+  const tester = isUnlimited(session);
+  if (tester && session) console.info("[tester]", session.id);
+  const slot = tester ? null : await takeSlot(visitor(req));
+  if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
   const budget = await underCeiling(key);
   if (!budget.ok) {
-    await slot.release();
+    await slot?.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
@@ -78,14 +94,14 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // signed-out request keeps its slot, so it counts against the limits; a misconfiguration costs nobody one.
   let who: Awaited<ReturnType<typeof whoIsAsking>>;
   try {
-    who = await whoIsAsking(req);
+    who = await whoIsAsking(req, session);
   } catch (e) {
     // The sign-in lookup failed (an auth or database error): give the slot back, so an outage does not use up the daily limits.
-    await slot.release();
+    await slot?.release();
     throw e;
   }
   if ("response" in who) {
-    if (who.response.status !== 401) await slot.release();
+    if (who.response.status !== 401) await slot?.release();
     return who.response;
   }
 
@@ -95,7 +111,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     state.charging = false;
   });
   if ("response" in charged) {
-    await slot.release();
+    await slot?.release();
     return charged.response;
   }
   state.charged = charged;
