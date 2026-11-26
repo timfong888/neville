@@ -10,12 +10,10 @@ export type NowPlayingState = {
   title: string;
   /** Where the now-playing bar goes when tapped. */
   route: string;
-  /** Position in the session's clips. */
   index: number;
   /** Place in the job (a play of the recording, or a recording in the Library). */
   position: number;
   total: number;
-  /** True when the running session loops until stopped. */
   loop: boolean;
   /** Why it ended or did not start, or "". */
   note: string;
