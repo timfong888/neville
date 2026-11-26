@@ -1,7 +1,7 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, toManifestation } from "@/lib/create";
+import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { newId } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
@@ -19,18 +19,22 @@ export type CreateState = {
   /** The free creations are used up and one more was asked for. */
   gate: boolean;
   making: boolean;
-  /** The voice chosen in Settings: the one the next recording uses. */
+  /** A voice picked on the Create page; null means the Settings choice. Cleared when the Settings voice changes. */
+  picked: string | null;
+  /** The voice the next recording uses: the pick, else the Settings choice. */
+  voiceId: string;
   voiceName: string;
   made: Made | null;
   /** The Library id of `made` once saved; empty until then. */
   savedId: string;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, voiceName: resolveVoice(null).name, made: null, savedId: "" };
+let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, made: null, savedId: "" };
 const subs = new Set<() => void>();
-const set = (p: Partial<CreateState>) => {
+const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
   subs.forEach((f) => f());
+  return p;
 };
 const subscribe = (f: () => void) => (subs.add(f), () => void subs.delete(f));
 const snapshot = () => state;
@@ -43,12 +47,23 @@ const write = (key: string, value: string | null) => void (value === null ? kv.r
 /** Whether this device can read a script aloud itself. Browsers can; the phone build cannot yet. */
 export const canSpeak = (): boolean => typeof (globalThis as { speechSynthesis?: unknown }).speechSynthesis !== "undefined";
 
+/** The state for a voice id: its id and the name to show. */
+const voice = (id: string) => ({ voiceId: id, voiceName: resolveVoice(id).name });
+
+// The Settings voice last seen; the rules are in lib/create.ts.
+let settingsVoice: string | null = null;
+function voiceNow(settingsVoiceId: string) {
+  const next = seeSettingsVoice({ picked: state.picked, settingsVoice }, settingsVoiceId);
+  settingsVoice = next.settingsVoice;
+  return { picked: next.picked, ...voice(next.voiceId) };
+}
+
 let typed = false;
 /** Reads what the device keeps: the draft, the count and the chosen voice. Run when the wish step shows. */
 export async function load(): Promise<void> {
   const [draft, used, chosen] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read()]);
   // Typing that began before storage answered wins over the stored draft.
-  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), voiceName: resolveVoice(chosen.voiceId).name });
+  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), ...voiceNow(chosen.voiceId) });
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
@@ -56,6 +71,14 @@ export function edit(p: { want?: string; name?: string }): void {
   typed = true;
   set(p);
   write(DRAFT_STORAGE_KEY, state.want || state.name ? JSON.stringify({ want: state.want, name: state.name }) : null);
+}
+
+/** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice. */
+export async function pickVoice(id: string, asDefault = false): Promise<boolean> {
+  const next = pickOnCreate({ picked: state.picked, settingsVoice }, id, state.voiceId, asDefault);
+  settingsVoice = next.settingsVoice;
+  set({ picked: next.picked, ...voice(next.voiceId) });
+  return asDefault ? settings.write({ voiceId: next.voiceId }) : true;
 }
 
 let run = 0;
@@ -66,8 +89,8 @@ async function generate(variant: number): Promise<void> {
   set({ making: true, made: null, savedId: "", variant });
   const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
-  set({ voiceName: resolveVoice(chosen.voiceId).name });
-  const made = await makeManifestation(api, { ...wish, variant, ...chosen }, canSpeak());
+  const { voiceId } = set(voiceNow(chosen.voiceId));
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;
   asked = wish;

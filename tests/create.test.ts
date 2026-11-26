@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, toManifestation, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
 
 const LINES = ["Tim, breathe in.", "You speak with calm.", "It is done."];
 const rec = (over: Partial<Recording> = {}): Recording => ({ audio: new ArrayBuffer(4), mime: "audio/wav", lines: LINES, voiceId: DEFAULT_VOICE_ID, source: "model", ...over });
@@ -86,5 +86,38 @@ describe("the Create flow (#120)", () => {
     });
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
+  });
+  it("uses the voice picked on Create, else the Settings voice (#150)", async () => {
+    const other = ENABLED_VOICES.find((v) => v.generate && v.id !== DEFAULT_VOICE_ID)!;
+    const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
+    expect(voiceFor(other.id, DEFAULT_VOICE_ID)).toBe(other.id);
+    expect(voiceFor(null, other.id)).toBe(other.id);
+    expect(voiceFor("gone", "also-gone")).toBe(DEFAULT_VOICE_ID);
+    if (sampleOnly) expect(voiceFor(sampleOnly.id, other.id)).toBe(other.id);
+    // The pick reaches the request body and the Library item.
+    let body: WishRequest | undefined;
+    const w = { want: "to be calm", name: "Tim", voiceId: voiceFor(other.id, DEFAULT_VOICE_ID) };
+    const made = await makeManifestation({ manifest: async (b) => ((body = b), rec({ voiceId: b.voiceId })) }, w, false);
+    expect(body?.voiceId).toBe(other.id);
+    expect(toManifestation(made, w, "id-3", 5)).toMatchObject({ voiceId: other.id, voiceName: other.name });
+  });
+  it("keeps a Create pick until the Settings voice changes (#150)", () => {
+    const [a, b, c] = ENABLED_VOICES.filter((v) => v.generate).map((v) => v.id);
+    // The first reading of Settings clears nothing and uses the Settings voice.
+    const start = seeSettingsVoice(NO_PICK, a);
+    expect(start).toEqual({ picked: null, settingsVoice: a, voiceId: a });
+    // A pick wins, and survives re-reading the same Settings voice (a pace or tone change).
+    const picked = pickOnCreate(start, b, start.voiceId);
+    expect(picked).toEqual({ picked: b, settingsVoice: a, voiceId: b });
+    expect(seeSettingsVoice(picked, a).voiceId).toBe(b);
+    // A different Settings voice replaces the pick.
+    expect(seeSettingsVoice(picked, c)).toEqual({ picked: null, settingsVoice: c, voiceId: c });
+    // "Make this my default" is our own Settings write, so the pick stays.
+    const made = pickOnCreate(start, b, start.voiceId, true);
+    expect(seeSettingsVoice(made, b)).toEqual({ picked: b, settingsVoice: b, voiceId: b });
+    // A pick made before Settings was ever read is kept by the first reading.
+    expect(seeSettingsVoice(pickOnCreate(NO_PICK, b, a), a).voiceId).toBe(b);
+    // A voice that may not be recorded is not picked.
+    expect(pickOnCreate(start, "gone", a).voiceId).toBe(a);
   });
 });

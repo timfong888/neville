@@ -94,6 +94,12 @@ export default function Recording() {
             ? "Read by your device's own voice. Nothing was recorded."
             : "Nothing was recorded."}
       </Text>
+      <View style={s.row}>
+        <Text style={s.muted}>
+          Next variation: <Text style={s.p}>{c.voiceName}</Text>
+        </Text>
+        <Button small label="Change voice" onPress={() => (stop(), router.push("/create/voice"))} />
+      </View>
       {c.gate || done || freeLeft(c.used) === 0 ? <Gate /> : null}
       <View style={s.row}>
         <Button small label="← Create another" onPress={back} />
