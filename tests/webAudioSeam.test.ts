@@ -14,6 +14,9 @@ class FakeAudio {
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
   ontimeupdate: (() => void) | null = null;
+  onloadeddata: (() => void) | null = null;
+  oncanplay: (() => void) | null = null;
+  onplaying: (() => void) | null = null;
   next: { name: string } | null = null;
   play = vi.fn(async () => {
     if (this.next) throw this.next;
@@ -66,6 +69,45 @@ describe("web seam: a refused play()", () => {
     await flush();
     expect(states.at(-1)?.failed).toBeUndefined();
     expect(states.at(-1)?.playing).toBe(false);
+  });
+});
+
+describe("web seam: a load that stalls", () => {
+  it("fails the session after the load timeout, and pauses the element", async () => {
+    vi.useFakeTimers();
+    try {
+      const { session, states, a } = open();
+      session.play();
+      await vi.advanceTimersByTimeAsync(8001);
+      expect(states.at(-1)).toMatchObject({ playing: false, failed: true });
+      expect(a.pause).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not fail once the clip has loaded", async () => {
+    vi.useFakeTimers();
+    try {
+      const { session, states, a } = open();
+      session.play();
+      a.oncanplay?.();
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(states.some((s) => s.failed)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not fire after the session is stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const { session, states } = open();
+      session.play();
+      session.stop();
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(states.some((s) => s.failed)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

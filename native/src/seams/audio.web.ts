@@ -1,6 +1,8 @@
 import type { AudioSeam } from "./types";
 
 const ARTIST = "Neville";
+/** How long the first clip may take to load before the session is reported as failed, as on a phone. */
+const LOAD_TIMEOUT_MS = 8000;
 // One address per saved name. Saving a name again frees the clip it held before.
 const saved = new Map<string, string>();
 // Addresses an open session may still load, and replaced ones waiting for that session to stop.
@@ -56,6 +58,24 @@ export const audio: AudioSeam = {
     // True once a clip has played. A refusal after that (the next clip, the lock screen's Play) only pauses,
     // so the listener keeps their place and can tap Play again.
     let everPlayed = false;
+    // A request that stalls fires no event at all, so a session that has not loaded this long after Play has failed.
+    let loaded = false;
+    let watch: ReturnType<typeof setTimeout> | null = null;
+    const markLoaded = () => {
+      loaded = true;
+      if (watch) clearTimeout(watch);
+      watch = null;
+    };
+    const guard = () => {
+      if (loaded || watch) return;
+      watch = setTimeout(() => {
+        watch = null;
+        if (!open || loaded) return;
+        want = false;
+        a.pause();
+        o.onState({ playing: false, index, ended: false, failed: true });
+      }, LOAD_TIMEOUT_MS);
+    };
     // A first play() the browser refuses (autoplay policy, unsupported source) is a failed start. Any other
     // rejection, such as an AbortError from pausing straight after play, is not.
     const start = () =>
@@ -69,6 +89,7 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = true;
         start();
+        guard();
         emit();
       },
       pause() {
@@ -87,7 +108,9 @@ export const audio: AudioSeam = {
           ms.setActionHandler("pause", null);
         }
         open = false;
-        a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = null;
+        if (watch) clearTimeout(watch);
+        watch = null;
+        a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = a.onloadeddata = a.oncanplay = a.onplaying = null;
         a.pause();
         a.removeAttribute("src");
         for (const u of mine) {
@@ -115,6 +138,7 @@ export const audio: AudioSeam = {
       if (want && !a.ended && !switching) session.pause();
     };
     a.ontimeupdate = () => emit();
+    a.onloadeddata = a.oncanplay = a.onplaying = markLoaded;
     a.onplay = () => {
       everPlayed = true;
       switching = false;
