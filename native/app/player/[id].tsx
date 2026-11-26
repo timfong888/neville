@@ -41,6 +41,8 @@ export default function Player() {
   const picked = useRef(false);
   // The Library's recordings copied ahead for loop all, so Play does not wait on them (a browser needs Play inside the tap).
   const prep = useRef<Promise<LoopItem<string>[]> | null>(null);
+  // True while that copy runs. Play waits for it, so it always starts straight from the tap.
+  const [preparing, setPreparing] = useState(false);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const session = useRef<PlaySession | null>(null);
   const starting = useRef(false);
@@ -95,9 +97,13 @@ export default function Player() {
   useEffect(() => {
     let live = true;
     prep.current = null;
+    setPreparing(false);
     if (loop === "all" && loaded && voice.current) {
       const me: LoopItem<string> = { id: loaded.id, src: voice.current.src, title: loaded.title || "Untitled" };
-      prep.current = libraryItems(me, () => !live);
+      const p = libraryItems(me, () => !live);
+      prep.current = p;
+      setPreparing(true);
+      void p.catch(() => []).then(() => live && setPreparing(false));
     }
     return () => void (live = false);
   }, [loop, loaded]);
@@ -166,12 +172,13 @@ export default function Player() {
       {voice.current ? (
         <View style={s.row}>
           <Pressable
-            style={[s.btn, s.main]}
+            disabled={preparing && phase === "idle"}
+            style={[s.btn, s.main, preparing && phase === "idle" && s.off]}
             accessibilityRole="button"
             accessibilityLabel={phase === "playing" ? "Pause" : "Play"}
             onPress={() => (phase === "playing" ? session.current?.pause() : play())}
           >
-            <Text style={s.mainText}>{phase === "playing" ? "Pause" : phase === "paused" ? "Resume" : "Play"}</Text>
+            <Text style={s.mainText}>{phase === "playing" ? "Pause" : phase === "paused" ? "Resume" : preparing ? "Preparing playlist…" : "Play"}</Text>
           </Pressable>
           {active ? (
             <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Stop" onPress={() => stop()}>
