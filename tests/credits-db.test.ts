@@ -97,7 +97,7 @@ describe("free credit", () => {
 describe("spending", () => {
   it("takes one credit and refuses at zero with the balance", async () => {
     await tx((d) => ensureFreeCredit(d, "alice", 1));
-    expect(await tx((d) => spendCredit(d, "alice", M))).toEqual({ ok: true, balance: 0 });
+    expect(await tx((d) => spendCredit(d, "alice", M))).toMatchObject({ ok: true, balance: 0 });
     expect(await tx((d) => spendCredit(d, "alice", M))).toEqual({ ok: false, balance: 0 });
     expect(await creditBalance(db, "alice")).toBe(0);
   });
@@ -109,10 +109,13 @@ describe("spending", () => {
     const spends = await db.query(`select count(*)::int as n from credit_ledger where user_id = 'alice' and reason = 'spend'`);
     expect(spends.rows[0].n).toBe(1);
   });
-  it("refunds a credit after a failed recording", async () => {
+  it("refunds a credit after a failed recording, once per spend however often it is retried", async () => {
     await tx((d) => ensureFreeCredit(d, "alice", 1));
-    await tx((d) => spendCredit(d, "alice", M));
-    await refundCredit(db, "alice", M);
+    const spent = await tx((d) => spendCredit(d, "alice", M));
+    expect(spent.spendId).toBeTruthy();
+    await refundCredit(db, "alice", M, spent.spendId!);
+    await refundCredit(db, "alice", M, spent.spendId!);
+    await Promise.all([refundCredit(db, "alice", M, spent.spendId!), refundCredit(db, "alice", M, spent.spendId!)]);
     expect(await creditBalance(db, "alice")).toBe(1);
   });
   it("logs a tester spend row that does not change the balance", async () => {
@@ -128,7 +131,7 @@ describe("the cost of an action", () => {
   it("takes the configured cost, records route and action on the row, and refuses when the balance is short", async () => {
     await tx((d) => grantPurchase(d, { userId: "alice", productId: "starter", eventId: "e", environment: null }));
     const re = { cost: 2, route: "/api/rerecord", action: "rerecord" };
-    expect(await tx((d) => spendCredit(d, "alice", re))).toEqual({ ok: true, balance: 1 });
+    expect(await tx((d) => spendCredit(d, "alice", re))).toMatchObject({ ok: true, balance: 1 });
     expect(await tx((d) => spendCredit(d, "alice", re))).toEqual({ ok: false, balance: 1 });
     const row = await db.query(`select delta, route, action from credit_ledger where reason = 'spend'`);
     expect(row.rows).toEqual([{ delta: -2, route: "/api/rerecord", action: "rerecord" }]);
@@ -136,8 +139,8 @@ describe("the cost of an action", () => {
   it("refunds the same cost and labels the tester row", async () => {
     const re = { cost: 2, route: "/api/rerecord", action: "rerecord" };
     await tx((d) => grantPurchase(d, { userId: "alice", productId: "pack10", eventId: "e", environment: null }));
-    await tx((d) => spendCredit(d, "alice", re));
-    await refundCredit(db, "alice", re);
+    const spent = await tx((d) => spendCredit(d, "alice", re));
+    await refundCredit(db, "alice", re, spent.spendId!);
     await logTesterSpend(db, "alice", re);
     expect(await creditBalance(db, "alice")).toBe(10);
     const rows = await db.query(`select reason, delta, route, action from credit_ledger where route is not null order by id`);
@@ -151,7 +154,7 @@ describe("the cost of an action", () => {
 
 describe("purchases", () => {
   const buy = (productId: string, eventId: string, userId = "alice") =>
-    tx((d) => grantPurchase(d, { userId, productId, eventId, environment: "SANDBOX" }));
+    tx((d) => grantPurchase(d, { userId, productId, eventId, environment: "PRODUCTION" }));
 
   it("adds the pack's credits once when the same event arrives twice", async () => {
     expect(await buy("pack10", "evt_1")).toBe("granted");
@@ -170,6 +173,21 @@ describe("purchases", () => {
     expect(await buy("starter", "evt_b")).toBe("duplicate");
     expect(await creditBalance(db, "alice")).toBe(3);
     expect(await hasStarter(db, "bob")).toBe(false);
+  });
+  it("keeps sandbox and production ownership of Starter apart: a sandbox Starter never blocks the real one", async () => {
+    const buyIn = (environment: string, eventId: string) =>
+      tx((d) => grantPurchase(d, { userId: "alice", productId: "starter", eventId, environment }));
+    expect(await buyIn("SANDBOX", "sb1")).toBe("granted");
+    expect(await hasStarter(db, "alice")).toBe(false); // the app still offers the real Starter
+    expect(await buyIn("SANDBOX", "sb2")).toBe("already_owned");
+    expect(await buyIn("PRODUCTION", "pr1")).toBe("granted");
+    expect(await hasStarter(db, "alice")).toBe(true);
+    expect(await buyIn("PRODUCTION", "pr2")).toBe("already_owned");
+    expect(await creditBalance(db, "alice")).toBe(6);
+  });
+  it("treats an event with no environment as production", async () => {
+    await tx((d) => grantPurchase(d, { userId: "alice", productId: "starter", eventId: "n1", environment: null }));
+    expect(await hasStarter(db, "alice")).toBe(true);
   });
   it("lets pack10 be bought again and again", async () => {
     await buy("pack10", "evt_x");

@@ -56,15 +56,22 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
       };
     }
     let refunded = false;
+    const spendId = out.spendId!;
     return {
       left: String(out.balance),
+      // Done only when the insert succeeded. A database error is retried a few times (the insert is keyed to this
+      // spend, so a retry can never refund twice); if every try fails the spend id is logged so it can be fixed by hand.
       refund: async () => {
         if (refunded) return;
-        refunded = true;
-        try {
-          await refundCredit(getPool() as unknown as Db, user.id, c);
-        } catch (e) {
-          console.error("[credits] refund failed", user.id, e instanceof Error ? e.message : e);
+        for (const wait of [0, 100, 400]) {
+          if (wait) await new Promise((r) => setTimeout(r, wait));
+          try {
+            await refundCredit(getPool() as unknown as Db, user.id, c, spendId);
+            refunded = true;
+            return;
+          } catch (e) {
+            if (wait === 400) console.error("[credits] refund failed", JSON.stringify({ spendId, userId: user.id, action }), e instanceof Error ? e.message : e);
+          }
         }
       },
     };

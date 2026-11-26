@@ -30,7 +30,7 @@ export async function ensureFreeCredit(db: Db, userId: string, amount: number): 
 export type Charge = { cost: number; route: string; action: string };
 
 /** Takes `cost` credits if the balance allows it, labelled with the route and action. Run inside a transaction. */
-export async function spendCredit(db: Db, userId: string, c: Charge): Promise<{ ok: boolean; balance: number }> {
+export async function spendCredit(db: Db, userId: string, c: Charge): Promise<{ ok: boolean; balance: number; spendId?: string }> {
   await lock(db, userId);
   const { rows } = await db.query(
     `insert into credit_ledger (user_id, delta, reason, route, action)
@@ -39,12 +39,19 @@ export async function spendCredit(db: Db, userId: string, c: Charge): Promise<{ 
      returning id`,
     [userId, c.cost, c.route, c.action],
   );
-  return { ok: rows.length > 0, balance: await creditBalance(db, userId) };
+  return { ok: rows.length > 0, balance: await creditBalance(db, userId), ...(rows.length ? { spendId: String(rows[0].id) } : {}) };
 }
 
-/** Gives back the credits of a recording that failed. */
-export async function refundCredit(db: Db, userId: string, c: Charge): Promise<void> {
-  await db.query(`insert into credit_ledger (user_id, delta, reason, route, action) values ($1, $2, 'refund', $3, $4)`, [userId, c.cost, c.route, c.action]);
+/**
+ * Gives back the credits of a recording that failed. Keyed to the spend row (source_id "refund:<spendId>"), so
+ * retrying after a database error, or calling it twice, returns the credits exactly once.
+ */
+export async function refundCredit(db: Db, userId: string, c: Charge, spendId: string): Promise<void> {
+  await db.query(
+    `insert into credit_ledger (user_id, delta, reason, route, action, source_id) values ($1, $2, 'refund', $3, $4, $5)
+     on conflict (source_id) do nothing`,
+    [userId, c.cost, c.route, c.action, `refund:${spendId}`],
+  );
 }
 
 /** A recording by an unlimited tester: no change to the balance, but a row, so the cost stays countable. */
@@ -52,6 +59,7 @@ export async function logTesterSpend(db: Db, userId: string, c: Charge): Promise
   await db.query(`insert into credit_ledger (user_id, delta, reason, route, action) values ($1, 0, 'tester', $2, $3)`, [userId, c.route, c.action]);
 }
 
+/** True once a real (production) Starter was bought. A sandbox Starter, from a TestFlight test, does not count. */
 export async function hasStarter(db: Db, userId: string): Promise<boolean> {
   const { rows } = await db.query(`select 1 from credit_ledger where user_id = $1 and once_key = 'starter' limit 1`, [userId]);
   return rows.length > 0;
@@ -72,12 +80,14 @@ export async function grantPurchase(
   if (!product) return "unknown_product";
   await lock(db, p.userId);
   if ((await db.query(`select 1 from credit_ledger where source_id = $1`, [p.eventId])).rows.length) return "duplicate";
-  const owned = product.oncePerAccount && (await db.query(`select 1 from credit_ledger where user_id = $1 and once_key = $2`, [p.userId, p.productId])).rows.length > 0;
+  // Once-per-account packs are owned per environment: a sandbox purchase (a TestFlight test) must never make the real one grant nothing.
+  const onceKey = product.oncePerAccount ? (p.environment === "SANDBOX" ? `${p.productId}:sandbox` : p.productId) : null;
+  const owned = onceKey !== null && (await db.query(`select 1 from credit_ledger where user_id = $1 and once_key = $2`, [p.userId, onceKey])).rows.length > 0;
   const { rows } = await db.query(
     `insert into credit_ledger (user_id, delta, reason, product_id, source_id, once_key, environment)
      values ($1, $2, 'purchase', $3, $4, $5, $6)
      on conflict do nothing returning id`,
-    [p.userId, owned ? 0 : product.credits, p.productId, p.eventId, owned || !product.oncePerAccount ? null : p.productId, p.environment ?? null],
+    [p.userId, owned ? 0 : product.credits, p.productId, p.eventId, owned ? null : onceKey, p.environment ?? null],
   );
   if (!rows.length) return "duplicate";
   return owned ? "already_owned" : "granted";

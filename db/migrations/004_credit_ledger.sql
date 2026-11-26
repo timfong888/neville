@@ -11,7 +11,7 @@
 --   source_id   the store transaction id ('txn:...'), or the RevenueCat event id when there is none; unique, so a repeat or restore can never grant twice
 --   route, action  what the row paid for (e.g. /api/rerecord, rerecord), on spend, refund and tester rows, so the
 --                  real cost per action can be compared later (#181)
---   once_key    set on a grant that may happen once per account ('free', 'starter'); unique per account
+--   once_key    set on a grant that may happen once per account ('free', 'starter', 'starter:sandbox'); unique per account
 create table if not exists credit_ledger (
   id           bigint generated always as identity primary key,
   user_id      text not null references "user"("id") on delete cascade,

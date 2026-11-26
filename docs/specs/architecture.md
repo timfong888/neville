@@ -226,7 +226,7 @@ credit_ledger (
   reason      text not null,   -- free | purchase | spend | refund | tester
   product_id  text,            -- starter | pack10, for a purchase
   source_id   text unique,     -- store transaction id ('txn:…'; the event id when there is none): a repeat or restore can never grant twice
-  once_key    text,            -- 'free' or 'starter'; unique with user_id, so each is granted once per account
+  once_key    text,            -- 'free', 'starter' or 'starter:sandbox'; unique with user_id, so each is granted once per account (sandbox and production apart)
   environment text,            -- SANDBOX | PRODUCTION, from the event
   route       text,            -- what a spend, refund or tester row paid for: /api/manifest, /api/rerecord
   action      text,            -- key in config/credits.json costs: manifest | rerecord

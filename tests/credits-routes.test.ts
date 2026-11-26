@@ -11,13 +11,22 @@ let pg: PGlite;
 let user: { id: string; name: string; email: string; image: null; emailVerified: boolean } | null;
 let accountsOn = true;
 let voiceOk = true;
+let refundFailures = 0;
 const synth = vi.fn();
 const takeSlot = vi.fn();
 const release = vi.fn();
 
 vi.mock("@/lib/server/db", () => ({
   dbConfigured: () => true,
-  getPool: () => ({ query: (q: string, p?: unknown[]) => pg.query(q, p) }),
+  getPool: () => ({
+    query: (q: string, p?: unknown[]) => {
+      if (refundFailures > 0 && q.includes("'refund'")) {
+        refundFailures--;
+        return Promise.reject(new Error("database blip"));
+      }
+      return pg.query(q, p);
+    },
+  }),
   withTx: <T>(fn: (d: unknown) => Promise<T>) => pg.transaction((t) => fn({ query: (q: string, p?: unknown[]) => t.query(q, p) })),
 }));
 vi.mock("@/lib/server/accounts", () => ({
@@ -92,6 +101,7 @@ beforeEach(async () => {
   user = { ...alice };
   accountsOn = true;
   voiceOk = true;
+  refundFailures = 0;
   synth.mockReset();
   synth.mockImplementation(async () =>
     voiceOk
@@ -152,6 +162,12 @@ describe("POST /api/revenuecat/webhook", () => {
     const again = await callHook(hook(purchase({ id: "r3", product_id: "starter", transaction_id: "tx-2" })));
     expect(await again.json()).toMatchObject({ status: "already_owned" });
     expect(await balance("alice")).toBe(3);
+  });
+  it("a sandbox Starter does not stop the real Starter from granting", async () => {
+    await callHook(hook(purchase({ id: "sb", product_id: "starter", transaction_id: "t-sb", environment: "SANDBOX" })));
+    const real = await callHook(hook(purchase({ id: "pr", product_id: "starter", transaction_id: "t-pr", environment: "PRODUCTION" })));
+    expect(await real.json()).toMatchObject({ status: "granted" });
+    expect(await balance("alice")).toBe(6);
   });
   it("handles INITIAL_PURCHASE too", async () => {
     await callHook(hook(purchase({ type: "INITIAL_PURCHASE", id: "i1" })));
@@ -215,10 +231,12 @@ describe("GET /api/credits", () => {
     });
     expect((await (await get()).json()).balance).toBe(1); // not given twice
   });
-  it("hides starter once it was bought", async () => {
-    await callHook(hook(purchase({ id: "s1", product_id: "starter" })));
+  it("hides starter once it was bought for real, but not after a sandbox test purchase", async () => {
+    await callHook(hook(purchase({ id: "sb1", product_id: "starter", environment: "SANDBOX" })));
+    expect((await (await get()).json()).packs.map((p: { id: string }) => p.id)).toEqual(["starter", "pack10"]);
+    await callHook(hook(purchase({ id: "s1", product_id: "starter", environment: "PRODUCTION" })));
     const body = await (await get()).json();
-    expect(body.balance).toBe(4);
+    expect(body.balance).toBe(7);
     expect(body.packs).toEqual([{ id: "pack10", credits: 10 }]);
   });
   it("says unlimited for a listed, verified email, and never from anything the client sends", async () => {
@@ -288,6 +306,20 @@ describe("POST /api/manifest with the paywall on", () => {
     const res = await callManifest();
     expect(res.status).toBe(502);
     expect(await balance("alice")).toBe(1);
+  });
+  it("keeps trying the refund when the database blips, and does not lose the credit", async () => {
+    voiceOk = false;
+    refundFailures = 2;
+    expect((await callManifest()).status).toBe(502);
+    expect(await balance("alice")).toBe(1);
+  });
+  it("says so in the log, with the spend id, when the refund cannot be written at all", async () => {
+    voiceOk = false;
+    refundFailures = 99;
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect((await callManifest()).status).toBe(502);
+    expect(await balance("alice")).toBe(0);
+    expect(err.mock.calls.some((c) => String(c[0]).includes("[credits] refund failed") && /spendId/.test(String(c[1])))).toBe(true);
   });
   it("charges nothing when a guard refuses first", async () => {
     takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
