@@ -180,6 +180,14 @@ const MINOR = new RegExp(
 );
 
 /**
+ * True when the wish mentions anyone who may be a minor, regardless of intimacy intent.
+ * Used by the image gate: every depicted person must be an adult.
+ */
+export function wishMentionsMinor(wish: string): boolean {
+  return MINOR.test(wish);
+}
+
+/**
  * A romantic or sexual wish about someone under 18 (or who may be a child).
  * No model is asked for it: the writer returns the neutral script.
  */

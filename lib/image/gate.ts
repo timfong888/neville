@@ -1,7 +1,8 @@
 // Image safety gate. Fail closed: anything uncertain is refused.
-// Reuses wishSexualisesMinor and the MINOR word list from lib/prompt.ts without change.
+// Uses wishMentionsMinor (any minor word) rather than wishSexualisesMinor (minor + intimacy),
+// because every depicted person must be stated as an adult regardless of intent.
 
-import { wishSexualisesMinor } from "@/lib/prompt";
+import { wishMentionsMinor, wishSexualisesMinor } from "@/lib/prompt";
 
 export type GateResult =
   | { allowed: true }
@@ -23,7 +24,10 @@ const REFERENCE_PHOTO =
  * Never calls a network; pure function.
  */
 export function imageGate(wish: string): GateResult {
-  if (wishSexualisesMinor(wish)) return { allowed: false, reason: "minor" };
+  // wishMentionsMinor is the broader check: refuse any wish that mentions a minor,
+  // even without an intimacy word, because every depicted person must be an adult.
+  // wishSexualisesMinor is a strict subset; it is kept in lib/prompt.ts for script use.
+  if (wishMentionsMinor(wish) || wishSexualisesMinor(wish)) return { allowed: false, reason: "minor" };
   if (PROPER_NAME.test(wish)) return { allowed: false, reason: "real_person" };
   if (REFERENCE_PHOTO.test(wish)) return { allowed: false, reason: "reference_photo" };
   return { allowed: true };

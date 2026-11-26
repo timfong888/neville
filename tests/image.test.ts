@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { imagePrompt } from "@/lib/image/prompt";
 import { imageGate } from "@/lib/image/gate";
 import { mockProvider } from "@/lib/image/provider";
+import { wishMentionsMinor } from "@/lib/prompt";
 
 // ── imagePrompt ──────────────────────────────────────────────────────────────
 
@@ -112,6 +113,68 @@ describe("imageGate", () => {
     const result = imageGate("naked teenager");
     expect(result.allowed).toBe(false);
     if (!result.allowed) expect(result.reason).toBe("minor");
+  });
+});
+
+// ── wishMentionsMinor ────────────────────────────────────────────────────────
+
+describe("wishMentionsMinor", () => {
+  it("matches a minor word without needing an intimacy word", () => {
+    expect(wishMentionsMinor("pretty girls at the beach")).toBe(true);
+    expect(wishMentionsMinor("kids playing in a park")).toBe(true);
+    expect(wishMentionsMinor("a student in a classroom")).toBe(true);
+    expect(wishMentionsMinor("my little sister smiling")).toBe(true);
+    expect(wishMentionsMinor("a teen with a guitar")).toBe(true);
+    expect(wishMentionsMinor("young girl")).toBe(true);
+  });
+
+  it("allows the young-women/men early-twenties exception from PR 201", () => {
+    expect(wishMentionsMinor("attractive young women smiling at me")).toBe(false);
+    expect(wishMentionsMinor("young men who look confident")).toBe(false);
+  });
+
+  it("allows wishes with no minor words", () => {
+    expect(wishMentionsMinor("a calm beach with no people")).toBe(false);
+    expect(wishMentionsMinor("confident women at a coffee shop")).toBe(false);
+    expect(wishMentionsMinor("photorealistic very attractive women, open and smiling at me in a flirtatious way")).toBe(false);
+  });
+});
+
+// ── imageGate minor-word check (broader than intimacy) ───────────────────────
+
+describe("imageGate minor-word check", () => {
+  const refused = [
+    "pretty girls at the beach",
+    "kids playing in a park",
+    "a student in a classroom",
+    "my little sister smiling",
+    "a teen with a guitar",
+    "young girl",
+  ];
+
+  for (const wish of refused) {
+    it(`refuses: "${wish}"`, () => {
+      const result = imageGate(wish);
+      expect(result.allowed, wish).toBe(false);
+      if (!result.allowed) expect(result.reason, wish).toBe("minor");
+    });
+  }
+
+  const allowed = [
+    "attractive young women smiling at me",
+    "a calm beach with no people",
+    "confident women at a coffee shop",
+  ];
+
+  for (const wish of allowed) {
+    it(`allows: "${wish}"`, () => {
+      expect(imageGate(wish).allowed, wish).toBe(true);
+    });
+  }
+
+  it("C1 acceptance example still passes", () => {
+    const wish = "photorealistic very attractive women, open and smiling at me in a flirtatious way";
+    expect(imageGate(wish).allowed).toBe(true);
   });
 });
 
