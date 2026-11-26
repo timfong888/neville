@@ -8,7 +8,7 @@ export type PlayState = {
   playing: boolean;
   /** Position in the list of clips given to `open`. */
   index: number;
-  /** True once, when the last clip has finished. */
+  /** True once, when the last clip has finished. Never true in a looping session. */
   ended: boolean;
   /** True once, when a clip could not be loaded or decoded. The session has stopped playing. */
   failed?: boolean;
@@ -40,7 +40,8 @@ export interface AudioSeam {
   /**
    * Opens the clips as one session, played in order with no timer between
    * them, so it continues with the screen locked. It starts paused. The title
-   * is shown on the lock screen.
+   * is shown on the lock screen. With `loop`, the first clip plays again after the last,
+   * the session never ends by itself, and `stop` is the only way out.
    */
-  open(srcs: string[], o: { title: string; onState(s: PlayState): void }): PlaySession;
+  open(srcs: string[], o: { title: string; loop?: boolean; onState(s: PlayState): void }): PlaySession;
 }
