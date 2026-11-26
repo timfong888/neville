@@ -1,0 +1,147 @@
+name: CI
+
+# Three layers, three jobs, so a red check names the failing layer:
+#   unit         pure functions, no network or database  (npm run test:unit)
+#   integration  one real boundary: Postgres 16          (npm run test:integration)
+#   acceptance   one test per story criterion, AT-<ticket>-<n>  (npm run test:acceptance)
+# `native` type-checks native/ and runs the native tests; it needs the Expo install,
+# so it runs only on PRs that touch native code (or what native imports).
+#
+# Generic by design: this file is the pilot for the project kit. A project changes the
+# env block, the NATIVE_PATHS list and the migrate step, nothing else.
+#
+# No secrets. The trigger is `pull_request` (not `pull_request_target`), so a PR from a
+# fork runs with a read-only token and receives no secrets.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test:unit
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway database inside this job's service container. Not a secret.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Run migrations
+        run: npm run migrate
+      - name: Integration tests
+        run: npm run test:integration
+
+  acceptance:
+    # Passes with zero tests until the first AT-<ticket>-<n> test lands, so the
+    # check exists and can be required from day one.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Acceptance tests
+        run: npm run test:acceptance
+
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Paths that, when changed in a PR, make this job do its work (extended regex).
+      # native/ imports from lib/, so lib/ is in the list.
+      NATIVE_PATHS: '^(native/|lib/|tests/native|tests/webAudioSeam|tests/stubs/|vitest\.config\.ts|package(-lock)?\.json|\.github/workflows/ci\.yml)'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Did this PR touch native code?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Pushes to main and manual runs always check native.
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -Eq "$NATIVE_PATHS"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No native-related files changed; skipping."
+          fi
+      - if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            native/package-lock.json
+      - if: steps.scope.outputs.run == 'true'
+        run: npm ci
+      - if: steps.scope.outputs.run == 'true'
+        name: Install native dependencies (Expo)
+        run: npm ci --prefix native
+      - if: steps.scope.outputs.run == 'true'
+        name: Type-check native/
+        run: npm run typecheck --prefix native
+      - if: steps.scope.outputs.run == 'true'
+        name: Native tests
+        run: npx vitest run --project native
