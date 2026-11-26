@@ -116,6 +116,26 @@ describe("the Create step plays through the seam", () => {
     expect(h.lists).toHaveLength(1);
     spy.mockRestore();
   });
+  it("still plays, and says so on screen, when the background mode could not be set", async () => {
+    const spy = vi.spyOn(audio, "configure").mockRejectedValueOnce(new Error("no session"));
+    const onWarn = vi.fn();
+    const ev = { ...events(), onWarn };
+    play(made(rec), ev);
+    await tick();
+    expect(onWarn).toHaveBeenCalledWith(expect.stringMatching(/background/i));
+    expect(ev.onError).not.toHaveBeenCalled();
+    expect(h.lists[0].play).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+  it("puts the lock screen controls up again once playing starts, once", async () => {
+    play(made(rec), events());
+    await tick();
+    const set = h.lists[0].setActiveForLockScreen;
+    expect(set).toHaveBeenCalledTimes(1);
+    h.lists[0].emit({ playing: true });
+    h.lists[0].emit({ playing: true, currentTime: 1, duration: 10 });
+    expect(set).toHaveBeenCalledTimes(2);
+  });
   it("follows the line from the playback position and ends when the clip ends", async () => {
     const ev = events();
     play(made(rec), ev);
@@ -175,6 +195,17 @@ describe("the Create step plays through the seam", () => {
     pb.stop();
     await tick();
     expect(h.lists).toHaveLength(0);
+  });
+});
+
+describe("the Create step tells the person why playback paused", () => {
+  const src = readFileSync("native/app/create/recording.tsx", "utf8");
+  it("notes when the app left while playing and the system paused it", () => {
+    expect(src).toMatch(/leftWhilePlaying/);
+    expect(src).toMatch(/paused by the system/);
+  });
+  it("shows the warning from the player", () => {
+    expect(src).toMatch(/onWarn: setToast/);
   });
 });
 

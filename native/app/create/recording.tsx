@@ -22,10 +22,15 @@ export default function Recording() {
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
   const stopper = useRef<Playback | null>(null);
+  // For the reason shown when the system paused playback while the app was away.
+  const pausedRef = useRef(false);
+  const leftWhilePlaying = useRef(false);
 
   const stop = useCallback(() => {
     stopper.current?.stop();
     stopper.current = null;
+    pausedRef.current = false;
+    leftWhilePlaying.current = false;
     setPlaying(false);
     setPaused(false);
   }, []);
@@ -36,6 +41,12 @@ export default function Recording() {
     const sub = AppState.addEventListener("change", (st) => {
       // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
       const pb = stopper.current;
+      if (st === "background" && pb?.active()) leftWhilePlaying.current = true;
+      // Back in front: if the system paused it meanwhile, give the reason rather than just a Play button.
+      if (st === "active" && leftWhilePlaying.current) {
+        leftWhilePlaying.current = false;
+        if (pb?.active() && pausedRef.current) setToast("Playback was paused by the system while Neville was in the background. Tap Play to continue.");
+      }
       // A browser keeps reading and running timers in a hidden tab; only a phone suspends them.
       if (Platform.OS === "web" || st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
       stop();
@@ -57,7 +68,8 @@ export default function Recording() {
       onLine: setIdx,
       onEnd: () => (setPlaying(false), setPaused(false), setIdx(made.lines.length)),
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
-      onPlaying: (p) => setPaused(!p),
+      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p)),
+      onWarn: setToast,
     });
   };
   const again = () => {
