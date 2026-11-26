@@ -3,6 +3,7 @@ import { Link, useRouter } from "expo-router";
 import { Pressable, type PressableInstance, type ScrollViewInstance, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
 import { playingItemId } from "@/lib/playingItemId";
+import { displayTitle } from "@/lib/script";
 import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
@@ -110,11 +111,11 @@ export default function LibraryScreen() {
                 <Pressable
                   ref={(r) => { rowRefs.current.set(m.id, r); }}
                   accessibilityRole="link"
-                  accessibilityLabel={isPlaying ? `${m.title}, Now playing` : m.title}
+                  accessibilityLabel={isPlaying ? `${displayTitle(m.title)}, Now playing` : displayTitle(m.title)}
                   accessibilityState={{ selected: isPlaying }}
                   style={[s.row, isPlaying && s.rowPlaying]}
                 >
-                  <Text style={type.body} numberOfLines={2}>{m.title}</Text>
+                  <Text style={type.body}>{displayTitle(m.title)}</Text>
                   <Text style={type.muted}>{itemMeta(m)}</Text>
                 </Pressable>
               </Link>

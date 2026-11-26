@@ -47,6 +47,7 @@ Rules:
 - Give the middle of the script (about six lines) to the one moment that implies the wish is done, of the kind the "moment" field asks for: where the listener is, who is there, what is said, held or done. Make it concrete to this wish, never general.
 - Use the listener's own words for the wish. Include one line of gratitude.
 - End with exactly: ${CLOSING}
+- Then, on the next line, write "Title: " followed by 2 to 5 words: a short noun phrase about the content of this script. No quotes, no ellipsis. Do not start with "You are" or "You have". Never include the listener's first name. Example: "Title: Magnetic confidence" or "Title: Calm and clear speech".
 - Then, on one last line, write "Refrain: " followed by one short phrase of 4 to 10 words, addressed to the listener as "you" like the script, in their own words for the wish, saying it is done (for example: Refrain: The house by the sea is yours. Thank you). It is the phrase to repeat, not part of the script.
 
 Content rules:
@@ -281,6 +282,47 @@ export function splitRefrain(raw: string, wish = ""): { script: string; refrain:
     // the one in "thank you".
     /\b(?:you|your|yours|yourself)\b/i.test(r.replace(/\bthank you\b/gi, ""));
   return { script, refrain: ok ? (/[.?]$/.test(r) ? r : `${r}.`) : null };
+}
+
+const TITLE_LABEL =
+  /^[ \t]*(?:(?:[-*•]|\d+[.)]|#+)[ \t]*)?["""'''`*_]*title["""'''`*_]*[ \t]*(?:[:\-–—][ \t]*(.*))?$/i;
+
+/**
+ * Splits out the "Title: ..." line the model writes after the script.
+ * Returns `{ script, title }` where `title` is null when missing or invalid:
+ * 2 to 5 words, no ellipsis, no "You are/have" opener, never the listener's name.
+ */
+export function splitTitle(raw: string, name?: string): { script: string; title: string | null } {
+  const lines = raw.split("\n");
+  const drop = new Set<number>();
+  let found: string | null = null;
+  const labels = lines.flatMap((line, i) => {
+    const m = TITLE_LABEL.exec(line);
+    return m ? [{ i, text: (m[1] ?? "").replace(EDGE_DECORATION, "") }] : [];
+  });
+  for (const { i } of labels) drop.add(i);
+  const last = labels.at(-1);
+  if (last?.text) found = last.text;
+  else if (last) {
+    const next = lines.findIndex((l, j) => j > last.i && l.trim());
+    if (next > 0) {
+      found = lines[next];
+      drop.add(next);
+    }
+  }
+  const script = lines.filter((_, i) => !drop.has(i)).join("\n");
+  if (!found) return { script, title: null };
+  const t = found.replace(/["""'''`*_]/g, "").replace(EDGE_DECORATION, "").replace(/\s+/g, " ").trim();
+  const words = t.split(" ").filter(Boolean);
+  const ok =
+    words.length >= 2 &&
+    words.length <= 5 &&
+    !/[…]/.test(t) &&
+    !/\.{2,}/.test(t) &&
+    !/^you\s+(are|have)\b/i.test(t) &&
+    !/^you\b/i.test(t) &&
+    (!name || !new RegExp(`\\b${name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
+  return { script, title: ok ? t.charAt(0).toUpperCase() + t.slice(1) : null };
 }
 
 const MIN_BODY_LINES = 6;

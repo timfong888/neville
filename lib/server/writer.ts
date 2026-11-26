@@ -7,7 +7,7 @@ import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -57,6 +57,8 @@ export type Script = {
   refrain: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** 2–5 word noun phrase from the model; absent when missing or invalid, absent for templates. */
+  title?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -156,12 +158,16 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       }
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
-      const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
+      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
       }
-      if (lines) return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want) };
+      if (lines) {
+        const t = titleParts?.title ?? undefined;
+        return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want), ...(t ? { title: t } : {}) };
+      }
       failure = { reason: "unusable_reply", status: res.status };
       variant++;
     }
