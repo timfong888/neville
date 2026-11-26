@@ -1,7 +1,7 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
+import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, noteForReason, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
@@ -113,9 +113,9 @@ async function generate(variant: number): Promise<void> {
       asked = wish;
       const voice = resolveVoice(r.voiceId);
       const made: Made = {
-        title: titleFor(wish.want),
+        title: r.source === "template" ? FALLBACK_TITLE : titleFor(wish.want),
         lines: r.lines,
-        note: r.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
+        note: r.source === "template" ? noteForReason(r.reason) : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
       };
       set({ making: false, made });

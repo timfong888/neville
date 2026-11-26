@@ -330,4 +330,59 @@ describe("writeScript fallback log (#176)", () => {
     expect((await write()).model).toBe(M2);
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it("includes the safety category in the withheld log but no wish text", async () => {
+    plan = {};
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(s.source).toBe("template");
+    expect(all).toMatch(/"category":"minor_word\+intimacy_word"/);
+    expect(all).not.toMatch(/classmate|kiss|15/);
+  });
+});
+
+describe("writeScript reason header (#176)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  let error: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    error = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+    error.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("sets script.reason per failure type and emits [ALERT] for non-withheld", async () => {
+    for (const [planKey, expected] of [
+      [{ [M1]: ["400"] }, "http_status"],
+      [{ [M1]: ["thin"] }, "unusable_reply"],
+    ] as Array<[Record<string, Reply[]>, string]>) {
+      plan = planKey;
+      const s = await write(0, "a neutral wish");
+      expect(s).toMatchObject({ source: "template", reason: expected });
+      const alerts = error.mock.calls.filter((c: unknown[]) => c[0] === "[ALERT]");
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(alerts[0][1]).toBe("script_failed");
+      error.mockClear();
+    }
+  });
+
+  it("sets script.reason to withheld and does NOT emit [ALERT]", async () => {
+    plan = {};
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    expect(s).toMatchObject({ source: "template", reason: "withheld" });
+    const alerts = error.mock.calls.filter((c: unknown[]) => c[0] === "[ALERT]");
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("never puts wish text in the [ALERT] line", async () => {
+    plan = { [M1]: ["400"] };
+    const SECRETWISH = "my secret wish about pineapples and Zorbulon's mother";
+    await write(0, SECRETWISH);
+    const all = error.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(all).not.toContain("pineapples");
+    expect(all).not.toContain(SECRETWISH);
+  });
 });

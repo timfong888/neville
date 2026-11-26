@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hashOf, neutralScript, scriptLines, titleFor, VARIANT_COUNT } from "@/lib/script";
+import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
@@ -93,7 +94,6 @@ export default function DemoPage() {
     writeDraft({ want, name: v });
   };
   const [variant, setVariant] = useState(0);
-  const [step, setStep] = useState(0);
   // A recording made by the server for this wish. Null means the free
   // fallback: a template script read by the device's own voice.
   const [made, setMade] = useState<Made | null>(null);
@@ -346,7 +346,6 @@ export default function DemoPage() {
     stop();
     const mine = ++run.current;
     setStage("making");
-    setStep(0);
     setNote("");
     setIdx(-1);
     let next: Made | null = null;
@@ -355,6 +354,7 @@ export default function DemoPage() {
     // cannot loop, "build" when this recording could not be cut into a loop.
     let noLoop: "" | "voice" | "build" = "";
     let why = "";
+    let scriptReason: string | undefined;
     // Mix voices on: each new recording takes the next voice in the set.
     const mixing = readMixOn();
     const voice = mixing ? resolveVoice(peekMixVoice()) : studioVoice;
@@ -378,10 +378,12 @@ export default function DemoPage() {
         const made = JSON.parse(new TextDecoder().decode(Uint8Array.from(packed, (c) => c.charCodeAt(0))));
         if (!Array.isArray(made) || !made.every((l) => typeof l === "string")) throw new Error("bad script");
         const audio = await res.blob();
+        const scriptSource = res.headers.get("X-Script-Source") ?? "";
+        scriptReason = res.headers.get("X-Script-Reason") ?? undefined;
         const base = {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
-          source: res.headers.get("X-Script-Source") ?? "",
+          source: scriptSource,
         };
         // Programming mode: the server recorded the refrain after the script.
         const refrainB64 = res.headers.get("X-Refrain");
@@ -432,7 +434,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
+            next.source === "template" ? noteForReason(scriptReason) : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"
@@ -459,13 +461,6 @@ export default function DemoPage() {
     writeCount(n);
     void generate(0);
   };
-
-  // While waiting, tick the first step after a moment. The request does both.
-  useEffect(() => {
-    if (stage !== "making" || step > 0) return;
-    const t = setTimeout(() => setStep(1), 3000);
-    return () => clearTimeout(t);
-  }, [stage, step]);
 
   const newVariation = () => {
     stop();
@@ -508,8 +503,7 @@ export default function DemoPage() {
       await (await resolveStore()).saveManifestation(
         {
           id,
-          // The general fallback is not about the wish, so its title is not either.
-          title: made ? titleFor(want) : "A moment of calm",
+          title: made?.source === "template" ? FALLBACK_TITLE : made ? titleFor(want) : FALLBACK_TITLE,
           want: want.trim(),
           firstName: name.trim(),
           lines: made?.saveLines ?? lines,
@@ -669,23 +663,10 @@ export default function DemoPage() {
   }
 
   if (stage === "making") {
-    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${makingVoice.name}`];
     return (
       <>
         <h1>Making it yours…</h1>
         <p className="lede">This takes up to half a minute. Keep this page open.</p>
-        <div className="card">
-          <ul className="steps" aria-live="polite">
-            {steps.map((label, i) => (
-              <li key={label} className={i < step ? "done" : i === step ? "on" : ""}>
-                <span>
-                  {i < step ? "✓ " : i === step ? "… " : ""}
-                  {label}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
       </>
     );
   }
@@ -694,7 +675,7 @@ export default function DemoPage() {
 
   return (
     <>
-      <h1>{titleFor(want)}</h1>
+      <h1>{made?.source === "template" ? FALLBACK_TITLE : titleFor(want)}</h1>
       <p className="lede">
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>
