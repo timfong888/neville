@@ -15,12 +15,28 @@ vi.mock("@/config/credits.json", async (orig) => {
 let pg: PGlite;
 let hang = false;
 let late: (() => void) | null = null;
+let refundFailures = 0;
+let slowTxMs = 0;
+let writeDelayMs = 0;
+let vetDelayMs = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const synth = vi.fn();
 
 vi.mock("@/lib/server/db", () => ({
   dbConfigured: () => true,
-  getPool: () => ({ query: (q: string, p?: unknown[]) => pg.query(q, p) }),
-  withTx: <T>(fn: (d: unknown) => Promise<T>) => pg.transaction((t) => fn({ query: (q: string, p?: unknown[]) => t.query(q, p) })),
+  getPool: () => ({
+    query: (q: string, p?: unknown[]) => {
+      if (refundFailures > 0 && q.includes("'refund'")) {
+        refundFailures--;
+        return Promise.reject(new Error("database blip"));
+      }
+      return pg.query(q, p);
+    },
+  }),
+  withTx: async <T>(fn: (d: unknown) => Promise<T>) => {
+    if (slowTxMs) await sleep(slowTxMs);
+    return pg.transaction((t) => fn({ query: (q: string, p?: unknown[]) => t.query(q, p) }));
+  },
 }));
 vi.mock("@/lib/server/accounts", () => ({
   accountsEnabled: () => true,
@@ -33,8 +49,18 @@ vi.mock("@/lib/server/limits", () => ({
   takeSlot: async () => ({ refusal: null, release: async () => undefined }),
   underCeiling: async () => ({ ok: true, usage: 0 }),
 }));
-vi.mock("@/lib/server/writer", () => ({ writeScript: async () => ({ lines: ["It is done."], refrain: "r", source: "model", model: "m" }) }));
-vi.mock("@/lib/server/vet", () => ({ vetScript: async () => ({ ok: true, model: "m", costUsd: 0 }) }));
+vi.mock("@/lib/server/writer", () => ({
+  writeScript: async () => {
+    if (writeDelayMs) await sleep(writeDelayMs);
+    return { lines: ["It is done."], refrain: "r", source: "model", model: "m" };
+  },
+}));
+vi.mock("@/lib/server/vet", () => ({
+  vetScript: async () => {
+    if (vetDelayMs) await sleep(vetDelayMs);
+    return { ok: true, model: "m", costUsd: 0 };
+  },
+}));
 vi.mock("@/lib/server/tts", () => ({ synthesize: (o: unknown) => synth(o) }));
 vi.mock("@/lib/server/ledger", () => ({ record: async () => undefined, estimateSpeech: async () => 0 }));
 
@@ -70,6 +96,10 @@ beforeEach(async () => {
   await pg.query(`insert into "user" (id, name, email, "emailVerified") values ('alice', 'Alice', 'alice@x.test', true)`);
   hang = true;
   late = null;
+  refundFailures = 0;
+  slowTxMs = 0;
+  writeDelayMs = 0;
+  vetDelayMs = 0;
   synth.mockReset();
   synth.mockImplementation(
     () =>
@@ -103,10 +133,45 @@ describe.each([
     await new Promise((r) => setTimeout(r, 50));
     expect(await balance()).toBe(1);
   });
+  it("does not mark a timed-out spend as fulfilled when the slow work finishes late", async () => {
+    await call();
+    late?.();
+    await sleep(50);
+    expect((await pg.query(`select fulfilled_at is null as open from credit_ledger where reason = 'spend'`)).rows).toEqual([{ open: true }]);
+  });
+  it("says the credit was not returned when the refund itself fails, and logs the spend id", async () => {
+    refundFailures = 99;
+    const err = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await call();
+    expect(res.status).toBe(504);
+    const body = await res.json();
+    expect(body).toMatchObject({ code: "timeout", creditReturned: false });
+    expect(body.error).not.toMatch(/returned/i);
+    expect(await balance()).toBe(0);
+    expect(err.mock.calls.some((c) => String(c[0]).includes("[credits] refund failed") && /spendId/.test(String(c[1])))).toBe(true);
+  });
+  it("makes no claim either way when the deadline passes while the credit is still being taken, and the credit still comes back", async () => {
+    slowTxMs = 400;
+    const res = await call();
+    expect(res.status).toBe(504);
+    expect(await res.json()).not.toHaveProperty("creditReturned");
+    await sleep(900);
+    expect(await balance()).toBe(1);
+  });
   it("is not applied when the paywall is off", async () => {
     vi.stubEnv("PAYWALL_ENABLED", "");
     hang = false;
     expect((await call()).status).toBe(200);
+  });
+  it("starts no paid call after the deadline has passed", async () => {
+    hang = false;
+    if (_name === "/api/manifest") writeDelayMs = 400;
+    else vetDelayMs = 400;
+    const res = await call();
+    expect(res.status).toBe(504);
+    await sleep(700);
+    expect(synth).not.toHaveBeenCalled();
+    expect(await balance()).toBe(1);
   });
   it("a request that finishes in time is unaffected and its spend is marked fulfilled", async () => {
     hang = false;

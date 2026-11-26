@@ -203,6 +203,12 @@ describe("spends the function never finished (killed after the spend committed)"
     await db.query(`update credit_ledger set created_at = now() - interval '1 hour' where reason = 'spend'`);
     expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(0);
   });
+  it("never marks a spend fulfilled once it has been refunded", async () => {
+    const spent = await tx((d) => spendCredit(d, "alice", M));
+    await refundCredit(db, "alice", M, spent.spendId!);
+    await markFulfilled(db, spent.spendId!);
+    expect((await db.query(`select fulfilled_at is null as open from credit_ledger where reason = 'spend'`)).rows).toEqual([{ open: true }]);
+  });
   it("does not touch tester rows, and refunds at the spend's own cost", async () => {
     await logTesterSpend(db, "alice", M);
     await db.query(`update credit_ledger set created_at = now() - interval '1 hour'`);

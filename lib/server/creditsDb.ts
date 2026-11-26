@@ -61,7 +61,13 @@ export async function logTesterSpend(db: Db, userId: string, c: Charge): Promise
 
 /** Marks a spend as delivered: the recording was made and sent, so reconciliation never refunds it. */
 export async function markFulfilled(db: Db, spendId: string): Promise<void> {
-  await db.query(`update credit_ledger set fulfilled_at = now() where id = $1::bigint and reason = 'spend'`, [spendId]);
+  // Never on a spend that was already refunded: that recording was not delivered, and stamping it would hide it from reconciliation.
+  await db.query(
+    `update credit_ledger set fulfilled_at = now()
+      where id = $1::bigint and reason = 'spend'
+        and not exists (select 1 from credit_ledger r where r.source_id = 'refund:' || $1::text)`,
+    [spendId],
+  );
 }
 
 /**

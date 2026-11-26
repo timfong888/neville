@@ -87,7 +87,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
 
   // Taken before the first paid call (the vet); given back below unless a recording is made.
-  const charged = await charge(who, "rerecord");
+  state.charging = true;
+  const charged = await charge(who, "rerecord").finally(() => {
+    state.charging = false;
+  });
   if ("response" in charged) {
     await slot.release();
     return charged.response;
@@ -124,6 +127,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
 
   const text = lines.join(" ");
+  // The deadline passed during the check: do not start the voice, the credit is already refunded.
+  if (state.timedOut) return timeoutResponse(true);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -155,7 +160,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     estUsd: await estimateSpeech(voice.model, speech.sentChars),
   });
   // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
-  await charged.fulfil();
+  if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,

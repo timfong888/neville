@@ -27,12 +27,12 @@ export async function whoIsAsking(req: Request): Promise<Who | { response: Respo
 export type Charged = {
   /** Value for the X-Credits-Left header: a number, or "unlimited" for a tester. Null when nothing was charged. */
   left: string | null;
-  /** Gives the credit back; safe to call more than once. */
-  refund: () => Promise<void>;
+  /** Gives the credit back; safe to call more than once. True once the credit is back (or there was nothing to give back), false if every try failed. */
+  refund: () => Promise<boolean>;
   /** Marks the recording as delivered, so reconciliation never refunds this spend. Call it just before the success response. */
   fulfil: () => Promise<void>;
 };
-const nothing: Charged = { left: null, refund: async () => undefined, fulfil: async () => undefined };
+const nothing: Charged = { left: null, refund: async () => true, fulfil: async () => undefined };
 
 /** Step 2, after the guards let the request through and before any paid call: spend one credit or refuse with 402. */
 export async function charge(who: Who, action: Action): Promise<Charged | { response: Response }> {
@@ -43,7 +43,7 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
   try {
     if (isUnlimited(user)) {
       await logTesterSpend(getPool() as unknown as Db, user.id, c);
-      return { left: "unlimited", refund: async () => undefined, fulfil: async () => undefined };
+      return { left: "unlimited", refund: async () => true, fulfil: async () => undefined };
     }
     const out = await withTx(async (db) => {
       // Heal first: a spend of this account's that a killed function left behind is refunded before the balance is read.
@@ -64,6 +64,7 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
     return {
       left: String(out.balance),
       fulfil: async () => {
+        if (refunded) return; // already given back: this recording was not delivered
         try {
           await markFulfilled(getPool() as unknown as Db, spendId);
         } catch (e) {
@@ -74,17 +75,18 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
       // Done only when the insert succeeded. A database error is retried a few times (the insert is keyed to this
       // spend, so a retry can never refund twice); if every try fails the spend id is logged so it can be fixed by hand.
       refund: async () => {
-        if (refunded) return;
+        if (refunded) return true;
         for (const wait of [0, 100, 400]) {
           if (wait) await new Promise((r) => setTimeout(r, wait));
           try {
             await refundCredit(getPool() as unknown as Db, user.id, c, spendId);
             refunded = true;
-            return;
+            return true;
           } catch (e) {
             if (wait === 400) console.error("[credits] refund failed", JSON.stringify({ spendId, userId: user.id, action }), e instanceof Error ? e.message : e);
           }
         }
+        return false;
       },
     };
   } catch (e) {
@@ -94,14 +96,16 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
 }
 
 /** What a paid route holds while it runs, so a deadline or an error can give the credit back. */
-export type PaidState = { charged?: Charged; timedOut?: boolean };
+export type PaidState = { charged?: Charged; charging?: boolean; timedOut?: boolean };
 
-/** The answer when the work did not finish before the deadline. */
-export function timeoutResponse(creditReturned: boolean): Response {
-  return NextResponse.json(
-    { code: "timeout", error: creditReturned ? "The recording took too long. Your credit was returned." : "The recording took too long. Try again.", creditReturned },
-    { status: 504 },
-  );
+/**
+ * The answer when the work did not finish before the deadline. `creditReturned` is true only once the refund was written,
+ * false when nothing was charged or the refund failed, and left out while it is not yet known (the credit is still being taken).
+ */
+export function timeoutResponse(creditReturned?: boolean): Response {
+  const error =
+    creditReturned === true ? "The recording took too long. Your credit was returned." : "The recording took too long. Try again.";
+  return NextResponse.json({ code: "timeout", error, ...(creditReturned === undefined ? {} : { creditReturned }) }, { status: 504 });
 }
 
 /**
@@ -121,8 +125,11 @@ export async function runPaid(work: (state: PaidState) => Promise<Response>): Pr
     const out = await Promise.race([work(state), deadline]);
     if (out === "timeout") {
       state.timedOut = true;
-      await state.charged?.refund();
-      return timeoutResponse(Boolean(state.charged && state.charged.left !== null && state.charged.left !== "unlimited"));
+      // The credit is still being taken: nothing is known yet. handle() refunds it as soon as it lands.
+      if (!state.charged && state.charging) return timeoutResponse(undefined);
+      const returned = state.charged ? await state.charged.refund() : false;
+      const refundable = Boolean(state.charged && state.charged.left !== null && state.charged.left !== "unlimited");
+      return timeoutResponse(refundable ? returned : false);
     }
     return out;
   } catch (e) {
