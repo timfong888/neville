@@ -116,7 +116,7 @@ describe("POST /api/rerecord", () => {
   });
 
   it("records nothing at the spend ceiling, and does not ask the text model", async () => {
-    usage = 5;
+    usage = limits.spendCeilingUsd * 2.5;
     const res = await POST(req(script));
     expect(res.status).toBe(429);
     expect(paths()).not.toContain("/chat/completions");
@@ -152,12 +152,12 @@ describe("POST /api/rerecord", () => {
   });
 
   it("alerts once at 50%, again at 80%, and at 100% when recording stops", async () => {
-    usage = 1.1;
+    usage = limits.spendCeilingUsd * 0.55;
     await POST(req(script));
     await POST(req(script));
-    usage = 1.7;
+    usage = limits.spendCeilingUsd * 0.85;
     await POST(req(script));
-    usage = 2.5;
+    usage = limits.spendCeilingUsd * 1.25;
     const res = await POST(req(script));
     expect(res.status).toBe(429);
     // Webhooks are sent in the background, so wait for them.
