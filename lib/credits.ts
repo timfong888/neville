@@ -43,3 +43,10 @@ export function availablePacks(boughtStarter: boolean): Pack[] {
 export function productOf(id: string): { credits: number; oncePerAccount: boolean } | null {
   return Object.hasOwn(config.products, id) ? config.products[id as ProductId] : null;
 }
+
+export type Action = keyof typeof config.costs;
+
+/** What an action costs, in credits, from config/credits.json. */
+export function costOf(action: Action): number {
+  return config.costs[action];
+}

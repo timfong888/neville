@@ -6,6 +6,7 @@ import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
+import { type Charged, charge, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,19 @@ function visitor(req: Request): string {
 // Records a script the person edited. Same guards as /api/manifest: the kill
 // switch, the daily slots, and the spend ceiling. The text model vets the
 // script but does not rewrite it. Nothing is stored.
+// With PAYWALL_ENABLED=true it also needs sign-in and spends credits (config/credits.json, costs.rerecord);
+// the credits are given back if no recording is made (#168).
 export async function POST(req: Request) {
+  const state: { charged?: Charged } = {};
+  try {
+    return await handle(req, state);
+  } catch (e) {
+    await state.charged?.refund();
+    throw e;
+  }
+}
+
+async function handle(req: Request, state: { charged?: Charged }): Promise<Response> {
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -54,6 +67,9 @@ export async function POST(req: Request) {
   const { lines } = parsed.value;
   const voice = resolveVoice(parsed.value.voiceId);
 
+  const who = await whoIsAsking(req);
+  if ("response" in who) return who.response;
+
   const ip = visitor(req);
   const slot = await takeSlot(ip);
   if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
@@ -64,6 +80,14 @@ export async function POST(req: Request) {
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
+  // Taken before the first paid call (the vet); given back below unless a recording is made.
+  const charged = await charge(who, "rerecord");
+  if ("response" in charged) {
+    await slot.release();
+    return charged.response;
+  }
+  state.charged = charged;
+
   const vet = await vetScript(key, lines);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
@@ -73,6 +97,7 @@ export async function POST(req: Request) {
     // caller could loop rejected scripts past the daily limits. Only a check
     // that never answered gives the slot back.
     if (vet.reason === "unavailable") await slot.release();
+    await charged.refund();
     return vet.reason === "rejected"
       ? NextResponse.json(
           { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
@@ -83,6 +108,7 @@ export async function POST(req: Request) {
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
     await slot.release();
+    await charged.refund();
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
@@ -105,6 +131,7 @@ export async function POST(req: Request) {
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    await charged.refund();
     return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
   }
   await record({
@@ -120,6 +147,7 @@ export async function POST(req: Request) {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
     },

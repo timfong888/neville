@@ -32,6 +32,7 @@ vi.mock("@/lib/server/limits", () => ({
   underCeiling: async () => ({ ok: true, usage: 0 }),
 }));
 vi.mock("@/lib/server/writer", () => ({ writeScript: async () => ({ lines: ["It is done."], refrain: "r", source: "model", model: "m" }) }));
+vi.mock("@/lib/server/vet", () => ({ vetScript: async () => ({ ok: true, model: "m", costUsd: 0 }) }));
 vi.mock("@/lib/server/tts", () => ({ synthesize: (o: unknown) => synth(o) }));
 vi.mock("@/lib/server/ledger", () => ({ record: async () => undefined, estimateSpeech: async () => 0 }));
 
@@ -63,6 +64,14 @@ const manifestReq = () =>
     body: JSON.stringify({ want: "I am calm", name: "Al" }),
   });
 const callManifest = async () => (await import("@/app/api/manifest/route")).POST(manifestReq());
+const callRerecord = async () =>
+  (await import("@/app/api/rerecord/route")).POST(
+    new Request("https://getneville.vercel.app/api/rerecord", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-real-ip": "1.2.3.4" },
+      body: JSON.stringify({ lines: ["It is done."] }),
+    }),
+  );
 const alice = { id: "alice", name: "Alice", email: "alice@x.test", image: null, emailVerified: true };
 
 beforeEach(async () => {
@@ -239,6 +248,7 @@ describe("POST /api/manifest with the paywall on", () => {
     for (let i = 0; i < 3; i++) expect((await callManifest()).status).toBe(200);
     const rows = (await pg.query<{ reason: string; n: number }>(`select reason, count(*)::int as n from credit_ledger group by reason`)).rows;
     expect(rows).toEqual([{ reason: "tester", n: 3 }]);
+    expect((await pg.query(`select distinct route, action from credit_ledger`)).rows).toEqual([{ route: "/api/manifest", action: "manifest" }]);
     expect(await balance("alice")).toBe(0);
   });
   it("does not treat an unverified email as a tester", async () => {
@@ -269,6 +279,52 @@ describe("POST /api/manifest with the paywall on", () => {
     accountsOn = false;
     expect((await callManifest()).status).toBe(503);
     expect(synth).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/rerecord with the paywall on", () => {
+  it("answers 401 signed out, before any guard or spend", async () => {
+    user = null;
+    expect((await callRerecord()).status).toBe(401);
+    expect(takeSlot).not.toHaveBeenCalled();
+    expect(synth).not.toHaveBeenCalled();
+  });
+  it("answers 402 no_credits at balance 0, and records nothing", async () => {
+    await pg.query(`insert into credit_ledger (user_id, delta, reason, once_key) values ('alice', 1, 'free', 'free')`);
+    await pg.query(`insert into credit_ledger (user_id, delta, reason) values ('alice', -1, 'spend')`);
+    const res = await callRerecord();
+    expect(res.status).toBe(402);
+    expect(await res.json()).toMatchObject({ code: "no_credits", balance: 0 });
+    expect(synth).not.toHaveBeenCalled();
+  });
+  it("spends the configured cost and labels the row with route and action", async () => {
+    const res = await callRerecord();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-credits-left")).toBe("0");
+    const row = await pg.query(`select delta, route, action from credit_ledger where reason = 'spend'`);
+    expect(row.rows).toEqual([{ delta: -1, route: "/api/rerecord", action: "rerecord" }]);
+  });
+  it("skips the spend for a tester and logs a labelled tester row", async () => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await callRerecord()).status).toBe(200);
+    const rows = (await pg.query(`select reason, delta, route, action from credit_ledger`)).rows;
+    expect(rows).toEqual([{ reason: "tester", delta: 0, route: "/api/rerecord", action: "rerecord" }]);
+  });
+  it("gives the credit back when the voice fails", async () => {
+    voiceOk = false;
+    expect((await callRerecord()).status).toBe(502);
+    expect(await balance("alice")).toBe(1);
+  });
+  it("lets only one of several simultaneous requests record at balance 1", async () => {
+    const out = await Promise.all(Array.from({ length: 4 }, () => callRerecord()));
+    expect(out.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(out.filter((r) => r.status === 402)).toHaveLength(3);
+  });
+  it("is unchanged with the paywall off", async () => {
+    vi.stubEnv("PAYWALL_ENABLED", "");
+    user = null;
+    expect((await callRerecord()).status).toBe(200);
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
   });
 });
 

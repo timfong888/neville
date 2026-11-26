@@ -2,7 +2,7 @@
 // Off unless PAYWALL_ENABLED=true; then none of this runs and the route is as it was.
 import "server-only";
 import { NextResponse } from "next/server";
-import { CREDITS, isUnlimited, paywallEnabled } from "@/lib/credits";
+import { type Action, CREDITS, costOf, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { type SignedIn, accountsEnabled, currentUser } from "@/lib/server/accounts";
 import { ensureFreeCredit, logTesterSpend, refundCredit, spendCredit } from "@/lib/server/creditsDb";
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
@@ -33,17 +33,19 @@ export type Charged = {
 const nothing: Charged = { left: null, refund: async () => undefined };
 
 /** Step 2, after the guards let the request through and before any paid call: spend one credit or refuse with 402. */
-export async function charge(who: Who): Promise<Charged | { response: Response }> {
+export async function charge(who: Who, action: Action): Promise<Charged | { response: Response }> {
   if (!who.enabled || !who.user) return nothing; // paywall off, or signed out where sign-in is not required
   const user = who.user;
+  const c = { cost: costOf(action), route: `/api/${action}`, action };
+  if (c.cost <= 0) return nothing; // a free action
   try {
     if (isUnlimited(user)) {
-      await logTesterSpend(getPool() as unknown as Db, user.id);
+      await logTesterSpend(getPool() as unknown as Db, user.id, c);
       return { left: "unlimited", refund: async () => undefined };
     }
     const out = await withTx(async (db) => {
       await ensureFreeCredit(db, user.id, CREDITS.freeCredits);
-      return spendCredit(db, user.id);
+      return spendCredit(db, user.id, c);
     });
     if (!out.ok) {
       return {
@@ -60,7 +62,7 @@ export async function charge(who: Who): Promise<Charged | { response: Response }
         if (refunded) return;
         refunded = true;
         try {
-          await refundCredit(getPool() as unknown as Db, user.id);
+          await refundCredit(getPool() as unknown as Db, user.id, c);
         } catch (e) {
           console.error("[credits] refund failed", user.id, e instanceof Error ? e.message : e);
         }

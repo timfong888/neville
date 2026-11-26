@@ -26,27 +26,30 @@ export async function ensureFreeCredit(db: Db, userId: string, amount: number): 
   return rows.length > 0;
 }
 
-/** Takes one credit if the balance allows it. Run inside a transaction. */
-export async function spendCredit(db: Db, userId: string): Promise<{ ok: boolean; balance: number }> {
+/** What a spend, refund or tester row paid for. */
+export type Charge = { cost: number; route: string; action: string };
+
+/** Takes `cost` credits if the balance allows it, labelled with the route and action. Run inside a transaction. */
+export async function spendCredit(db: Db, userId: string, c: Charge): Promise<{ ok: boolean; balance: number }> {
   await lock(db, userId);
   const { rows } = await db.query(
-    `insert into credit_ledger (user_id, delta, reason)
-     select $1::text, -1, 'spend'
-      where (select coalesce(sum(delta), 0) from credit_ledger where user_id = $1::text) >= 1
+    `insert into credit_ledger (user_id, delta, reason, route, action)
+     select $1::text, -($2::int), 'spend', $3::text, $4::text
+      where (select coalesce(sum(delta), 0) from credit_ledger where user_id = $1::text) >= $2::int
      returning id`,
-    [userId],
+    [userId, c.cost, c.route, c.action],
   );
   return { ok: rows.length > 0, balance: await creditBalance(db, userId) };
 }
 
-/** Gives back the credit of a recording that failed. */
-export async function refundCredit(db: Db, userId: string): Promise<void> {
-  await db.query(`insert into credit_ledger (user_id, delta, reason) values ($1, 1, 'refund')`, [userId]);
+/** Gives back the credits of a recording that failed. */
+export async function refundCredit(db: Db, userId: string, c: Charge): Promise<void> {
+  await db.query(`insert into credit_ledger (user_id, delta, reason, route, action) values ($1, $2, 'refund', $3, $4)`, [userId, c.cost, c.route, c.action]);
 }
 
 /** A recording by an unlimited tester: no change to the balance, but a row, so the cost stays countable. */
-export async function logTesterSpend(db: Db, userId: string): Promise<void> {
-  await db.query(`insert into credit_ledger (user_id, delta, reason) values ($1, 0, 'tester')`, [userId]);
+export async function logTesterSpend(db: Db, userId: string, c: Charge): Promise<void> {
+  await db.query(`insert into credit_ledger (user_id, delta, reason, route, action) values ($1, 0, 'tester', $2, $3)`, [userId, c.route, c.action]);
 }
 
 export async function hasStarter(db: Db, userId: string): Promise<boolean> {

@@ -82,7 +82,7 @@ async function handle(req: Request, state: { charged?: Charged }): Promise<Respo
   }
 
   // The last gate before anything is paid for: the guards above are the backstop, this is the account's quota.
-  const charged = await charge(who);
+  const charged = await charge(who, "manifest");
   if ("response" in charged) {
     await slot.release();
     return charged.response;

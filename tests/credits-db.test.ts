@@ -7,7 +7,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs script, no type declarations
 import { runMigrations } from "../scripts/migrate-core.mjs";
-import { availablePacks, isUnlimited, paywallEnabled, unlimitedEmails } from "@/lib/credits";
+import { CREDITS, availablePacks, isUnlimited, paywallEnabled, unlimitedEmails } from "@/lib/credits";
 import {
   creditBalance,
   ensureFreeCredit,
@@ -33,6 +33,7 @@ const client = {
   },
 };
 const quiet = () => undefined;
+const M = { cost: 1, route: "/api/manifest", action: "manifest" };
 
 async function addUser(id: string) {
   await pg.query(`insert into "user" (id, name, email, "emailVerified") values ($1, $1, $1 || '@x.test', true)`, [id]);
@@ -65,6 +66,9 @@ describe("config helpers", () => {
     expect(paywallEnabled({ PAYWALL_ENABLED: "1" })).toBe(false);
     expect(paywallEnabled({ PAYWALL_ENABLED: " TRUE " })).toBe(true);
   });
+  it("keeps the credit cost of each action in config", () => {
+    expect(CREDITS.costs).toEqual({ manifest: 1, rerecord: 1 });
+  });
   it("offers starter only while it has not been bought", () => {
     expect(availablePacks(false).map((p) => p.id)).toEqual(["starter", "pack10"]);
     expect(availablePacks(true).map((p) => p.id)).toEqual(["pack10"]);
@@ -87,13 +91,13 @@ describe("free credit", () => {
 describe("spending", () => {
   it("takes one credit and refuses at zero with the balance", async () => {
     await tx((d) => ensureFreeCredit(d, "alice", 1));
-    expect(await tx((d) => spendCredit(d, "alice"))).toEqual({ ok: true, balance: 0 });
-    expect(await tx((d) => spendCredit(d, "alice"))).toEqual({ ok: false, balance: 0 });
+    expect(await tx((d) => spendCredit(d, "alice", M))).toEqual({ ok: true, balance: 0 });
+    expect(await tx((d) => spendCredit(d, "alice", M))).toEqual({ ok: false, balance: 0 });
     expect(await creditBalance(db, "alice")).toBe(0);
   });
   it("lets only one of several concurrent spends win at balance 1", async () => {
     await tx((d) => ensureFreeCredit(d, "alice", 1));
-    const results = await Promise.all(Array.from({ length: 6 }, () => tx((d) => spendCredit(d, "alice"))));
+    const results = await Promise.all(Array.from({ length: 6 }, () => tx((d) => spendCredit(d, "alice", M))));
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect(await creditBalance(db, "alice")).toBe(0);
     const spends = await db.query(`select count(*)::int as n from credit_ledger where user_id = 'alice' and reason = 'spend'`);
@@ -101,16 +105,41 @@ describe("spending", () => {
   });
   it("refunds a credit after a failed recording", async () => {
     await tx((d) => ensureFreeCredit(d, "alice", 1));
-    await tx((d) => spendCredit(d, "alice"));
-    await refundCredit(db, "alice");
+    await tx((d) => spendCredit(d, "alice", M));
+    await refundCredit(db, "alice", M);
     expect(await creditBalance(db, "alice")).toBe(1);
   });
   it("logs a tester spend row that does not change the balance", async () => {
-    await logTesterSpend(db, "alice");
-    await logTesterSpend(db, "alice");
+    await logTesterSpend(db, "alice", M);
+    await logTesterSpend(db, "alice", M);
     expect(await creditBalance(db, "alice")).toBe(0);
     const r = await db.query(`select count(*)::int as n from credit_ledger where user_id = 'alice' and reason = 'tester' and delta = 0`);
     expect(r.rows[0].n).toBe(2);
+  });
+});
+
+describe("the cost of an action", () => {
+  it("takes the configured cost, records route and action on the row, and refuses when the balance is short", async () => {
+    await tx((d) => grantPurchase(d, { userId: "alice", productId: "starter", eventId: "e", environment: null }));
+    const re = { cost: 2, route: "/api/rerecord", action: "rerecord" };
+    expect(await tx((d) => spendCredit(d, "alice", re))).toEqual({ ok: true, balance: 1 });
+    expect(await tx((d) => spendCredit(d, "alice", re))).toEqual({ ok: false, balance: 1 });
+    const row = await db.query(`select delta, route, action from credit_ledger where reason = 'spend'`);
+    expect(row.rows).toEqual([{ delta: -2, route: "/api/rerecord", action: "rerecord" }]);
+  });
+  it("refunds the same cost and labels the tester row", async () => {
+    const re = { cost: 2, route: "/api/rerecord", action: "rerecord" };
+    await tx((d) => grantPurchase(d, { userId: "alice", productId: "pack10", eventId: "e", environment: null }));
+    await tx((d) => spendCredit(d, "alice", re));
+    await refundCredit(db, "alice", re);
+    await logTesterSpend(db, "alice", re);
+    expect(await creditBalance(db, "alice")).toBe(10);
+    const rows = await db.query(`select reason, delta, route, action from credit_ledger where route is not null order by id`);
+    expect(rows.rows).toEqual([
+      { reason: "spend", delta: -2, route: "/api/rerecord", action: "rerecord" },
+      { reason: "refund", delta: 2, route: "/api/rerecord", action: "rerecord" },
+      { reason: "tester", delta: 0, route: "/api/rerecord", action: "rerecord" },
+    ]);
   });
 });
 
