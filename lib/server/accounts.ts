@@ -176,14 +176,14 @@ export function getAuth() {
   return auth;
 }
 
-export type SignedIn = { id: string; name: string; email: string; image: string | null };
+export type SignedIn = { id: string; name: string; email: string; image: string | null; emailVerified: boolean };
 
 /** The signed-in user for this request, or null (also null when accounts are off). */
 export async function currentUser(req: Request): Promise<SignedIn | null> {
   if (!accountsEnabled()) return null;
   const s = await getAuth().api.getSession({ headers: req.headers });
   if (!s?.user) return null;
-  return { id: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image ?? null };
+  return { id: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image ?? null, emailVerified: s.user.emailVerified === true };
 }
 
 // Recordings live in a private Blob store and are only served through the

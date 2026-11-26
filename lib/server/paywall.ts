@@ -1,0 +1,73 @@
+// The paywall on /api/manifest (#168): sign-in, then one credit per recording.
+// Off unless PAYWALL_ENABLED=true; then none of this runs and the route is as it was.
+import "server-only";
+import { NextResponse } from "next/server";
+import { CREDITS, isUnlimited, paywallEnabled } from "@/lib/credits";
+import { type SignedIn, accountsEnabled, currentUser } from "@/lib/server/accounts";
+import { ensureFreeCredit, logTesterSpend, refundCredit, spendCredit } from "@/lib/server/creditsDb";
+import { dbConfigured, getPool, withTx } from "@/lib/server/db";
+import type { Db } from "@/lib/server/libraryDb";
+
+export type Who = { enabled: false } | { enabled: true; user: SignedIn | null };
+
+/** Step 1, before any guard counts the request: who is asking, or the refusal to send. */
+export async function whoIsAsking(req: Request): Promise<Who | { response: Response }> {
+  if (!paywallEnabled()) return { enabled: false };
+  // With the paywall on, accounts and the database must both be there, or nobody could sign in or be charged.
+  if (!accountsEnabled() || !dbConfigured()) {
+    return { response: NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 }) };
+  }
+  const user = await currentUser(req);
+  if (!user && CREDITS.signInRequired) {
+    return { response: NextResponse.json({ code: "sign_in_required", error: "Sign in to create a recording." }, { status: 401 }) };
+  }
+  return { enabled: true, user };
+}
+
+export type Charged = {
+  /** Value for the X-Credits-Left header: a number, or "unlimited" for a tester. Null when nothing was charged. */
+  left: string | null;
+  /** Gives the credit back; safe to call more than once. */
+  refund: () => Promise<void>;
+};
+const nothing: Charged = { left: null, refund: async () => undefined };
+
+/** Step 2, after the guards let the request through and before any paid call: spend one credit or refuse with 402. */
+export async function charge(who: Who): Promise<Charged | { response: Response }> {
+  if (!who.enabled || !who.user) return nothing; // paywall off, or signed out where sign-in is not required
+  const user = who.user;
+  try {
+    if (isUnlimited(user)) {
+      await logTesterSpend(getPool() as unknown as Db, user.id);
+      return { left: "unlimited", refund: async () => undefined };
+    }
+    const out = await withTx(async (db) => {
+      await ensureFreeCredit(db, user.id, CREDITS.freeCredits);
+      return spendCredit(db, user.id);
+    });
+    if (!out.ok) {
+      return {
+        response: NextResponse.json(
+          { code: "no_credits", error: "You have no recordings left. Get more to keep going.", balance: out.balance },
+          { status: 402 },
+        ),
+      };
+    }
+    let refunded = false;
+    return {
+      left: String(out.balance),
+      refund: async () => {
+        if (refunded) return;
+        refunded = true;
+        try {
+          await refundCredit(getPool() as unknown as Db, user.id);
+        } catch (e) {
+          console.error("[credits] refund failed", user.id, e instanceof Error ? e.message : e);
+        }
+      },
+    };
+  } catch (e) {
+    console.error("[credits] spend failed", e instanceof Error ? e.message : e);
+    return { response: NextResponse.json({ code: "credits_unavailable", error: "Recording is paused for a moment." }, { status: 503 }) };
+  }
+}

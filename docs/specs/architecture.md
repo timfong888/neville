@@ -11,10 +11,11 @@ Each fix, with how it was checked. "Code" means this repository on `main` at 83a
 3. **Script models.** The writer uses Gemini 2.5 Flash Lite and similar small models at $0.10 in and $0.40 out per 1M tokens (OpenRouter; list in `config/limits.json`: Gemini 2.5 Flash Lite, GPT-4.1 nano, GPT-4o mini, Mistral Small 3.2, Llama 3.3 70B), not Claude Haiku at about $0.0035 a script. A script at those prices is a small fraction of a cent.
 4. **Guardrails as built** (`config/limits.json`, `lib/limits.ts`, `lib/ledger.ts`, PR #26): a spend ceiling of $2 read from OpenRouter's own usage counter; at most 150 generations a day in total and 6 per visitor per day (counted in Upstash Redis when configured, otherwise in memory per instance); 280 characters in and 700 out; a kill switch (`generationEnabled`, `SPEECH_ENABLED`); alerts at 50%, 80% and 100% of the ceiling, to a webhook (`ALERT_WEBHOOK_URL`) or the log, not email. The usage ledger is `[ledger]` log lines plus the last 500 entries in memory per instance, not a Postgres table. **No bot check exists yet:** BotID is not in the code.
 5. **Sign-in.** Apple-only is enough to turn accounts on; Google is optional and appears only when its two variables are set (#106, `lib/server/providers.ts`). The Expo section's "Sign in with Apple alongside Google" is now the other way round.
-6. **Not built:** Stripe (nothing in the code) and the `entitlement` table. Neither are the `allowance`, `job`, `usage`, `image`, `rate_limit` or `setting` tables below. The tables that exist (`db/migrations/001_accounts_and_library.sql`) are `user`, `session`, `account`, `verification`, `profile`, `manifestation`, `rendition`, `playlist`, `playlist_item` and `blob_tombstone`.
+6. **Not built:** Stripe (nothing in the code) and the `entitlement` table (the paywall uses `credit_ledger` instead, correction 10). Neither are the `allowance`, `job`, `usage`, `image`, `rate_limit` or `setting` tables below. The tables that exist (`db/migrations/001_accounts_and_library.sql`) are `user`, `session`, `account`, `verification`, `profile`, `manifestation`, `rendition`, `playlist`, `playlist_item` and `blob_tombstone`.
 7. **Blob transfer** is included in Vercel's flat rate, so there is no separate per-GB transfer line; only storage is a cost to watch. (Reported by the PRD steward from Vercel's pricing; not re-read here.)
 8. **Neon** is on the Free plan today; a typical Launch plan bill is about $15 a month, not $5 to $19. (Reported by the PRD steward; the Neon API does not show the plan, so not independently checked here.)
 9. **Web stack.** The client is `native/`, one React Native codebase for iOS and web, with Next.js as the API only; see `native-ios.md`.
+10. **[2026-11-26, #168] Paywall as built:** credits in Postgres (`credit_ledger`, `config/credits.json`), bought through RevenueCat, switched by `PAYWALL_ENABLED` (default off). See Data model.
 
 Status: proposed, 2026-11-17. Source of truth for product scope is the PRD (Google Doc "Neville"). This document starts fresh: nothing from the old Google project, FlutterFlow app, users or recordings is reused.
 
@@ -213,6 +214,30 @@ entitlement (
 rate_limit ( key text primary key, count int not null, window_start timestamptz not null )
 setting    ( key text primary key, value jsonb not null )   -- kill switch, daily budgets, default models
 ```
+
+**[corrected 2026-11-26, #168]** Entitlements are stored as credits, in our Postgres (`db/migrations/004_credit_ledger.sql`), not in Stripe or RevenueCat. The `entitlement` and `allowance` tables above are not built and are not the plan for the paywall. RevenueCat is the till: its webhook tells our server a purchase happened, and our server adds credits. RevenueCat entitlements suit subscriptions, not a count of recordings.
+
+```sql
+-- One row per grant or spend. An account's balance is sum(delta). Keyed by the Better Auth user id.
+credit_ledger (
+  id          bigint generated always as identity primary key,
+  user_id     text not null references "user"(id) on delete cascade,
+  delta       integer not null,
+  reason      text not null,   -- free | purchase | spend | refund | tester
+  product_id  text,            -- starter | pack10, for a purchase
+  source_id   text unique,     -- RevenueCat event id: a repeated event can never grant twice
+  once_key    text,            -- 'free' or 'starter'; unique with user_id, so each is granted once per account
+  environment text,            -- SANDBOX | PRODUCTION, from the event
+  created_at  timestamptz not null default now()
+)
+```
+
+- **Packs** (`config/credits.json`, Tim 2026-11-26): `starter` is 3 recordings at $2.99, once per account; `pack10` is 10 recordings at $6.99, repeatable. Prices are set in App Store Connect, not here. The free allowance (1) and "sign-in required" (true) are in the same file.
+- **Spend:** one credit per recording, taken after the network and spend-ceiling guards pass and before any paid call, under a per-account lock, so two requests at balance 1 cannot both record. A recording that fails after the credit was taken gives it back (`refund`). The network, global and ceiling guards stay as the backstop.
+- **Testers:** `UNLIMITED_USER_EMAILS` (comma list) skips the spend for a signed-in account whose email, from the server-side session and verified by the sign-in provider, is on the list. Each such recording writes a `tester` row with delta 0, so the cost stays countable. Nothing from the client is trusted.
+- **Switch:** `PAYWALL_ENABLED` (default off). Off, `/api/manifest` is as it was before.
+- **RevenueCat id mapping:** the RevenueCat app user id is our account id (`"user".id`). The app calls `Purchases.logIn(id)` right after sign-in. The webhook (`POST /api/revenuecat/webhook`, header checked against `REVENUECAT_WEBHOOK_AUTH`) handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE`, and tries the event's aliases when `app_user_id` is not an account.
+- **Deleting an account** deletes its ledger rows with it (cascade), like every other user-owned row.
 
 Delete account: one transaction deletes the auth user (cascading to profile, manifestations, renditions, images, jobs, allowance, entitlement), then a job deletes the stored files by key and cancels the Stripe subscription. Share links stop working because they are served through `/s/:slug`, never as raw storage URLs.
 

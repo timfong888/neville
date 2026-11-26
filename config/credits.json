@@ -1,0 +1,8 @@
+{
+  "freeCredits": 1,
+  "signInRequired": true,
+  "products": {
+    "starter": { "credits": 3, "oncePerAccount": true },
+    "pack10": { "credits": 10, "oncePerAccount": false }
+  }
+}

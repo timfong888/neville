@@ -6,6 +6,7 @@ import { writeScript } from "@/lib/server/writer";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
+import { type Charged, charge, whoIsAsking } from "@/lib/server/paywall";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,8 +25,20 @@ function visitor(req: Request): string {
 }
 
 // The app's one paid path: a wish in, a script and its recording out.
-// Nothing is stored. Guards are in lib/server/limits.ts.
+// Nothing is stored. Guards are in lib/server/limits.ts. With PAYWALL_ENABLED=true it also needs
+// sign-in and one credit per recording (lib/server/paywall.ts, #168); a credit is given back if
+// the recording fails after it was taken.
 export async function POST(req: Request) {
+  const state: { charged?: Charged } = {};
+  try {
+    return await handle(req, state);
+  } catch (e) {
+    await state.charged?.refund();
+    throw e;
+  }
+}
+
+async function handle(req: Request, state: { charged?: Charged }): Promise<Response> {
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -54,6 +67,10 @@ export async function POST(req: Request) {
   const pace = resolvePace(body.pace);
   const tone = resolveTone(body.tone);
 
+  // Signed-out requests stop here when sign-in is required, before they use up a network slot.
+  const who = await whoIsAsking(req);
+  if ("response" in who) return who.response;
+
   const ip = visitor(req);
   const slot = await takeSlot(ip);
   if (slot.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
@@ -63,6 +80,14 @@ export async function POST(req: Request) {
     await slot.release();
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
+
+  // The last gate before anything is paid for: the guards above are the backstop, this is the account's quota.
+  const charged = await charge(who);
+  if ("response" in charged) {
+    await slot.release();
+    return charged.response;
+  }
+  state.charged = charged;
 
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
   // Programming mode (#77): the refrain is recorded once, as one more line at
@@ -103,6 +128,7 @@ export async function POST(req: Request) {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    await charged.refund();
     return NextResponse.json(
       {
         code: "voice_failed",
@@ -137,6 +163,7 @@ export async function POST(req: Request) {
       // and was left out ("skipped").
       ...(body.repeat === true && !repeat ? { "X-Repeat": "unsupported" } : {}),
       ...(repeat && speech.tailDropped ? { "X-Repeat": "skipped" } : {}),
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,

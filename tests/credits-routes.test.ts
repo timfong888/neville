@@ -1,0 +1,275 @@
+// /api/revenuecat/webhook, /api/credits and the paywall on /api/manifest (#168), on PGlite.
+import { PGlite } from "@electric-sql/pglite";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// @ts-expect-error plain .mjs script, no type declarations
+import { runMigrations } from "../scripts/migrate-core.mjs";
+
+vi.mock("server-only", () => ({}));
+
+let pg: PGlite;
+let user: { id: string; name: string; email: string; image: null; emailVerified: boolean } | null;
+let accountsOn = true;
+let voiceOk = true;
+const synth = vi.fn();
+const takeSlot = vi.fn();
+const release = vi.fn();
+
+vi.mock("@/lib/server/db", () => ({
+  dbConfigured: () => true,
+  getPool: () => ({ query: (q: string, p?: unknown[]) => pg.query(q, p) }),
+  withTx: <T>(fn: (d: unknown) => Promise<T>) => pg.transaction((t) => fn({ query: (q: string, p?: unknown[]) => t.query(q, p) })),
+}));
+vi.mock("@/lib/server/accounts", () => ({
+  accountsEnabled: () => accountsOn,
+  currentUser: async () => user,
+}));
+vi.mock("@/lib/server/openrouter", () => ({ apiKey: () => "k", OPENROUTER: "https://x" }));
+vi.mock("@/lib/server/limits", () => ({
+  LIMITS: { maxWantChars: 280 },
+  generationEnabled: () => true,
+  takeSlot: (ip: string) => takeSlot(ip),
+  underCeiling: async () => ({ ok: true, usage: 0 }),
+}));
+vi.mock("@/lib/server/writer", () => ({ writeScript: async () => ({ lines: ["It is done."], refrain: "r", source: "model", model: "m" }) }));
+vi.mock("@/lib/server/tts", () => ({ synthesize: (o: unknown) => synth(o) }));
+vi.mock("@/lib/server/ledger", () => ({ record: async () => undefined, estimateSpeech: async () => 0 }));
+
+const SECRET = "Bearer test-secret";
+const AUTH = { authorization: SECRET };
+
+const hook = (event: Record<string, unknown>, headers: Record<string, string> = AUTH) =>
+  new Request("https://getneville.vercel.app/api/revenuecat/webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({ api_version: "1.0", event }),
+  });
+const purchase = (over: Record<string, unknown> = {}) => ({
+  id: "evt-1",
+  type: "NON_RENEWING_PURCHASE",
+  app_user_id: "alice",
+  product_id: "pack10",
+  environment: "SANDBOX",
+  ...over,
+});
+const callHook = async (req: Request) => (await import("@/app/api/revenuecat/webhook/route")).POST(req);
+const balance = async (id: string) =>
+  Number((await pg.query<{ b: number }>(`select coalesce(sum(delta),0)::int as b from credit_ledger where user_id = $1`, [id])).rows[0].b);
+
+const manifestReq = () =>
+  new Request("https://getneville.vercel.app/api/manifest", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-real-ip": "1.2.3.4" },
+    body: JSON.stringify({ want: "I am calm", name: "Al" }),
+  });
+const callManifest = async () => (await import("@/app/api/manifest/route")).POST(manifestReq());
+const alice = { id: "alice", name: "Alice", email: "alice@x.test", image: null, emailVerified: true };
+
+beforeEach(async () => {
+  vi.resetModules();
+  vi.stubEnv("REVENUECAT_WEBHOOK_AUTH", SECRET);
+  vi.stubEnv("PAYWALL_ENABLED", "true");
+  vi.stubEnv("UNLIMITED_USER_EMAILS", "");
+  pg = new PGlite();
+  await runMigrations(
+    { query: async (t: string, p?: unknown[]) => (p ? pg.query(t, p) : ((await pg.exec(t)).at(-1) ?? { rows: [] })) },
+    path.join(process.cwd(), "db", "migrations"),
+    () => undefined,
+  );
+  for (const id of ["alice", "bob"]) {
+    await pg.query(`insert into "user" (id, name, email, "emailVerified") values ($1, $1, $1 || '@x.test', true)`, [id]);
+  }
+  user = { ...alice };
+  accountsOn = true;
+  voiceOk = true;
+  synth.mockReset();
+  synth.mockImplementation(async () =>
+    voiceOk
+      ? { ok: true, audio: new Uint8Array([1, 2, 3]), mime: "audio/wav", sentChars: 10, speedApplied: true, pauseMs: 0 }
+      : { ok: false, status: 500, message: "down", sentChars: 5 },
+  );
+  takeSlot.mockReset();
+  takeSlot.mockResolvedValue({ refusal: null, release });
+  release.mockReset();
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
+});
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await pg.close();
+});
+
+describe("POST /api/revenuecat/webhook", () => {
+  it("refuses a missing or wrong Authorization header and grants nothing", async () => {
+    expect((await callHook(hook(purchase(), {}))).status).toBe(401);
+    expect((await callHook(hook(purchase(), { authorization: "Bearer nope" }))).status).toBe(401);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("refuses everything when REVENUECAT_WEBHOOK_AUTH is not set", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_AUTH", "");
+    expect((await callHook(hook(purchase()))).status).toBe(503);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("adds 10 credits for a pack10 purchase, matched by the app user id", async () => {
+    const res = await callHook(hook(purchase()));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, status: "granted" });
+    expect(await balance("alice")).toBe(10);
+  });
+  it("answers 200 and adds nothing when the same event is delivered twice", async () => {
+    const a = await callHook(hook(purchase()));
+    const b = await callHook(hook(purchase()));
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(await b.json()).toMatchObject({ ok: true, status: "duplicate" });
+    expect(await balance("alice")).toBe(10);
+  });
+  it("adds nothing for a second starter purchase, with a different event id, and still answers 200", async () => {
+    await callHook(hook(purchase({ id: "s1", product_id: "starter" })));
+    const again = await callHook(hook(purchase({ id: "s2", product_id: "starter" })));
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({ status: "already_owned" });
+    expect(await balance("alice")).toBe(3);
+  });
+  it("handles INITIAL_PURCHASE too", async () => {
+    await callHook(hook(purchase({ type: "INITIAL_PURCHASE", id: "i1" })));
+    expect(await balance("alice")).toBe(10);
+  });
+  it("finds the account through an alias when app_user_id is anonymous", async () => {
+    await callHook(hook(purchase({ id: "a1", app_user_id: "$RCAnonymousID:zzz", aliases: ["$RCAnonymousID:zzz", "bob"] })));
+    expect(await balance("bob")).toBe(10);
+  });
+  it("answers 200 and grants nothing for an unknown user, an unknown product or another event type", async () => {
+    expect(await (await callHook(hook(purchase({ id: "u1", app_user_id: "$RCAnonymousID:nobody" })))).json()).toMatchObject({ status: "ignored" });
+    expect(await (await callHook(hook(purchase({ id: "p1", product_id: "gold" })))).json()).toMatchObject({ status: "ignored" });
+    expect((await callHook(hook(purchase({ id: "t1", type: "CANCELLATION" })))).status).toBe(200);
+    expect((await callHook(hook(purchase({ id: "t2", type: "TEST" })))).status).toBe(200);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("answers 400 for a purchase with no event id, since it could not be made safe to repeat", async () => {
+    expect((await callHook(hook(purchase({ id: undefined })))).status).toBe(400);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("answers 400 for a body that is not JSON", async () => {
+    const bad = new Request("https://x/api/revenuecat/webhook", { method: "POST", headers: AUTH, body: "nope" });
+    expect((await callHook(bad)).status).toBe(400);
+  });
+});
+
+describe("GET /api/credits", () => {
+  const get = async () => (await import("@/app/api/credits/route")).GET(new Request("https://getneville.vercel.app/api/credits"));
+
+  it("is 401 when signed out", async () => {
+    user = null;
+    const res = await get();
+    expect(res.status).toBe(401);
+  });
+  it("gives the free credit on first call and shows both packs", async () => {
+    const res = await get();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      balance: 1,
+      unlimited: false,
+      paywallEnabled: true,
+      signInRequired: true,
+      packs: [
+        { id: "starter", credits: 3 },
+        { id: "pack10", credits: 10 },
+      ],
+    });
+    expect((await (await get()).json()).balance).toBe(1); // not given twice
+  });
+  it("hides starter once it was bought", async () => {
+    await callHook(hook(purchase({ id: "s1", product_id: "starter" })));
+    const body = await (await get()).json();
+    expect(body.balance).toBe(4);
+    expect(body.packs).toEqual([{ id: "pack10", credits: 10 }]);
+  });
+  it("says unlimited for a listed, verified email, and never from anything the client sends", async () => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    expect((await (await get()).json()).unlimited).toBe(true);
+    user = { ...alice, emailVerified: false };
+    expect((await (await get()).json()).unlimited).toBe(false);
+    const forged = new Request("https://getneville.vercel.app/api/credits?unlimited=1", { headers: { "x-unlimited": "true" } });
+    user = { ...alice };
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "");
+    expect((await (await import("@/app/api/credits/route")).GET(forged).then((r) => r.json())).unlimited).toBe(false);
+  });
+});
+
+describe("POST /api/manifest with the paywall on", () => {
+  it("answers 401 sign_in_required when signed out, before any guard or spend", async () => {
+    user = null;
+    const res = await callManifest();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: "sign_in_required" });
+    expect(takeSlot).not.toHaveBeenCalled();
+    expect(synth).not.toHaveBeenCalled();
+  });
+  it("spends the free credit, then answers 402 no_credits with the balance", async () => {
+    const first = await callManifest();
+    expect(first.status).toBe(200);
+    expect(first.headers.get("x-credits-left")).toBe("0");
+    const second = await callManifest();
+    expect(second.status).toBe(402);
+    expect(await second.json()).toMatchObject({ code: "no_credits", balance: 0 });
+    expect(synth).toHaveBeenCalledTimes(1);
+  });
+  it("lets only one of several simultaneous requests record at balance 1", async () => {
+    const out = await Promise.all(Array.from({ length: 5 }, () => callManifest()));
+    expect(out.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(out.filter((r) => r.status === 402)).toHaveLength(4);
+    expect(synth).toHaveBeenCalledTimes(1);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("skips the spend for a tester and logs a tester row", async () => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "Alice@x.test");
+    for (let i = 0; i < 3; i++) expect((await callManifest()).status).toBe(200);
+    const rows = (await pg.query<{ reason: string; n: number }>(`select reason, count(*)::int as n from credit_ledger group by reason`)).rows;
+    expect(rows).toEqual([{ reason: "tester", n: 3 }]);
+    expect(await balance("alice")).toBe(0);
+  });
+  it("does not treat an unverified email as a tester", async () => {
+    vi.stubEnv("UNLIMITED_USER_EMAILS", "alice@x.test");
+    user = { ...alice, emailVerified: false };
+    await callManifest();
+    expect((await callManifest()).status).toBe(402);
+  });
+  it("charges nothing when the voice fails: the credit comes back", async () => {
+    voiceOk = false;
+    const res = await callManifest();
+    expect(res.status).toBe(502);
+    expect(await balance("alice")).toBe(1);
+  });
+  it("charges nothing when a guard refuses first", async () => {
+    takeSlot.mockResolvedValue({ refusal: { status: 429, code: "limit", error: "Too many." }, release });
+    expect((await callManifest()).status).toBe(429);
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
+  it("uses a purchased pack once the free credit is gone", async () => {
+    await callManifest();
+    await callHook(hook(purchase({ id: "p1", product_id: "starter" })));
+    const ok = await callManifest();
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("x-credits-left")).toBe("2");
+  });
+  it("answers 503 and does not record when accounts are off", async () => {
+    accountsOn = false;
+    expect((await callManifest()).status).toBe(503);
+    expect(synth).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/manifest with the paywall off (the default)", () => {
+  beforeEach(() => vi.stubEnv("PAYWALL_ENABLED", ""));
+
+  it("works signed out and spends nothing, exactly as before", async () => {
+    user = null;
+    expect((await callManifest()).status).toBe(200);
+    expect(synth).toHaveBeenCalledTimes(1);
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
+  it("spends nothing for a signed-in account either", async () => {
+    expect((await callManifest()).status).toBe(200);
+    expect((await pg.query(`select count(*)::int as n from credit_ledger`)).rows[0]).toEqual({ n: 0 });
+  });
+});

@@ -154,6 +154,26 @@ values, and not on production).
 | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | optional: Sign in with Apple appears (Services ID return URLs: `https://getneville.vercel.app/api/auth/callback/apple` and `https://neville-delta.vercel.app/api/auth/callback/apple`; domains: `getneville.vercel.app`, `neville-delta.vercel.app`) when all four are set and the key parses. A key that does not parse switches only Apple off (one log line names the variable); Google keeps working. The Services ID, the 10-character Team ID, the key's Key ID, and the full contents of its `.p8` file. The app signs Apple's client secret from the key itself, so nothing expires by hand. |
 | `APPLE_APP_BUNDLE_ID` | optional, for the future iOS app: also accept Apple ID tokens issued to this bundle id (the Services ID stays accepted) |
 
+## Credits and the paywall (#168)
+
+Off until `PAYWALL_ENABLED=true`. Then `/api/manifest` needs sign-in and spends one credit per
+recording; the IP, daily and spend-ceiling guards above still apply first. Credits live in
+Postgres (`credit_ledger`, migration 004; balance is the sum of `delta`). Packs, the free
+allowance and "sign-in required" are in `config/credits.json`. Prices are set in App Store
+Connect, not here. Environment variables (names only):
+
+| Variable | Purpose |
+|---|---|
+| `PAYWALL_ENABLED` | `true` turns the paywall on. Anything else, or unset, leaves recording as it was. |
+| `UNLIMITED_USER_EMAILS` | comma list of tester emails that skip the spend. Matched against the signed-in account's own verified email on the server; each recording still writes a `tester` row. |
+| `REVENUECAT_WEBHOOK_AUTH` | the exact `Authorization` header value RevenueCat sends to `POST /api/revenuecat/webhook`. Unset: the webhook refuses every call. |
+
+- `GET /api/credits` (signed in): `{ balance, unlimited, paywallEnabled, signInRequired, packs }`. `starter` is listed only until it has been bought. The free credit is given the first time an account is seen here or spends.
+- `POST /api/manifest` with the paywall on: `401 {code:"sign_in_required"}` signed out; `402 {code:"no_credits", balance}` at zero; `X-Credits-Left` on success. A recording that fails after the credit was taken gives it back.
+- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The event id is the idempotency key, so a repeat answers 200 and adds nothing.
+- **Id mapping:** RevenueCat's app user id must be our account id (`"user".id`). The app calls `Purchases.logIn(<that id>)` after sign-in and does not buy while anonymous.
+- Roll back migration 004 by hand with `db/rollback/004_credit_ledger.down.sql`.
+
 Schema: `db/migrations/*.sql`, applied in order by `scripts/migrate.mjs`. A
 build applies them only when `MIGRATE_ON_BUILD=true`; `npm run migrate`
 applies them by hand against `DATABASE_URL`. Each applied migration is recorded

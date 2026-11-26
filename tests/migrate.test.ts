@@ -105,6 +105,6 @@ describe("runMigrations", () => {
 
   it("runs this repo's migrations cleanly", async () => {
     await expect(runMigrations(client, path.join(process.cwd(), "db", "migrations"), () => {})).resolves.toBeUndefined();
-    expect((await rows()).map((r) => r.name)).toEqual(["001_accounts_and_library.sql", "002_share_links.sql", "003_apple_revocation_pending.sql"]);
+    expect((await rows()).map((r) => r.name)).toEqual(["001_accounts_and_library.sql", "002_share_links.sql", "003_apple_revocation_pending.sql", "004_credit_ledger.sql"]);
   });
 });
