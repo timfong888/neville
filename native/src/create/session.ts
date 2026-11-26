@@ -1,10 +1,12 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FREE_STORAGE_KEY, type Made, freeLeft, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
+import { FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
+import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
+import { currentView } from "../accountStore";
 import { api } from "../api";
 import { kv } from "../seams/kv";
 import { library } from "../seams/library";
@@ -97,14 +99,22 @@ async function generate(variant: number): Promise<void> {
   set({ making: false, made });
 }
 
-/** Counts one free creation. False, with the gate shown, when none are left. */
+/** Counts one free creation. False, with the gate shown, when a signed-out user has none left. A signed-in user is not held to the count (#164). */
 function spend(): boolean {
-  if (freeLeft(state.used) === 0) {
+  const { account, checked } = currentView();
+  const access = createAccess(account, checked, state.used);
+  // Still asking who is signed in: the button is disabled meanwhile, so this is only a guard.
+  if (access === "checking") return false;
+  if (access === "blocked") {
     set({ gate: true });
     return false;
   }
-  set({ gate: false, used: state.used + 1 });
-  write(FREE_STORAGE_KEY, String(state.used));
+  const signedIn = isSignedIn(account);
+  set({ gate: false });
+  if (!signedIn) {
+    set({ used: state.used + 1 });
+    write(FREE_STORAGE_KEY, String(state.used));
+  }
   return true;
 }
 

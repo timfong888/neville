@@ -1,7 +1,9 @@
 import { useCallback } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { EXAMPLES, MAX_NAME, MAX_WANT, freeBanner } from "@/lib/create";
+import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
+import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
+import { refreshAccount, useAccountView } from "../../src/accountStore";
 import { create, edit, load, reset, useCreate } from "../../src/create/session";
 import { colors } from "../../src/theme";
 import { Button, Gate, s } from "../../src/create/ui";
@@ -11,10 +13,17 @@ import { Screen } from "../../src/ui/Screen";
 export default function Wish() {
   const c = useCreate();
   const router = useRouter();
-  // Each visit: the draft, the count, and the voice may have changed in Settings.
+  // The same sign-in state the Account tab keeps; it updates here when that changes (#164).
+  const { account, checked } = useAccountView();
+  const signedIn = isSignedIn(account);
+  const access = createAccess(account, checked, c.used);
+  const checking = access === "checking";
+  const note = freeNoteFor(access, signedIn, c.used);
+  // Each visit: the draft, the count, the voice, and who is signed in may have changed.
   useFocusEffect(
     useCallback(() => {
       void load();
+      refreshAccount().catch(() => undefined);
     }, []),
   );
   const go = () => {
@@ -28,8 +37,9 @@ export default function Wish() {
       title="Type what you want. Hear it as already yours."
       footer={
         <>
-          {c.gate ? <Gate /> : null}
-          <Button label="Create my manifestation" disabled={!c.want.trim()} onPress={go} />
+          {c.gate ? <Gate signedIn={signedIn} /> : null}
+          {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
+          <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
         </>
       }
     >
@@ -75,8 +85,8 @@ export default function Wish() {
           <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
         </View>
         <View style={s.row}>
-          <Text style={s.muted}>{freeBanner(c.used)}</Text>
-          {c.used > 0 ? <Button small label="Reset demo" onPress={reset} /> : null}
+          {note ? <Text style={s.muted}>{note}</Text> : null}
+          {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}
         </View>
       </View>
     </Screen>

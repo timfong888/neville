@@ -1,6 +1,7 @@
 // Shared pieces of the Create screens. Colours and type come from src/theme.ts.
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Link } from "expo-router";
+import { gateCard } from "@/lib/createGate";
 import { colors as C, radius, space, type } from "../theme";
 
 export function Button(p: { label: string; onPress: () => void; disabled?: boolean; small?: boolean }) {
@@ -11,13 +12,15 @@ export function Button(p: { label: string; onPress: () => void; disabled?: boole
   );
 }
 
-/** Shown when the free creations are used up. No prices: purchases come in Phase 3. */
-export function Gate() {
+/** Shown when the free creations are used up. No prices: purchases come in Phase 3. A signed-in user is not asked to sign up (#164). */
+export function Gate({ signedIn }: { signedIn: boolean }) {
+  const card = gateCard(signedIn);
+  if (!card) return null;
   return (
     <View style={s.card}>
-      <Text style={s.h3}>Keep this, in a voice you choose</Text>
-      <Text style={s.muted}>A free account saves your manifestations and plays them back to back, on any device.</Text>
-      <Link href="/account" style={s.link}>Create a free account</Link>
+      <Text style={s.h3}>{card.title}</Text>
+      <Text style={s.muted}>{card.body}</Text>
+      <Link href={card.link.href} style={s.link}>{card.link.label}</Link>
     </View>
   );
 }

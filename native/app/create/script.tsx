@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
-import { freeLeft } from "@/lib/create";
+import { canCreate, isSignedIn } from "@/lib/createGate";
+import { useAccount } from "../../src/accountStore";
 import { leave, newVariation, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
@@ -10,6 +11,7 @@ import { Screen } from "../../src/ui/Screen";
 // or the server's refusal with a script the listener can still use.
 export default function Script() {
   const c = useCreate();
+  const signedIn = isSignedIn(useAccount());
   const router = useRouter();
   // The request does both; tick the first step after a moment.
   const [step, setStep] = useState(0);
@@ -60,7 +62,7 @@ export default function Script() {
         <Button small label="New variation" onPress={newVariation} />
         <Button small label="← Create another" onPress={back} />
       </View>
-      {c.gate || freeLeft(c.used) === 0 ? <Gate /> : null}
+      {c.gate || !canCreate(signedIn, c.used) ? <Gate signedIn={signedIn} /> : null}
     </Screen>
   );
 }
