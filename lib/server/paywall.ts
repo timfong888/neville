@@ -4,7 +4,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { type Action, CREDITS, costOf, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { type SignedIn, accountsEnabled, currentUser } from "@/lib/server/accounts";
-import { ensureFreeCredit, logTesterSpend, markFulfilled, refundCredit, spendCredit } from "@/lib/server/creditsDb";
+import { ensureFreeCredit, logTesterSpend, markFulfilled, reconcileUnfulfilledSpends, refundCredit, spendCredit } from "@/lib/server/creditsDb";
 import { dbConfigured, getPool, withTx } from "@/lib/server/db";
 import type { Db } from "@/lib/server/libraryDb";
 
@@ -46,6 +46,8 @@ export async function charge(who: Who, action: Action): Promise<Charged | { resp
       return { left: "unlimited", refund: async () => undefined, fulfil: async () => undefined };
     }
     const out = await withTx(async (db) => {
+      // Heal first: a spend of this account's that a killed function left behind is refunded before the balance is read.
+      await reconcileUnfulfilledSpends(db, { userId: user.id });
       await ensureFreeCredit(db, user.id, CREDITS.freeCredits);
       return spendCredit(db, user.id, c);
     });

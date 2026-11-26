@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { CREDITS, availablePacks, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { accountsEnabled, currentUser } from "@/lib/server/accounts";
-import { creditBalance, ensureFreeCredit, hasStarter } from "@/lib/server/creditsDb";
+import { creditBalance, ensureFreeCredit, hasStarter, reconcileUnfulfilledSpends } from "@/lib/server/creditsDb";
 import { dbConfigured, withTx } from "@/lib/server/db";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,8 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ code: "sign_in_required", error: "Sign in first." }, { status: 401 });
   try {
     const { balance, starter } = await withTx(async (db) => {
+      // A spend of this account's that a killed function left behind comes back here, so the balance shown is right.
+      await reconcileUnfulfilledSpends(db, { userId: user.id });
       await ensureFreeCredit(db, user.id, CREDITS.freeCredits);
       return { balance: await creditBalance(db, user.id), starter: await hasStarter(db, user.id) };
     });

@@ -67,21 +67,26 @@ export async function markFulfilled(db: Db, spendId: string): Promise<void> {
 /**
  * Refunds spends the function never finished: older than `olderThanSeconds` (use more than the routes' maxDuration),
  * not marked fulfilled, and with no refund yet. The refund is keyed to the spend, so running this twice, or racing a
- * late in-request refund, returns each credit once. Returns how many it refunded. Not scheduled anywhere: call it from a job or by hand.
+ * late in-request refund, returns each credit once. Returns how many it refunded. With `userId` it heals one account only (the paid
+ * routes and GET /api/credits call it that way); without it, every account (not scheduled anywhere yet: for a later job or by hand).
  */
-export async function reconcileUnfulfilledSpends(db: Db, o: { olderThanSeconds?: number; limit?: number } = {}): Promise<number> {
+export async function reconcileUnfulfilledSpends(
+  db: Db,
+  o: { olderThanSeconds?: number; limit?: number; userId?: string } = {},
+): Promise<number> {
   const { rows } = await db.query(
     `insert into credit_ledger (user_id, delta, reason, route, action, source_id)
      select s.user_id, -s.delta, 'refund', s.route, s.action, 'refund:' || s.id::text
        from credit_ledger s
       where s.reason = 'spend' and s.fulfilled_at is null
         and s.created_at < now() - ($1::int * interval '1 second')
+        and ($3::text is null or s.user_id = $3::text)
         and not exists (select 1 from credit_ledger r where r.source_id = 'refund:' || s.id::text)
       order by s.id
       limit $2::int
      on conflict (source_id) do nothing
      returning id`,
-    [o.olderThanSeconds ?? 120, o.limit ?? 500],
+    [o.olderThanSeconds ?? 120, o.limit ?? 500, o.userId ?? null],
   );
   return rows.length;
 }

@@ -396,6 +396,51 @@ describe("POST /api/manifest with the paywall on", () => {
   });
 });
 
+describe("a spend cut off by a killed function heals on the account's next visit", () => {
+  const get = async () => (await import("@/app/api/credits/route")).GET(new Request("https://getneville.vercel.app/api/credits"));
+  // The free credit was spent, and the function died before it refunded or marked the recording delivered.
+  const killedSpend = async (userId: string, secondsAgo: number, fulfilled = false) => {
+    await pg.query(`insert into credit_ledger (user_id, delta, reason, once_key) values ($1, 1, 'free', 'free') on conflict do nothing`, [userId]);
+    await pg.query(
+      `insert into credit_ledger (user_id, delta, reason, route, action, created_at, fulfilled_at)
+       values ($1, -1, 'spend', '/api/manifest', 'manifest', now() - ($2::int * interval '1 second'), ${fulfilled ? "now()" : "null"})`,
+      [userId, secondsAgo],
+    );
+  };
+
+  it("refunds it on the next credits read, once", async () => {
+    await killedSpend("alice", 600);
+    expect(await balance("alice")).toBe(0);
+    expect((await (await get()).json()).balance).toBe(1);
+    expect((await (await get()).json()).balance).toBe(1);
+    expect((await pg.query(`select count(*)::int as n from credit_ledger where reason = 'refund'`)).rows[0]).toEqual({ n: 1 });
+  });
+  it("refunds it on the next charge, so the user can record again", async () => {
+    await killedSpend("alice", 600);
+    const res = await callManifest();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-credits-left")).toBe("0");
+    const reasons = (await pg.query<{ reason: string }>(`select reason from credit_ledger order by id`)).rows.map((r) => r.reason);
+    expect(reasons).toEqual(["free", "spend", "refund", "spend"]);
+  });
+  it("does not touch a spend newer than 120 seconds (it may still be running)", async () => {
+    await killedSpend("alice", 10);
+    expect((await (await get()).json()).balance).toBe(0);
+    expect((await callManifest()).status).toBe(402);
+  });
+  it("does not refund a spend whose recording was delivered", async () => {
+    await killedSpend("alice", 600, true);
+    expect((await (await get()).json()).balance).toBe(0);
+    expect((await callManifest()).status).toBe(402);
+  });
+  it("heals only the account that is asking", async () => {
+    await killedSpend("bob", 600);
+    await get();
+    await callManifest();
+    expect(await balance("bob")).toBe(0);
+  });
+});
+
 describe("POST /api/rerecord with the paywall on", () => {
   it("answers 401 signed out, after the IP guard and before any spend, keeping its slot", async () => {
     user = null;

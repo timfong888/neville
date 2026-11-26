@@ -187,6 +187,16 @@ describe("spends the function never finished (killed after the spend committed)"
     expect(await refunds()).toBe(1);
     expect(await creditBalance(db, "alice")).toBe(3); // 5 - three spends + one refund
   });
+  it("can be limited to one account, leaving every other account's cut-off spends for a later job", async () => {
+    await tx((d) => ensureFreeCredit(d, "bob", 5));
+    await spendAt("alice", 600);
+    await spendAt("bob", 600);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120, userId: "alice" })).toBe(1);
+    expect(await creditBalance(db, "alice")).toBe(5);
+    expect(await creditBalance(db, "bob")).toBe(4);
+    expect(await reconcileUnfulfilledSpends(db, { olderThanSeconds: 120 })).toBe(1);
+    expect(await creditBalance(db, "bob")).toBe(5);
+  });
   it("marks a spend fulfilled when the recording was delivered, so it is never refunded", async () => {
     const spent = await tx((d) => spendCredit(d, "alice", M));
     await markFulfilled(db, spent.spendId!);
