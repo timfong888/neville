@@ -1,0 +1,143 @@
+// The one background music player (#184). Framework-free; the platform's engine is passed in.
+//
+// The rule: at most one music player exists. Every change (a new track, Off, the session ending) removes
+// the current player first, then makes the next. A load that finishes after a later change is released
+// without playing: each change takes a new token, and only the newest token may keep what it loaded.
+//
+// The music has no start button of its own. It belongs to the voice session: it plays while the voice
+// plays, pauses with it, and goes when the session ends. What to play comes from the stored choice,
+// which the app feeds in through `setTarget`, so a change takes effect while the session runs.
+import type { MusicChoice } from "@/lib/music";
+
+/** What should be playing: a track, at the level it sits under the voice. */
+export type Track = { id: Exclude<MusicChoice, "none">; src: string | number; volume: number };
+/** One loaded player. `remove` stops and unloads it; nothing is called after it. */
+export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): void; remove(): void };
+/** Loops the track. May finish late, or fail. */
+export type MusicEngine = { load(src: string | number, volume: number): Promise<MusicHandle> };
+/** A session's hold on the music. Calls from a session that has been replaced do nothing. */
+export type Follower = { voice(playing: boolean): void; close(): void };
+/** What is really there: the track that is loading or loaded ("none" if none), and whether a session holds the music. */
+export type MusicView = { choice: MusicChoice; active: boolean };
+
+export function makeMusicPlayer(engine: MusicEngine) {
+  let target: Track | undefined;
+  let session = 0;
+  let voice = false;
+  /** Bumped by every change; a load keeps its result only if no change came after it started. */
+  let token = 0;
+  let loaded: { track: Track; h: MusicHandle; playing: boolean } | null = null;
+  let loading: Track | null = null;
+  let snap: MusicView = { choice: "none", active: false };
+  const subs = new Set<() => void>();
+
+  const publish = () => {
+    const choice: MusicChoice = loaded?.track.id ?? loading?.id ?? "none";
+    const active = session !== 0;
+    if (choice === snap.choice && active === snap.active) return;
+    snap = { choice, active };
+    subs.forEach((f) => f());
+  };
+  const drop = (h: MusicHandle) => {
+    try {
+      h.remove();
+    } catch {}
+  };
+  /** Stops and unloads whatever exists, and voids any load still on its way. */
+  const release = () => {
+    token++;
+    loading = null;
+    if (loaded) drop(loaded.h);
+    loaded = null;
+  };
+  const follow = () => {
+    if (!loaded) return;
+    const l = loaded;
+    if (voice === l.playing) return;
+    l.playing = voice;
+    try {
+      voice ? l.h.play() : l.h.pause();
+    } catch {}
+  };
+  const sync = () => {
+    const want = session !== 0 ? target : undefined;
+    const have = loaded?.track ?? loading;
+    if (want && have && have.id === want.id && have.src === want.src) {
+      // The same track: only its level changes.
+      if (loaded) {
+        loaded.track = want;
+        try {
+          loaded.h.setVolume(want.volume);
+        } catch {}
+      } else loading = want;
+      return publish();
+    }
+    release();
+    if (want) {
+      const mine = token;
+      loading = want;
+      let p: Promise<MusicHandle>;
+      try {
+        p = engine.load(want.src, want.volume);
+      } catch (e) {
+        p = Promise.reject(e);
+      }
+      p.then(
+        (h) => {
+          // Another change came first: this one never sounds.
+          if (mine !== token || !loading) return drop(h);
+          const track = loading;
+          loading = null;
+          loaded = { track, h, playing: false };
+          if (track.volume !== want.volume) {
+            try {
+              h.setVolume(track.volume);
+            } catch {}
+          }
+          follow();
+          publish();
+        },
+        () => {
+          if (mine !== token) return;
+          loading = null;
+          publish();
+        },
+      );
+    }
+    publish();
+  };
+
+  return {
+    view: () => snap,
+    subscribe(fn: () => void) {
+      subs.add(fn);
+      return () => void subs.delete(fn);
+    },
+    /** What the stored choice says should play, or nothing. Takes effect at once if a session holds the music. */
+    setTarget(t: Track | undefined) {
+      target = t;
+      sync();
+    },
+    /** A voice session takes the music. The one before it, if any, is let go first. */
+    attach(): Follower {
+      release();
+      const mine = ++session;
+      voice = false;
+      sync();
+      return {
+        voice(playing) {
+          if (session !== mine) return;
+          voice = playing;
+          follow();
+        },
+        close() {
+          if (session !== mine) return;
+          session = 0;
+          voice = false;
+          release();
+          publish();
+        },
+      };
+    },
+  };
+}

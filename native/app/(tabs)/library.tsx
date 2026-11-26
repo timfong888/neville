@@ -3,7 +3,7 @@ import { Link, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
 import { setBell, useBell } from "../../src/player/bellStore";
-import { musicNow, useMusic } from "../../src/player/musicStore";
+import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
@@ -19,7 +19,6 @@ export default function LibraryScreen() {
   const router = useRouter();
   const items = newestFirst(lib.manifestations);
   const np = useNowPlaying();
-  const music = useMusic();
   const bell = useBell();
   // The controller plays one thing at a time; this card shows it only when it is the Library loop.
   const now = np.id === "all" ? np : { ...np, status: "idle" as const, note: "" };
@@ -55,7 +54,7 @@ export default function LibraryScreen() {
             </>
           ) : (
             <>
-              <Button kind="primary" label={copied ? "Play all on loop" : "Preparing playlist…"} disabled={!copied} onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: musicNow(music) }; } })} />
+              <Button kind="primary" label={copied ? "Play all on loop" : "Preparing playlist…"} disabled={!copied} onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: MUSIC_ENABLED }; } })} />
               {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
               <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={np.status !== "idle"} />
             </>

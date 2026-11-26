@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import "../src/player/musicStore"; // The music player follows the stored choice from launch (#184).
 import { audio } from "../src/seams/audio";
 import { colors } from "../src/theme";
 

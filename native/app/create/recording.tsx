@@ -9,7 +9,7 @@ import { pauseWatch } from "../../src/create/pauseWatch";
 import { canSpeak, leave, newVariation, save, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { setBell, useBell } from "../../src/player/bellStore";
-import { musicNow, useMusic } from "../../src/player/musicStore";
+import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 
@@ -28,7 +28,6 @@ export default function Recording() {
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
   const [loop, setLoop] = useState(false);
-  const music = useMusic();
   const bell = useBell();
   const stopper = useRef<Playback | null>(null);
   // For the reason shown when the system paused playback while the app was away.
@@ -87,7 +86,7 @@ export default function Recording() {
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
       onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), p && clearPauseNote(), watch.playing(p)),
       onWarn: setToast,
-    }, { loop, bell, music: musicNow(music) });
+    }, { loop, bell, music: MUSIC_ENABLED });
   };
   const again = () => {
     stop();

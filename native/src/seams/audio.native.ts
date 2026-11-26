@@ -1,5 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
+import { musicPlayer } from "./music";
 import type { AudioSeam, PlaySession } from "./types";
 
 const ARTIST = "Neville";
@@ -55,12 +56,9 @@ export const audio: AudioSeam = {
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };
     list.setActiveForLockScreen(true, meta, opts);
-    // The music is a second player, never the lock screen's: only the voice puts its controls up.
-    const bed = o.music ? createAudioPlayer(o.music.src) : null;
-    if (bed && o.music) {
-      bed.loop = true;
-      bed.volume = o.music.volume;
-    }
+    // The music is the app's one other player, never the lock screen's: only the voice puts its controls up.
+    // It is the shared player's to make and remove; this session only tells it what the voice is doing.
+    const bed = o.music ? musicPlayer.attach() : null;
     // Whether the voice is playing, as last seen, so the music follows it when the lock screen, a call or a bar pauses it.
     let voice: boolean | null = null;
     // Now Playing is only taken up once the audio session is running, which is after Play. Say it again then.
@@ -80,12 +78,13 @@ export const audio: AudioSeam = {
       }
       if (bed && s.playing !== voice) {
         voice = s.playing;
-        try {
-          s.playing ? bed.play() : bed.pause();
-        } catch {}
+        bed.voice(s.playing);
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
-      o.onState({ playing: s.playing, index: s.currentIndex, ended: !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1, progress });
+      const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
+      // The recording is over: the music goes with it, whether or not the caller stops the session.
+      if (ended) bed?.close();
+      o.onState({ playing: s.playing, index: s.currentIndex, ended, progress });
     });
     const guard = () => {
       if (loaded || watch) return;
@@ -97,6 +96,7 @@ export const audio: AudioSeam = {
         try {
           list.pause();
         } catch {}
+        bed?.close();
         o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
       }, LOAD_TIMEOUT_MS);
     };
@@ -104,17 +104,13 @@ export const audio: AudioSeam = {
       play() {
         if (!open) return;
         list.play();
-        try {
-          bed?.play();
-        } catch {}
+        bed?.voice(true);
         guard();
       },
       pause() {
         if (!open) return;
         list.pause();
-        try {
-          bed?.pause();
-        } catch {}
+        bed?.voice(false);
       },
       stop() {
         if (!open) return;
@@ -127,9 +123,7 @@ export const audio: AudioSeam = {
           list.clearLockScreenControls();
           list.destroy();
         } catch {}
-        try {
-          bed?.remove();
-        } catch {}
+        bed?.close();
       },
     };
     const end = () => {
