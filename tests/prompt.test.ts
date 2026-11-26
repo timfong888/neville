@@ -327,6 +327,27 @@ describe("sexual content (#170)", () => {
     expect(wishSexualisesMinor("I want my daughter to sleep well")).toBe(false);
     expect(wishSexualisesMinor("I want to kiss my 15 year old classmate")).toBe(true);
   });
+  it("young followed by women/man/adult within two words is not a minor word", () => {
+    // Not withheld: young + exception word within two words
+    expect(wishSexualisesMinor("attracting young beautiful women with romantic intent"), "young beautiful women").toBe(false);
+    expect(wishSexualisesMinor("I want young women to find me attractive"), "young women").toBe(false);
+    expect(wishSexualisesMinor("I want young men to notice me romantically"), "young men").toBe(false);
+    expect(wishSexualisesMinor("I want young woman to feel attracted to me"), "young woman").toBe(false);
+    expect(wishSexualisesMinor("I want young man to feel attracted to me"), "young man").toBe(false);
+    // Still withheld: young without an exception word nearby
+    expect(wishSexualisesMinor("a romantic evening with a young girl"), "young girl").toBe(true);
+    expect(wishSexualisesMinor("a young person romantic"), "young person").toBe(true);
+    // Still withheld: young + women but another minor word is also present
+    expect(wishSexualisesMinor("I want young women in high school to kiss me"), "young women in high school").toBe(true);
+    expect(wishSexualisesMinor("I want young women and girls romantic"), "young women and girls").toBe(true);
+    // Still withheld: age under 18 present even with young + women
+    expect(wishSexualisesMinor("young woman, 15 years old, dating me"), "young woman 15 years old").toBe(true);
+    // Still withheld: teen keyword
+    expect(wishSexualisesMinor("a romantic evening with a teen"), "teen").toBe(true);
+  });
+  it("the prompt names young women and young men as adults in their early twenties", () => {
+    expect(SYSTEM).toMatch(/young women.*adults? in their early twenties|young men.*adults? in their early twenties/i);
+  });
   it("the prompt sends romantic wishes about minors to a peace affirmation, not a nearest scene", () => {
     expect(SYSTEM).toMatch(/Never write anything romantic or sexual about anyone under 18[^]*gentle affirmation of peace/);
     expect(SYSTEM).not.toMatch(/under 18\. If a wish asks for that, write the nearest/);
