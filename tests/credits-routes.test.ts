@@ -130,6 +130,19 @@ describe("POST /api/revenuecat/webhook", () => {
     expect(await again.json()).toMatchObject({ status: "already_owned" });
     expect(await balance("alice")).toBe(3);
   });
+  it("grants once when the same store transaction arrives under different event ids (a restore)", async () => {
+    const a = await callHook(hook(purchase({ id: "r1", product_id: "starter", transaction_id: "tx-100" })));
+    const b = await callHook(hook(purchase({ id: "r2", type: "INITIAL_PURCHASE", product_id: "starter", transaction_id: "tx-100" })));
+    expect(await a.json()).toMatchObject({ status: "granted" });
+    expect(await b.json()).toMatchObject({ status: "duplicate" });
+    expect(await balance("alice")).toBe(3);
+  });
+  it("still adds nothing for a starter with a new transaction: the per-account check is the second guard", async () => {
+    await callHook(hook(purchase({ id: "r1", product_id: "starter", transaction_id: "tx-1" })));
+    const again = await callHook(hook(purchase({ id: "r3", product_id: "starter", transaction_id: "tx-2" })));
+    expect(await again.json()).toMatchObject({ status: "already_owned" });
+    expect(await balance("alice")).toBe(3);
+  });
   it("handles INITIAL_PURCHASE too", async () => {
     await callHook(hook(purchase({ type: "INITIAL_PURCHASE", id: "i1" })));
     expect(await balance("alice")).toBe(10);

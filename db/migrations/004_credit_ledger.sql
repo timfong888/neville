@@ -8,7 +8,7 @@
 --            spend     one recording                             delta < 0
 --            refund    a spend returned after a failed recording delta > 0
 --            tester    a recording by an unlimited tester        delta = 0, so cost stays visible
---   source_id   the RevenueCat event id; unique, so a repeated event can never grant twice
+--   source_id   the store transaction id ('txn:...'), or the RevenueCat event id when there is none; unique, so a repeat or restore can never grant twice
 --   once_key    set on a grant that may happen once per account ('free', 'starter'); unique per account
 create table if not exists credit_ledger (
   id           bigint generated always as identity primary key,

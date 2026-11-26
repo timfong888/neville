@@ -2,7 +2,7 @@
   "freeCredits": 1,
   "signInRequired": true,
   "products": {
-    "starter": { "credits": 3, "oncePerAccount": true },
-    "pack10": { "credits": 10, "oncePerAccount": false }
+    "starter": { "credits": 3, "oncePerAccount": true, "storeType": "non-consumable" },
+    "pack10": { "credits": 10, "oncePerAccount": false, "storeType": "consumable" }
   }
 }

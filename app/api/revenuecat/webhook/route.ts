@@ -14,7 +14,10 @@ export const dynamic = "force-dynamic";
 // Auth: RevenueCat sends the Authorization header exactly as typed in its dashboard; it must equal
 // REVENUECAT_WEBHOOK_AUTH. Not set: every call is refused.
 //
-// Repeats: the event id is the idempotency key (credit_ledger.source_id is unique). A repeated event, an
+// Repeats: the store transaction id is the idempotency key (credit_ledger.source_id is unique), so a
+// redelivered event and a restored purchase under a new event id never grant twice. An event with no
+// transaction id falls back to its event id. Starter is a non-consumable, so the store allows one
+// purchase per Apple ID; the once-per-account check in grantPurchase is the second guard. A repeated event, an
 // ignored event type and an unknown product all answer 200 so RevenueCat stops retrying; only a server
 // fault answers 5xx, so RevenueCat retries it.
 const HANDLED = new Set(["NON_RENEWING_PURCHASE", "INITIAL_PURCHASE"]);
@@ -50,13 +53,17 @@ export async function POST(req: Request) {
   const productId = typeof event.product_id === "string" ? event.product_id : "";
   if (!eventId || eventId.length > 200) return NextResponse.json({ code: "bad_request", error: "No event id." }, { status: 400 });
 
+  // The store's transaction id when the event has one: the same purchase keeps one key whatever event reports it.
+  const txn = typeof event.transaction_id === "string" ? event.transaction_id.trim() : "";
+  const key = txn && txn.length <= 200 ? `txn:${txn}` : eventId;
+
   const ids = [event.app_user_id, ...(Array.isArray(event.aliases) ? event.aliases : [])].filter((i): i is string => typeof i === "string");
   try {
     const result = await withTx(async (db) => {
       const userId = await firstExistingUser(db, ids);
       if (!userId) return { status: "ignored" as const, reason: "unknown_user" };
       const environment = typeof event.environment === "string" ? event.environment : null;
-      return { status: await grantPurchase(db, { userId, productId, eventId, environment }), userId };
+      return { status: await grantPurchase(db, { userId, productId, eventId: key, environment }), userId };
     });
     if (result.status === "ignored" || result.status === "unknown_product") {
       // The purchase may be real and unmatched: leave a trail to fix by hand.

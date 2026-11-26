@@ -170,7 +170,7 @@ Connect, not here. Environment variables (names only):
 
 - `GET /api/credits` (signed in): `{ balance, unlimited, paywallEnabled, signInRequired, packs }`. `starter` is listed only until it has been bought. The free credit is given the first time an account is seen here or spends.
 - `POST /api/manifest` with the paywall on: `401 {code:"sign_in_required"}` signed out; `402 {code:"no_credits", balance}` at zero; `X-Credits-Left` on success. A recording that fails after the credit was taken gives it back.
-- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The event id is the idempotency key, so a repeat answers 200 and adds nothing.
+- `POST /api/revenuecat/webhook`: handles `NON_RENEWING_PURCHASE` and `INITIAL_PURCHASE` for product ids `starter` and `pack10`. The store transaction id (the event id when there is none) is the idempotency key, so a repeat or a restore answers 200 and adds nothing. `starter` is a non-consumable in the store (one purchase per Apple ID); `pack10` is a consumable.
 - **Id mapping:** RevenueCat's app user id must be our account id (`"user".id`). The app calls `Purchases.logIn(<that id>)` after sign-in and does not buy while anonymous.
 - Roll back migration 004 by hand with `db/rollback/004_credit_ledger.down.sql`.
 

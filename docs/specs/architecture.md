@@ -225,14 +225,14 @@ credit_ledger (
   delta       integer not null,
   reason      text not null,   -- free | purchase | spend | refund | tester
   product_id  text,            -- starter | pack10, for a purchase
-  source_id   text unique,     -- RevenueCat event id: a repeated event can never grant twice
+  source_id   text unique,     -- store transaction id ('txn:…'; the event id when there is none): a repeat or restore can never grant twice
   once_key    text,            -- 'free' or 'starter'; unique with user_id, so each is granted once per account
   environment text,            -- SANDBOX | PRODUCTION, from the event
   created_at  timestamptz not null default now()
 )
 ```
 
-- **Packs** (`config/credits.json`, Tim 2026-11-26): `starter` is 3 recordings at $2.99, once per account; `pack10` is 10 recordings at $6.99, repeatable. Prices are set in App Store Connect, not here. The free allowance (1) and "sign-in required" (true) are in the same file.
+- **Packs** (`config/credits.json`, Tim 2026-11-26): `starter` is 3 recordings at $2.99, a non-consumable in the store (one purchase per Apple ID, Tim 2026-11-26) and also once per account in our ledger as a second guard; `pack10` is 10 recordings at $6.99, a consumable, repeatable. Balances stay in our ledger, not in RevenueCat Virtual Currency. Prices are set in App Store Connect, not here. The free allowance (1) and "sign-in required" (true) are in the same file.
 - **Spend:** one credit per recording, taken after the network and spend-ceiling guards pass and before any paid call, under a per-account lock, so two requests at balance 1 cannot both record. A recording that fails after the credit was taken gives it back (`refund`). The network, global and ceiling guards stay as the backstop.
 - **Testers:** `UNLIMITED_USER_EMAILS` (comma list) skips the spend for a signed-in account whose email, from the server-side session and verified by the sign-in provider, is on the list. Each such recording writes a `tester` row with delta 0, so the cost stays countable. Nothing from the client is trusted.
 - **Switch:** `PAYWALL_ENABLED` (default off). Off, `/api/manifest` is as it was before.
