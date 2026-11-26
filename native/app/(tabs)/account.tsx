@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import type { AccountState } from "@/lib/api/client";
 import { ACCOUNT_DELETED, type DeviceData, deleteAccountPrompt } from "@/lib/deviceDataCopy";
 import { api } from "../../src/api";
+import { refreshAccount, useAccount } from "../../src/accountStore";
 import { appleCodeForDeletion, authClient, signInWithApple, signInWithAppleOnWeb } from "../../src/auth";
 import { deviceData } from "../../src/deviceData";
 import { colors, radius, space, type } from "../../src/theme";
@@ -13,7 +13,7 @@ const WEB = Platform.OS === "web";
 
 // Account (#121): Sign in with Apple, who is signed in, sign out, delete the account.
 export default function Account() {
-  const [account, setAccount] = useState<AccountState | null>(null);
+  const account = useAccount();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState(false);
@@ -22,10 +22,7 @@ export default function Account() {
 
   const refresh = useCallback(
     () =>
-      api
-        .account()
-        .then(setAccount)
-        .catch((e: Error) => setNote(`Could not reach the server: ${e.message}`)),
+      refreshAccount().catch((e: Error) => setNote(`Could not reach the server: ${e.message}`)),
     [],
   );
 
