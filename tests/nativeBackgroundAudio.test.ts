@@ -96,20 +96,25 @@ describe("the app starts the mode before any screen plays", () => {
 });
 
 describe("the Create step plays through the seam", () => {
-  it("has no player or audio mode of its own", () => {
-    const src = readFileSync("native/src/create/playback.ts", "utf8");
-    expect(src).not.toMatch(/createAudioPlayer|createAudioPlaylist|setAudioModeAsync/);
-  });
   it("opens one session with the recording and the title, and never sets its own mode", async () => {
     const ev = events();
     play(made(rec), ev);
     await tick();
     expect(h.createAudioPlayer).not.toHaveBeenCalled();
-    expect(h.setAudioModeAsync).not.toHaveBeenCalled();
+    // Any mode set is the seam's own, never a mode of the step's.
+    for (const [m] of h.setAudioModeAsync.mock.calls) expect(m).toEqual(AUDIO_MODE);
     expect(h.lists).toHaveLength(1);
     expect(h.lists[0].sources).toEqual([expect.stringMatching(/create\.mp3$/)]);
     expect(h.lists[0].setActiveForLockScreen).toHaveBeenCalledWith(true, expect.objectContaining({ title: "Calm" }), expect.anything());
     expect(h.lists[0].play).toHaveBeenCalled();
+  });
+  it("asks the seam to configure before it opens, in case the launch call failed", async () => {
+    const spy = vi.spyOn(audio, "configure");
+    play(made(rec), events());
+    await tick();
+    expect(spy).toHaveBeenCalled();
+    expect(h.lists).toHaveLength(1);
+    spy.mockRestore();
   });
   it("follows the line from the playback position and ends when the clip ends", async () => {
     const ev = events();

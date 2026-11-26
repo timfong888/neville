@@ -34,7 +34,8 @@ export default function Recording() {
   // The device voice and the timed lines cannot run in the background. Say so rather than go silent.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
-      if (st === "active" || !stopper.current?.foregroundOnly) return;
+      // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
+      if (st !== "background" || !stopper.current?.foregroundOnly) return;
       stop();
       setToast("Playback stopped when you left Neville. Tap Play to start again.");
     });

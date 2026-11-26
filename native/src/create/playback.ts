@@ -60,6 +60,9 @@ function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
       const ext = /wav/.test(rec.mime) ? "wav" : /mp4|aac|m4a/.test(rec.mime) ? "m4a" : "mp3";
       const uri = await audio.save(`create.${ext}`, new Uint8Array(rec.audio), rec.mime);
       if (dead) return;
+      // Normally done at launch; if that failed, try again so this plays as background audio too.
+      await audio.configure().catch(() => {});
+      if (dead) return;
       session = audio.open([uri], { title: made.title || "Neville", onState });
       session.play();
     } catch {
