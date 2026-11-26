@@ -47,7 +47,7 @@ export function makePlaylistLoop(d: {
   const fail = (error: string) => (stop(), set({ error }));
   // Another session in the app (a Create preview, the Player) takes over, so two never play at once.
   let opening = false;
-  d.audio.onOpen(() => !opening && session && stop());
+  d.audio.onOpen(() => !opening && state.status !== "idle" && stop());
   // A recording may be deleted or replaced: end the loop, and copy again at the next start.
   d.onLibraryChange(() => {
     ready = null;

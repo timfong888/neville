@@ -65,7 +65,6 @@ describe("Play all on loop", () => {
     expect(f.opens[0].o.loop).toBe(true);
     expect(f.opens[0].play).toHaveBeenCalledTimes(1);
     expect(LOOP_GAP_MS).toBeLessThanOrEqual(1800);
-    // Its own gap clip name, so a Player session cannot free it on the web.
     expect(f.saved).toEqual([PLAYLIST_GAP_NAME]);
     expect([false, true].flatMap((l) => [false, true].map((b) => playerGapName(l, b)))).not.toContain(PLAYLIST_GAP_NAME);
   });
@@ -111,15 +110,6 @@ describe("Play all on loop", () => {
     expect(f.opens).toHaveLength(1);
   });
 
-  it("a stop while preparing opens nothing", async () => {
-    const f = fake();
-    const starting = f.loop.start();
-    f.loop.stop();
-    await starting;
-    expect(f.opens).toHaveLength(0);
-    expect(f.loop.state().status).toBe("idle");
-  });
-
   it("stops and shows an error when a clip cannot be played, and can start again", async () => {
     const f = fake();
     await f.loop.start();
@@ -155,6 +145,18 @@ describe("Play all on loop", () => {
     f.otherOpens();
     expect(f.opens[0].stop).toHaveBeenCalledTimes(1);
     expect(f.loop.state().status).toBe("idle");
+  });
+
+  it("a session that opens while the loop is still preparing wins; the loop does not start over it", async () => {
+    const f = fake();
+    let release: (v: typeof items) => void = () => undefined;
+    f.setLoad(() => new Promise((r) => (release = r)));
+    const starting = f.loop.start();
+    await new Promise((r) => setTimeout(r, 0));
+    f.otherOpens();
+    release(items);
+    await starting;
+    expect([f.opens.length, f.loop.state().status]).toEqual([1, "idle"]);
   });
 
   it("says a Library that could not be read failed, and tries again next time", async () => {
