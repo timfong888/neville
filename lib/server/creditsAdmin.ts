@@ -89,6 +89,7 @@ export async function creditsSpecialCounts(db: Db): Promise<SpecialCounts> {
           select 1 from credit_ledger o
           where o.user_id = credit_ledger.user_id
             and o.once_key = credit_ledger.product_id || ':sandbox'
+            and o.id < credit_ledger.id
         )
         then 1 end)::int as sandbox_capped,
       count(case when reason = 'purchase' and delta = 0 and (
@@ -97,6 +98,7 @@ export async function creditsSpecialCounts(db: Db): Promise<SpecialCounts> {
           select 1 from credit_ledger o
           where o.user_id = credit_ledger.user_id
             and o.once_key = credit_ledger.product_id || ':sandbox'
+            and o.id < credit_ledger.id
         ))
       ) then 1 end)::int as already_owned
     from credit_ledger
