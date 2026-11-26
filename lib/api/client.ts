@@ -35,6 +35,8 @@ export type Recording = {
   lines: string[];
   voiceId: string;
   source: string;
+  /** Why the template was used; set when source is "template". */
+  reason?: string;
   /** Line start times as fractions of the clip, when the server sent sound ones. */
   starts?: number[];
 };
@@ -128,12 +130,14 @@ export function createApi(opts: ApiOptions) {
   /** `lines` is the script already known to the caller; `/api/rerecord` does not send `X-Script` back. */
   async function recording(res: Response, lines?: string[]): Promise<Recording> {
     const script = lines ?? readScript(res.headers.get("X-Script"));
+    const reason = res.headers.get("X-Script-Reason") ?? undefined;
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
       lines: script,
       voiceId: res.headers.get("X-Voice-Id") ?? "",
       source: res.headers.get("X-Script-Source") ?? "",
+      ...(reason !== undefined ? { reason } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
     };
   }

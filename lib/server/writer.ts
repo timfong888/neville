@@ -5,8 +5,9 @@
 import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
+import { alertFailure } from "@/lib/server/alertFailure";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -54,6 +55,8 @@ export type Script = {
   costUsd?: number | null;
   /** A short phrase to repeat in programming mode (#77); the default one for the template. */
   refrain: string;
+  /** Why the template was used; set when source is "template". */
+  reason?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -77,14 +80,18 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   // The fallback never repeats the wish: see neutralScript. It logs one line
   // saying why, from numbers and names only: never the wish, the name, the
   // model's reply, an error message (some echo the body) or the key.
-  const template = (): Script => {
-    console.warn("[script_fallback]", JSON.stringify({ ...failure, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
-    return { lines: neutralScript(opts.name), source: "template", costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
+  const template = (extra: Record<string, unknown> = {}): Script => {
+    console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
+    if (failure.reason !== "withheld") {
+      alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started });
+    }
+    return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
   // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
   if (wishSexualisesMinor(opts.want)) {
     failure = { reason: "withheld" };
-    return template();
+    const category = wishSexualisesMinorCategory(opts.want);
+    return template(category ? { category } : {});
   }
   try {
     const models = await scriptModels();

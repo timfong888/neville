@@ -3,6 +3,7 @@ import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { writeScript } from "@/lib/server/writer";
+import { alertFailure } from "@/lib/server/alertFailure";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
@@ -101,6 +102,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (state.timedOut) {
     // The deadline already passed while the credit was being taken: give it back and stop.
     await charged.refund();
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", elapsedMs: Date.now() - started });
     return timeoutResponse(true);
   }
 
@@ -122,10 +124,16 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
   // The deadline passed while the script was being written: do not start the voice, the credit is already refunded.
-  if (state.timedOut) return timeoutResponse(true);
+  if (state.timedOut) {
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? null, elapsedMs: Date.now() - started });
+    return timeoutResponse(true);
+  }
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s): the route's own 52 s budget alone could pass it.
   const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
-  if (voiceMs === null) return timeoutAnswer(state);
+  if (voiceMs === null) {
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? null, elapsedMs: Date.now() - started });
+    return timeoutAnswer(state);
+  }
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -149,6 +157,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    alertFailure("voice_failed", { route: "manifest", model: voice.model, status: speech.status, elapsedMs: Date.now() - started });
     await charged.refund();
     return NextResponse.json(
       {
@@ -157,6 +166,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         // The model's script was already written and vetted: the device voice
         // reads it instead of the general one. A template script is not sent.
         ...(script.source === "model" ? { lines: script.lines } : {}),
+        // Why the template was used, when it was: the client can show a reason-specific note.
+        ...(script.source === "template" && script.reason ? { reason: script.reason } : {}),
       },
       { status: 502 },
     );
@@ -179,6 +190,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "Cache-Control": "no-store",
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
+      ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
       // Repetition was asked for, but this voice's audio cannot be cut apart to

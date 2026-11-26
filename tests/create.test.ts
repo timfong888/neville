@@ -38,9 +38,27 @@ describe("the Create flow (#120)", () => {
     expect(m.recording?.starts).toHaveLength(LINES.length);
     expect(m.recording?.starts[0]).toBe(0);
   });
-  it("says when the script is the general one", async () => {
+  it("says when the script is the general one (no reason)", async () => {
     const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
     expect(m.note).toBe("A personal script could not be written just now, so this is a general one.");
+  });
+
+  it("uses FALLBACK_TITLE when the script is a template, never the typed wish", async () => {
+    const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
+    expect(m.title).toBe("A moment of calm");
+  });
+
+  it("shows a withheld-specific note when reason is withheld", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), wish, true);
+    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.title).toBe("A moment of calm");
+  });
+
+  it("shows the generic template note for all other failure reasons", async () => {
+    for (const reason of ["timeout", "no_model", "http_status", "unusable_reply", "exception"]) {
+      const m = await makeManifestation(api(rec({ source: "template", reason })), wish, true);
+      expect(m.note).toBe("A personal script could not be written just now, so this is a general one.");
+    }
   });
   it("says when the whole day's budget resets too", async () => {
     const m = await makeManifestation(api(new ApiError("Today's free recordings are used up. Try again tomorrow.", 429, "day_full")), wish, true);

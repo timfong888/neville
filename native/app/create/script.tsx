@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+
 import { Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { canCreate, isSignedIn } from "@/lib/createGate";
@@ -7,33 +7,20 @@ import { leave, newVariation, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
 
-// Create, step 2: the script. While the one request runs it shows progress; then the lines,
+// Create, step 2: the script. While the one request runs it shows a waiting message; then the lines,
 // or the server's refusal with a script the listener can still use.
 export default function Script() {
   const c = useCreate();
   const signedIn = isSignedIn(useAccount());
   const router = useRouter();
-  // The request does both; tick the first step after a moment.
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    if (!c.making) return setStep(0);
-    const t = setTimeout(() => setStep(1), 3000);
-    return () => clearTimeout(t);
-  }, [c.making]);
 
   if (c.making) {
-    const steps = ["Writing your script in “You” statements", `Recording it in the voice of ${c.voiceName}`];
     return (
       <Screen title="Making it yours…">
         <Stack.Screen options={{ title: "Your script" }} />
         <Text style={s.muted}>This takes up to half a minute. Keep this page open.</Text>
         <View style={s.card} accessibilityLiveRegion="polite">
-          {steps.map((label, i) => (
-            <Text key={label} style={[s.line, i === step && s.now]}>
-              {i < step ? "✓ " : i === step ? "… " : ""}
-              {label}
-            </Text>
-          ))}
+          <Text style={s.line}>Making it yours…</Text>
         </View>
       </Screen>
     );

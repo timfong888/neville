@@ -95,6 +95,12 @@ export type Made = {
 /** The server's words, plus when a daily limit lifts: its day is the UTC date (lib/limits.ts). */
 const withReset = (e: ApiError): string => (e.code === "visitor_full" || e.code === "day_full" ? `${e.message} It resets at midnight UTC.` : e.message);
 
+/** The user-facing note when the server returned a template script instead of a personal one. */
+export function noteForReason(reason: string | undefined): string {
+  if (reason === "withheld") return "That wish was held back, so this is a general script. Try wording it differently.";
+  return "A personal script could not be written just now, so this is a general one.";
+}
+
 /**
  * One request writes the script and records it. A refusal or failure still gives
  * a script: the server's own when only the voice failed, else a general one. It
@@ -106,9 +112,9 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const r = await api.manifest(wishRequest(w));
     const voice = resolveVoice(r.voiceId);
     return {
-      title: titleFor(w.want),
+      title: r.source === "template" ? FALLBACK_TITLE : titleFor(w.want),
       lines: r.lines,
-      note: r.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
+      note: r.source === "template" ? noteForReason(r.reason) : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
     };
   } catch (e) {

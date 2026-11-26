@@ -187,6 +187,14 @@ export function wishSexualisesMinor(wish: string): boolean {
   return MINOR.test(wish) && (ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish));
 }
 
+/** Which safety list matched in wishSexualisesMinor — the category name, never the wish text. */
+export function wishSexualisesMinorCategory(wish: string): "minor_word+intimacy_word" | "minor_word+explicit_word" | null {
+  if (!MINOR.test(wish)) return null;
+  if (ASKS_FOR_INTIMACY.test(wish)) return "minor_word+intimacy_word";
+  if (EXPLICIT.test(wish)) return "minor_word+explicit_word";
+  return null;
+}
+
 /** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */
 export function wishAsksForIntimacy(wish: string): boolean {
   return ASKS_FOR_INTIMACY.test(wish) && ADULT_CUE.test(wish) && !MINOR.test(wish);
