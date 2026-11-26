@@ -4,6 +4,7 @@ import { Redirect, Stack, useRouter } from "expo-router";
 import { freeLeft } from "@/lib/create";
 import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
+import { pauseWatch } from "../../src/create/pauseWatch";
 import { canSpeak, leave, newVariation, save, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
@@ -24,20 +25,18 @@ export default function Recording() {
   const stopper = useRef<Playback | null>(null);
   // For the reason shown when the system paused playback while the app was away.
   const pausedRef = useRef(false);
-  const leftWhilePlaying = useRef(false);
 
-  const explainPause = () => {
-    leftWhilePlaying.current = false;
-    setToast("Playback was paused while Neville was in the background. Tap Play to continue.");
-  };
+  const watch = useRef(
+    pauseWatch(() => setToast("Playback was paused while Neville was in the background. Tap Play to continue.")),
+  ).current;
   const stop = useCallback(() => {
     stopper.current?.stop();
     stopper.current = null;
     pausedRef.current = false;
-    leftWhilePlaying.current = false;
+    watch.reset();
     setPlaying(false);
     setPaused(false);
-  }, []);
+  }, [watch]);
   // Leaving the step always ends playback.
   useEffect(() => stop, [stop]);
   // The device voice and the timed lines cannot run in the background. Say so rather than go silent.
@@ -45,20 +44,14 @@ export default function Recording() {
     const sub = AppState.addEventListener("change", (st) => {
       // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
       const pb = stopper.current;
-      if (st === "background" && pb?.active()) leftWhilePlaying.current = true;
-      // Back in front: the pause can be reported before or after this event, so the flag
-      // stays up briefly and `onPlaying` explains a pause that arrives late.
-      if (st === "active" && leftWhilePlaying.current) {
-        if (pb?.active() && pausedRef.current) explainPause();
-        else setTimeout(() => (leftWhilePlaying.current = false), 2000);
-      }
+      watch.appState(st, !!pb?.active() && !pausedRef.current, pausedRef.current);
       // A browser keeps reading and running timers in a hidden tab; only a phone suspends them.
       if (Platform.OS === "web" || st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
       stop();
       setToast("Playback stopped when you left Neville. Tap Play to start again.");
     });
     return () => sub.remove();
-  }, [stop]);
+  }, [stop, watch]);
 
   if (c.making) return <Redirect href="/create/script" />;
   if (!made) return <Redirect href="/create" />;
@@ -73,7 +66,7 @@ export default function Recording() {
       onLine: setIdx,
       onEnd: () => (setPlaying(false), setPaused(false), setIdx(made.lines.length)),
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
-      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), !p && leftWhilePlaying.current && explainPause()),
+      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), watch.playing(p)),
       onWarn: setToast,
     });
   };

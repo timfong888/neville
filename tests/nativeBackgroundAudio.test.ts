@@ -59,6 +59,7 @@ vi.mock("expo-file-system", () => ({
 
 import { AUDIO_MODE, audio } from "@/native/src/seams/audio.native";
 import { play } from "@/native/src/create/playback";
+import { pauseWatch } from "@/native/src/create/pauseWatch";
 
 const made = (recording: Made["recording"]): Made => ({ lines: ["a", "b", "c"], title: "Calm", note: "", recording });
 const rec = { audio: new ArrayBuffer(8), mime: "audio/mpeg", voiceId: "v", voiceName: "Voice", starts: [0, 0.4, 0.8] };
@@ -199,15 +200,58 @@ describe("the Create step plays through the seam", () => {
 });
 
 describe("the Create step tells the person why playback paused", () => {
-  const src = readFileSync("native/app/create/recording.tsx", "utf8");
-  it("notes when the app left while playing and the system paused it", () => {
-    expect(src).toMatch(/leftWhilePlaying/);
-    expect(src).toMatch(/paused while Neville was in the background/);
-    // A pause reported after the app is back in front is explained too.
-    expect(src).toMatch(/!p && leftWhilePlaying\.current && explainPause\(\)/);
+  const setup = () => {
+    vi.useFakeTimers();
+    const explain = vi.fn();
+    return { explain, w: pauseWatch(explain) };
+  };
+  it("explains a pause reported while away, once", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
-  it("shows the warning from the player", () => {
-    expect(src).toMatch(/onWarn: setToast/);
+  it("explains a pause reported after the app is back in front, within the grace period", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    expect(explain).not.toHaveBeenCalled();
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("explains a pause already seen when the app returns", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", false, true);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+  it("says nothing for a pause long after the return, or one that began before leaving", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    vi.advanceTimersByTime(2500);
+    w.playing(false);
+    w.appState("background", false, true);
+    w.appState("active", false, true);
+    w.playing(false);
+    expect(explain).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it("says nothing after the step resets", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.reset();
+    w.playing(false);
+    expect(explain).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+  it("the screen shows the player's warning", () => {
+    expect(readFileSync("native/app/create/recording.tsx", "utf8")).toMatch(/onWarn: setToast/);
   });
 });
 
