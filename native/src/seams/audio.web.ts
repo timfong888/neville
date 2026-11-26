@@ -19,7 +19,12 @@ const media = () => (typeof navigator !== "undefined" && "mediaSession" in navig
 
 // The web audio seam: one <audio> element carries the whole session, as the
 // website's player does, and Media Session gives the lock-screen controls.
+// Ends the open session. One at a time: a new session ends the one before it.
+let current: (() => void) | null = null;
+let opened = 0;
+
 export const audio: AudioSeam = {
+  opened: () => opened,
   async configure() {},
   async save(name, bytes, mime) {
     return put(name, new Blob([bytes as BlobPart], { type: mime }));
@@ -40,9 +45,19 @@ export const audio: AudioSeam = {
     });
   },
   open(srcs, o) {
+    opened++;
+    current?.();
     const a = new Audio();
     const mine = [...new Set(srcs)];
     for (const u of mine) inUse.set(u, (inUse.get(u) ?? 0) + 1);
+    // The music is a second element that follows the session.
+    let bed: HTMLAudioElement | null = null;
+    if (o.music && typeof o.music.src === "string") {
+      bed = new Audio();
+      bed.loop = true;
+      bed.volume = o.music.volume;
+      bed.src = o.music.src;
+    }
     let index = 0;
     let open = true;
     // What the listener asked for. The element also pauses by itself at the end of each clip.
@@ -89,6 +104,7 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = true;
         start();
+        void bed?.play().catch(() => undefined);
         guard();
         emit();
       },
@@ -96,10 +112,12 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = false;
         a.pause();
+        bed?.pause();
         emit();
       },
       stop() {
         if (!open) return;
+        if (current === end) current = null;
         const ms = media();
         if (ms) {
           ms.playbackState = "none";
@@ -113,6 +131,10 @@ export const audio: AudioSeam = {
         a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = a.onloadeddata = a.oncanplay = a.onplaying = null;
         a.pause();
         a.removeAttribute("src");
+        if (bed) {
+          bed.pause();
+          bed.removeAttribute("src");
+        }
         for (const u of mine) {
           const n = (inUse.get(u) ?? 1) - 1;
           if (n > 0) inUse.set(u, n);
@@ -123,9 +145,15 @@ export const audio: AudioSeam = {
         }
       },
     };
+    const end = () => {
+      if (open) o.onState({ playing: false, index, ended: true, replaced: true });
+      session.stop();
+    };
+    current = end;
     a.onended = () => {
       if (index + 1 >= srcs.length && !o.loop) {
         want = false;
+        bed?.pause();
         return emit(true);
       }
       switching = true;

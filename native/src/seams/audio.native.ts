@@ -1,6 +1,6 @@
 import { File, Paths } from "expo-file-system";
 import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from "expo-audio";
-import type { AudioSeam } from "./types";
+import type { AudioSeam, PlaySession } from "./types";
 
 const ARTIST = "Neville";
 /** How long a local clip may take to load before the session is reported as failed. */
@@ -12,7 +12,12 @@ const LOAD_TIMEOUT_MS = 8000;
 export const AUDIO_MODE = { playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: "doNotMix" } as const;
 let configured: Promise<void> | null = null;
 
+// Ends the open session. One at a time: a new session ends the one before it.
+let current: (() => void) | null = null;
+let opened = 0;
+
 export const audio: AudioSeam = {
+  opened: () => opened,
   // Once per launch; a failure is not remembered, so the next call tries again.
   configure() {
     configured ??= setAudioModeAsync(AUDIO_MODE).catch((e) => {
@@ -44,10 +49,20 @@ export const audio: AudioSeam = {
     }
   },
   open(srcs, o) {
+    opened++;
+    current?.();
     const list = createAudioPlaylist({ sources: srcs, loop: o.loop ? "all" : "none", updateInterval: 500 });
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };
     list.setActiveForLockScreen(true, meta, opts);
+    // The music is a second player, never the lock screen's: only the voice puts its controls up.
+    const bed = o.music ? createAudioPlayer(o.music.src) : null;
+    if (bed && o.music) {
+      bed.loop = true;
+      bed.volume = o.music.volume;
+    }
+    // Whether the voice is playing, as last seen, so the music follows it when the lock screen, a call or a bar pauses it.
+    let voice: boolean | null = null;
     // Now Playing is only taken up once the audio session is running, which is after Play. Say it again then.
     let announced = false;
     // The playlist status has no error field. A clip that cannot be loaded or decoded
@@ -61,6 +76,12 @@ export const audio: AudioSeam = {
         announced = true;
         try {
           list.setActiveForLockScreen(true, meta, opts);
+        } catch {}
+      }
+      if (bed && s.playing !== voice) {
+        voice = s.playing;
+        try {
+          s.playing ? bed.play() : bed.pause();
         } catch {}
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
@@ -79,16 +100,26 @@ export const audio: AudioSeam = {
         o.onState({ playing: false, index: list.currentIndex, ended: false, failed: true });
       }, LOAD_TIMEOUT_MS);
     };
-    return {
+    const session: PlaySession = {
       play() {
         if (!open) return;
         list.play();
+        try {
+          bed?.play();
+        } catch {}
         guard();
       },
-      pause: () => open && list.pause(),
+      pause() {
+        if (!open) return;
+        list.pause();
+        try {
+          bed?.pause();
+        } catch {}
+      },
       stop() {
         if (!open) return;
         open = false;
+        if (current === end) current = null;
         if (watch) clearTimeout(watch);
         sub.remove();
         try {
@@ -96,7 +127,16 @@ export const audio: AudioSeam = {
           list.clearLockScreenControls();
           list.destroy();
         } catch {}
+        try {
+          bed?.remove();
+        } catch {}
       },
     };
+    const end = () => {
+      if (open) o.onState({ playing: false, index: list.currentIndex, ended: true, replaced: true });
+      session.stop();
+    };
+    current = end;
+    return session;
   },
 };
