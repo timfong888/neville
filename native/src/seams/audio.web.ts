@@ -49,11 +49,21 @@ export const audio: AudioSeam = {
     let switching = false;
     const emit = (ended = false) => {
       if (!open) return;
-      o.onState({ playing: want && !ended, index, ended });
+      o.onState({ playing: want && !ended, index, ended, progress: a.duration > 0 ? Math.min(1, a.currentTime / a.duration) : undefined });
       const ms = media();
       if (ms) ms.playbackState = ended ? "none" : want ? "playing" : "paused";
     };
-    const start = () => void a.play().catch(() => ((want = false), emit()));
+    // True once a clip has played. A refusal after that (the next clip, the lock screen's Play) only pauses,
+    // so the listener keeps their place and can tap Play again.
+    let everPlayed = false;
+    // A first play() the browser refuses (autoplay policy, unsupported source) is a failed start. Any other
+    // rejection, such as an AbortError from pausing straight after play, is not.
+    const start = () =>
+      void a.play().catch((e: { name?: string }) => {
+        want = false;
+        if (open && !everPlayed && (e?.name === "NotAllowedError" || e?.name === "NotSupportedError")) o.onState({ playing: false, index, ended: false, failed: true });
+        else emit();
+      });
     const session = {
       play() {
         if (!open) return;
@@ -77,7 +87,7 @@ export const audio: AudioSeam = {
           ms.setActionHandler("pause", null);
         }
         open = false;
-        a.onended = a.onpause = a.onplay = a.onerror = null;
+        a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = null;
         a.pause();
         a.removeAttribute("src");
         for (const u of mine) {
@@ -104,7 +114,9 @@ export const audio: AudioSeam = {
     a.onpause = () => {
       if (want && !a.ended && !switching) session.pause();
     };
+    a.ontimeupdate = () => emit();
     a.onplay = () => {
+      everPlayed = true;
       switching = false;
       if (!want) ((want = true), emit());
     };

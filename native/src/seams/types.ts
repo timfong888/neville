@@ -12,6 +12,8 @@ export type PlayState = {
   ended: boolean;
   /** True once, when a clip could not be loaded or decoded. The session has stopped playing. */
   failed?: boolean;
+  /** How far through the current clip, 0 to 1, when the engine knows. */
+  progress?: number;
 };
 
 /** One playing session. `stop` also frees it and clears the lock screen. */

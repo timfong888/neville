@@ -38,6 +38,9 @@
   "exclude": [
     "node_modules",
     "native",
-    "ios-shell"
+    "ios-shell",
+    "tests/nativeBackgroundAudio.test.ts",
+    "tests/webAudioSeam.test.ts",
+    "tests/stubs"
   ]
 }

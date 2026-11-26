@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { AppState, Platform, Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { freeLeft } from "@/lib/create";
 import { CLOSING } from "@/lib/prompt";
-import { play } from "../../src/create/playback";
+import { type Playback, play } from "../../src/create/playback";
 import { canSpeak, leave, newVariation, save, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
@@ -15,19 +15,34 @@ export default function Recording() {
   const router = useRouter();
   const made = c.made;
   const [playing, setPlaying] = useState(false);
+  // Playing was cut short from outside (a call, the lock screen, another app). Play resumes it.
+  const [paused, setPaused] = useState(false);
   // -1 before the first play; lines.length once finished.
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
-  const stopper = useRef<(() => void) | null>(null);
+  const stopper = useRef<Playback | null>(null);
 
   const stop = useCallback(() => {
-    stopper.current?.();
+    stopper.current?.stop();
     stopper.current = null;
     setPlaying(false);
+    setPaused(false);
   }, []);
   // Leaving the step always ends playback.
   useEffect(() => stop, [stop]);
+  // The device voice and the timed lines cannot run in the background. Say so rather than go silent.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (st) => {
+      // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
+      const pb = stopper.current;
+      // A browser keeps reading and running timers in a hidden tab; only a phone suspends them.
+      if (Platform.OS === "web" || st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
+      stop();
+      setToast("Playback stopped when you left Neville. Tap Play to start again.");
+    });
+    return () => sub.remove();
+  }, [stop]);
 
   if (c.making) return <Redirect href="/create/script" />;
   if (!made) return <Redirect href="/create" />;
@@ -40,8 +55,9 @@ export default function Recording() {
     setPlaying(true);
     stopper.current = play(made, {
       onLine: setIdx,
-      onEnd: () => (setPlaying(false), setIdx(made.lines.length)),
-      onError: (m) => (setPlaying(false), setToast(m)),
+      onEnd: () => (setPlaying(false), setPaused(false), setIdx(made.lines.length)),
+      onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
+      onPlaying: (p) => setPaused(!p),
     });
   };
   const again = () => {
@@ -76,6 +92,7 @@ export default function Recording() {
         <Text style={s.spoken}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
       </View>
       <View style={s.row}>
+        {paused ? <Button label="▶ Resume" onPress={() => (setPaused(false), stopper.current?.resume())} /> : null}
         {playing ? <Button label="■ Stop" onPress={stop} /> : <Button label={done ? "▶ Play again" : "▶ Play"} onPress={start} />}
         <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
         <Button small label="New variation" onPress={again} />
