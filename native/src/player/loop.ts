@@ -16,6 +16,9 @@ export const LOOP_GAP_MS = 1800;
 
 export const parseLoop = (v: string | null | undefined): LoopMode => LOOP_MODES.find((m) => m === v) ?? DEFAULT_LOOP;
 
+/** The Player has Off and One. "All" starts from the Library, so a stored All (PR 158) reads as Off. */
+export const playerLoop = (v: string | null | undefined): LoopMode => (parseLoop(v) === "one" ? "one" : "off");
+
 export function makeLoopStore(kv: KV) {
   return {
     async read(): Promise<LoopMode> {
