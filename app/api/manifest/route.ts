@@ -26,6 +26,8 @@ function visitor(req: Request): string {
 // The app's one paid path: a wish in, a script and its recording out.
 // Nothing is stored. Guards are in lib/server/limits.ts.
 export async function POST(req: Request) {
+  // The route has 60 s in all (maxDuration), counted from here: guards, script, voice and the ledger writes.
+  const started = Date.now();
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -64,8 +66,6 @@ export async function POST(req: Request) {
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
-  // The route has 60 s in all (maxDuration). The script may take up to scriptTimeoutMs, so the voice gets what is left.
-  const started = Date.now();
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
@@ -79,9 +79,8 @@ export async function POST(req: Request) {
   // are not sent when a voice is recorded line by line.
   const spoken = recorded.join(" ").length;
   if (script.source === "model") {
-    // Text-model cost is not returned by the writer; at these prices it is a
-    // few thousandths of a cent, so it is recorded as unpriced.
-    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: null });
+    // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
+    await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
   const speech = await synthesize({
     key,
@@ -96,7 +95,8 @@ export async function POST(req: Request) {
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
-    timeoutMs: Math.max(10_000, Math.min(42_000, 56_000 - (Date.now() - started))),
+    // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
+    timeoutMs: Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))),
     atomic: voice.atomic === true,
   });
   if (!speech.ok) {

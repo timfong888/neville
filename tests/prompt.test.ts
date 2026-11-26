@@ -285,16 +285,21 @@ describe("sexual content (#170)", () => {
     }
   });
   it("mentioning a wife, a girl, women or attracting clients is not a request for sensual writing", () => {
-    for (const wish of ["I want to attract more clients", "I want my wife to recover from surgery", "I want my daughter, a girl of seven, to sleep well", "I want women to approach me and show interest in me", "I want a loving partnership with my business partner"]) {
+    for (const wish of ["I want to attract more clients", "I want my wife to recover from surgery", "I want my daughter, a girl of seven, to sleep well", "I want women to approach me and show interest in me", "I want a loving partnership with my business partner", "I want a career I am passionate about", "I want to crush my sales targets", "I want music lovers to buy my album", "I want my daughter to have a loving partner one day"]) {
       expect(wishAsksForIntimacy(wish), wish).toBe(false);
       expect(sexualIn(["Her thighs are bare."], wish), wish).not.toBeNull();
     }
   });
   it("a wish for romance or attraction allows sensual detail, never explicit words", () => {
-    for (const wish of ["I want women to find me attractive", "I want a loving partner who is attracted to me", "I want an intimate evening with my wife"]) {
+    for (const wish of ["I want women to find me attractive", "I want a romantic partner who is attracted to me", "I want an intimate evening with my wife", "I want a passionate evening with my wife", "I want someone to have a crush on me"]) {
       expect(wishAsksForIntimacy(wish), wish).toBe(true);
       expect(sexualIn(sensualScene, wish), wish).toBeNull();
       expect(sexualIn(explicit, wish), wish).not.toBeNull();
+    }
+  });
+  it("ordinary scene words are not sexual terms", () => {
+    for (const l of ["A strip of morning light lies across the floor.", "The striped awning flaps.", "Her hair is lustrous in the lamplight.", "A sea breeze arouses the curtains.", "The wind moans in the chimney.", "A pen sits in his breast pocket.", "You eat chicken breast with rice."]) {
+      expect(sexualIn([l], "I want to own a small house by the sea"), l).toBeNull();
     }
   });
   it("cleanLines drops a neutral wish's scene that turns sensual", () => {
