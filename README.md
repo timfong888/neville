@@ -85,7 +85,9 @@ Limits are in `config/limits.json`:
   (local dev, tests) the counters fall back to memory, one copy per instance.
   The two free creations before the sign-up prompt are softer: that count is
   in the browser's own storage. No bot check yet.
-- `maxWantChars`, `maxScriptChars` — input and script length.
+- `maxWantChars`, `maxScriptChars` — input and script length. Scripts are scenes of about 200 to 300 words (#170); `maxScriptChars` is the cap that audio length allows, `scriptMinLines` and `scriptMinWords` the floor below which a reply is asked for again.
+- `scriptModels`, `scriptReasoningEffort`, `scriptMaxTokens` — the models that write scripts, best first (a 429, a 5xx or a timeout hands over to the next), the reasoning effort sent to them, and the reply limit. `scriptTimeoutMs` is the whole script budget and `scriptTryTimeoutMs` the share one model gets. `vetModels` are the cheap models that check a script a listener edits (they do not write scripts).
+  `npm run eval:compare` runs the same wishes through the old and the new setup and writes `evals/scripts-compare.snapshot.md`; it costs a few cents.
 - `generationEnabled` — `false` switches recording off. Setting the environment
   variable `SPEECH_ENABLED=false` does the same without a code change.
 
