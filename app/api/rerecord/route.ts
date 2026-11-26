@@ -65,7 +65,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
-  const session = await currentUser(req);
+  let session: Awaited<ReturnType<typeof currentUser>> | undefined;
+  try {
+    session = await currentUser(req);
+  } catch {
+    // Keep the existing guards and retry the lookup below, so an auth outage
+    // cannot spend a daily slot and still preserves its original refusal order.
+  }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
   const slot = tester ? null : await takeSlot(visitor(req));
