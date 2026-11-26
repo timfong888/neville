@@ -8,6 +8,7 @@ import { type Playback, play } from "../../src/create/playback";
 import { pauseWatch } from "../../src/create/pauseWatch";
 import { canSpeak, leave, newVariation, save, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
+import { setBell, useBell } from "../../src/player/bellStore";
 import { musicNow, useMusic } from "../../src/player/musicStore";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
@@ -28,6 +29,7 @@ export default function Recording() {
   const [saving, setSaving] = useState(false);
   const [loop, setLoop] = useState(false);
   const music = useMusic();
+  const bell = useBell();
   const stopper = useRef<Playback | null>(null);
   // For the reason shown when the system paused playback while the app was away.
   const pausedRef = useRef(false);
@@ -85,7 +87,7 @@ export default function Recording() {
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
       onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), p && clearPauseNote(), watch.playing(p)),
       onWarn: setToast,
-    }, { loop, music: musicNow(music) });
+    }, { loop, bell, music: musicNow(music) });
   };
   const again = () => {
     stop();
@@ -124,7 +126,7 @@ export default function Recording() {
         <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
         <Button small label="New variation" onPress={again} />
       </View>
-      {made.recording ? <PlayOptions loop={{ value: loop, onChange: setLoop }} disabled={playing} /> : null}
+      {made.recording ? <PlayOptions loop={{ value: loop, onChange: setLoop }} bell={{ value: bell, onChange: (v) => void setBell(v), disabled: !loop }} disabled={playing} /> : null}
       {toast ? <Text accessibilityRole="alert" style={s.muted}>{toast}</Text> : null}
       {!made.recording && !canSpeak() ? <Text style={s.muted}>This device has no built-in speech here, so the lines are shown in time instead.</Text> : null}
       <View style={s.card}>

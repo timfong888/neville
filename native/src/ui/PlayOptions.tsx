@@ -8,17 +8,26 @@ import { colors, radius, space, type } from "../theme";
 const CHOICES: { id: MusicChoice; label: string }[] = [{ id: "none", label: "Off" }, ...MUSIC_TRACKS.map((t) => ({ id: t.id, label: t.title }))];
 const STEP = 0.1;
 
-export function PlayOptions({ loop, disabled }: { loop?: { value: boolean; onChange(v: boolean): void }; disabled?: boolean }) {
+type Toggle = { value: boolean; onChange(v: boolean): void; disabled?: boolean };
+
+/** `bell` is the soft bell between recordings when looping (#177); its own `disabled` adds to the screen's. */
+export function PlayOptions({ loop, bell, disabled }: { loop?: Toggle; bell?: Toggle; disabled?: boolean }) {
   const m = useMusic();
   const volume = m?.volume ?? DEFAULT_MUSIC_VOLUME;
   const nudge = (d: number) => void musicStore.write({ volume: Math.round(Math.min(1, Math.max(0, volume + d)) * 10) / 10 });
-  if (!loop && !MUSIC_ENABLED) return null;
+  if (!loop && !bell && !MUSIC_ENABLED) return null;
   return (
     <View style={s.box}>
       {loop ? (
         <View style={s.spread}>
           <Text style={type.body}>Repeat until stopped</Text>
           <Switch accessibilityLabel="Repeat until stopped" value={loop.value} onValueChange={loop.onChange} disabled={disabled} />
+        </View>
+      ) : null}
+      {bell ? (
+        <View style={s.spread}>
+          <Text style={type.body}>A soft bell between recordings</Text>
+          <Switch accessibilityLabel="A soft bell between recordings" value={bell.value} onValueChange={bell.onChange} disabled={disabled || bell.disabled} />
         </View>
       ) : null}
       {MUSIC_ENABLED ? (

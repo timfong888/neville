@@ -19,6 +19,14 @@ export const parseLoop = (v: string | null | undefined): LoopMode => LOOP_MODES.
 /** The Player's gap clip names. The Library loop has its own, so neither frees the other's clip on the web. */
 export const playerGapName = (looping: boolean, bell: boolean) => `player-gap${looping ? "-loop" : ""}${bell ? "-bell" : ""}.wav`;
 export const PLAYLIST_GAP_NAME = "playlist-gap.wav";
+/** The Library loop's and the Create recording loop's gap clips: one name per bell choice, so neither clip replaces the other. */
+export const playlistGapName = (bell: boolean) => (bell ? "playlist-gap-bell.wav" : PLAYLIST_GAP_NAME);
+export const createGapName = (bell: boolean) => `create-gap${bell ? "-bell" : ""}.wav`;
+
+/** A soft bell in the gap between recordings (#177). One choice for the Library loop and the Create recording loop. */
+export const BELL_KEY = "nvn_loop_bell";
+export const DEFAULT_BELL = true;
+export const parseBell = (v: string | null | undefined): boolean => (v === "off" ? false : v === "on" ? true : DEFAULT_BELL);
 
 /** The Player has Off and One. "All" starts from the Library, so a stored All (PR 158) reads as Off. */
 export const playerLoop = (v: string | null | undefined): LoopMode => (parseLoop(v) === "one" ? "one" : "off");
@@ -30,6 +38,16 @@ export function makeLoopStore(kv: KV) {
     },
     /** False when the device refused the write. */
     write: (mode: LoopMode): Promise<boolean> => kv.set(LOOP_KEY, mode),
+  };
+}
+
+export function makeBellStore(kv: KV) {
+  return {
+    async read(): Promise<boolean> {
+      return parseBell(await kv.get(BELL_KEY));
+    },
+    /** False when the device refused the write. */
+    write: (on: boolean): Promise<boolean> => kv.set(BELL_KEY, on ? "on" : "off"),
   };
 }
 

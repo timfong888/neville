@@ -2,7 +2,7 @@
 // as one job it runs. Both are framework-free and take the audio seam as input, so they are tested with fakes.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Manifestation } from "@/lib/library/model";
-import { LOOP_GAP_MS, PLAYLIST_GAP_NAME, playerGapName } from "@/native/src/player/loop";
+import { LOOP_GAP_MS, playerGapName, playlistGapName } from "@/native/src/player/loop";
 import { type PlayJob, type Prepared, makeNowPlaying, showsBar } from "@/native/src/player/nowPlaying";
 import { makePlayAll } from "@/native/src/player/playAll";
 import type { PlayState } from "@/native/src/seams/types";
@@ -182,16 +182,19 @@ describe("the app-level controller", () => {
 
 describe("Play all on loop, as a job (#157)", () => {
   const saved: string[] = [];
-  const make = (load: () => Promise<typeof items>) => makePlayAll({ save: async (name) => (saved.push(name), `file:${name}`), load });
+  const make = (load: () => Promise<typeof items>) => makePlayAll({ save: async (name) => (saved.push(name), `file:${name}`), load, bell: async () => true });
   beforeEach(() => void (saved.length = 0));
 
   it("is every recording once in the Library's order, a gap after each, looping, with its own gap clip name", async () => {
     const p = await make(async () => items).job.prepare();
-    const gap = `file:${PLAYLIST_GAP_NAME}`;
+    // The bell is On by default (#177), so the gap is the bell's clip.
+    const gap = `file:${playlistGapName(true)}`;
     expect(p?.clips).toEqual(["c.wav", gap, "b.wav", gap, "a.wav", gap]);
     expect(p?.loop).toBe(true);
-    expect(saved).toEqual([PLAYLIST_GAP_NAME]);
-    expect([false, true].flatMap((l) => [false, true].map((b) => playerGapName(l, b)))).not.toContain(PLAYLIST_GAP_NAME);
+    expect(saved).toEqual([playlistGapName(true)]);
+    const players = [false, true].flatMap((l) => [false, true].map((b) => playerGapName(l, b)));
+    expect(players).not.toContain(playlistGapName(true));
+    expect(players).not.toContain(playlistGapName(false));
     expect(LOOP_GAP_MS).toBeLessThanOrEqual(1800);
   });
 
@@ -206,6 +209,7 @@ describe("Play all on loop, as a job (#157)", () => {
     let release: () => void = () => undefined;
     const p = makePlayAll({
       save: async (name) => `file:${name}`,
+      bell: async () => true,
       load: async (gone) => {
         await new Promise<void>((r) => (release = r));
         seen.push(gone());
