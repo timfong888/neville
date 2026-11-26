@@ -10,6 +10,8 @@ export type LedgerEntry = {
   kind: LedgerKind;
   /** OpenRouter model id; null when the call fell back without a model. */
   model: string | null;
+  /** Script step only: who wrote it. A template script is not a paid call and is not ledgered; see [script_fallback]. */
+  source?: "model" | "template";
   voiceId?: string;
   /** Characters sent (speech, vet) or returned (script). */
   chars: number;

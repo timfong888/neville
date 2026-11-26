@@ -39,9 +39,28 @@ export type Script = {
   refrain: string;
 };
 
+/** Why the last try did not give a script. */
+type Failure = { reason: "http_status" | "timeout" | "unusable_reply" | "exception" | "no_model"; status?: number; error?: string };
+
+/** A timeout or abort is a timeout; anything else is an exception, named by class only. */
+function classify(e: unknown): Failure {
+  const name = e instanceof Error ? e.name : "unknown";
+  return name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
+}
+
 export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
-  // The fallback never repeats the wish: see neutralScript.
-  const template = (): Script => ({ lines: neutralScript(opts.name), source: "template", refrain: DEFAULT_REFRAIN });
+  const started = Date.now();
+  // Where the last try got to, so a fallback can say why (#176).
+  let attempt = 0;
+  let model: string | undefined;
+  let failure: Failure = { reason: "no_model" };
+  // The fallback never repeats the wish: see neutralScript. It logs one line
+  // saying why, from numbers and names only: never the wish, the name, the
+  // model's reply, an error message (some echo the body) or the key.
+  const template = (): Script => {
+    console.warn("[script_fallback]", JSON.stringify({ ...failure, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
+    return { lines: neutralScript(opts.name), source: "template", refrain: DEFAULT_REFRAIN };
+  };
   try {
     const models = await scriptModels();
     // Up to two tries within the time box. A model that is rate-limited or down
@@ -53,10 +72,11 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     // Bumped only after an unusable reply, so a handover after a rate limit
     // still asks for the version the listener chose.
     let variant = opts.variant;
-    for (let attempt = 0; attempt < 2 && m < models.length; attempt++) {
+    for (let i = 0; i < 2 && m < models.length; i++) {
       const left = deadline - Date.now();
-      if (attempt > 0 && left < 4_000) break;
-      const model = models[m];
+      if (i > 0 && left < 4_000) break;
+      attempt = i + 1;
+      model = models[m];
       let res: Response;
       try {
         res = await fetch(`${OPENROUTER}/chat/completions`, {
@@ -76,11 +96,13 @@ export async function writeScript(opts: { key: string; want: string; name: strin
           }),
           signal: AbortSignal.timeout(Math.min(12_000, left)),
         });
-      } catch {
+      } catch (e) {
+        failure = classify(e);
         m++; // timed out or dropped: try the next model
         continue;
       }
       if (!res.ok) {
+        failure = { reason: "http_status", status: res.status };
         if (res.status === 429 || res.status >= 500) {
           m++;
           continue;
@@ -92,10 +114,13 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want) : null;
       if (lines) return { lines, source: "model", model, refrain: parts?.refrain ?? DEFAULT_REFRAIN };
+      failure = { reason: "unusable_reply", status: res.status };
       variant++;
     }
     return template();
-  } catch {
+  } catch (e) {
+    // The abort signal stays live while the body is read, so a timeout can surface here too.
+    failure = classify(e);
     return template();
   }
 }

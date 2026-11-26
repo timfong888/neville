@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { budgetLevel, newAlert, sameSecret, speechCost, totals } from "@/lib/ledger";
 
 describe("budget alerts", () => {
@@ -42,5 +42,17 @@ describe("admin token", () => {
     expect(sameSecret("abc124", "abc123")).toBe(false);
     expect(sameSecret("abc", "abc123")).toBe(false);
     expect(sameSecret("", "")).toBe(false);
+  });
+});
+
+describe("script ledger line (#176)", () => {
+  it("carries the script's source and model id", async () => {
+    vi.doMock("server-only", () => ({}));
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { record } = await import("@/lib/server/ledger");
+    await record({ route: "manifest", kind: "script", source: "model", model: "google/gemini-2.5-flash-lite", chars: 120, estUsd: null });
+    const line = info.mock.calls.find((c) => c[0] === "[ledger]");
+    info.mockRestore();
+    expect(JSON.parse(String(line?.[1]))).toMatchObject({ kind: "script", source: "model", model: "google/gemini-2.5-flash-lite" });
   });
 });
