@@ -197,10 +197,7 @@ describe("script setup, old vs new (#170)", async () => {
     const hits = fresh.filter((r) => !wishAsksForIntimacy(r.wish) && sexualIn(r.lines, r.wish));
     expect(hits.map((r) => `${r.wish}: ${sexualIn(r.lines, r.wish)}`)).toEqual([]);
     // Only the wish that names romance or intimacy may have sensual words.
-    expect(WISHES.filter((w) => wishAsksForIntimacy(w.wish)).map((w) => w.wish)).toEqual([
-      "I want women to find me attractive when I walk into a party",
-      "I want a deeply intimate, passionate evening with my wife",
-    ]);
+    expect(WISHES.filter((w) => wishAsksForIntimacy(w.wish)).map((w) => w.wish)).toEqual(["I want a deeply intimate, passionate evening with my wife"]);
   });
   it("no new script has an explicit term, even when the wish asks for intimacy", () => {
     const explicit = fresh.filter((r) => sexualIn(r.lines, "I want an intimate romantic evening"));

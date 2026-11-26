@@ -135,7 +135,7 @@ describe("writeScript", () => {
 
   it("allows sensual detail when the wish asks for attraction, but never explicit words", async () => {
     plan = { [M1]: ["sensual"] };
-    const s = await write(0, "my journey across Japan, and a romantic evening");
+    const s = await write(0, "my journey across Japan, and a romantic evening with my wife");
     expect(s.source).toBe("model");
     expect(s.lines.join(" ")).toMatch(/thighs/);
   });

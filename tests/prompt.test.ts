@@ -291,14 +291,14 @@ describe("sexual content (#170)", () => {
     }
   });
   it("a wish for romance or attraction allows sensual detail, never explicit words", () => {
-    for (const wish of ["I want women to find me attractive", "I want a romantic partner who is attracted to me", "I want an intimate evening with my wife", "I want a passionate evening with my wife", "I want someone to have a crush on me"]) {
+    for (const wish of ["I want a romantic partner who is attracted to me", "I want an intimate evening with my wife", "I want a passionate evening with my husband", "I want a romantic night with my wife of 30 years"]) {
       expect(wishAsksForIntimacy(wish), wish).toBe(true);
       expect(sexualIn(sensualScene, wish), wish).toBeNull();
       expect(sexualIn(explicit, wish), wish).not.toBeNull();
     }
   });
   it("a wish about someone under 18 never allows sensual words, whatever else it says", () => {
-    for (const wish of ["I want a romantic evening with my 16 year old girlfriend", "I want a passionate evening with a 15-year-old", "romantic kiss with a teenager", "an intimate evening with a high school girl", "I want my son to have a crush on me"]) {
+    for (const wish of ["I want a romantic evening with my 16 year old girlfriend", "I want a passionate evening with a 15-year-old", "romantic kiss with a teenager", "an intimate evening with a high school girl", "I want my son to have a crush on me", "I want a romantic evening with my niece in eighth grade", "I want an intimate evening with my cousin, who is little", "a romantic evening with a young girl", "I want a romantic evening", "I want someone to have a crush on me", "I want women to find me attractive"]) {
       expect(wishAsksForIntimacy(wish), wish).toBe(false);
       expect(sexualIn(["Her thighs are bare."], wish), wish).not.toBeNull();
       expect(sexualIn(["She is naked."], wish), wish).not.toBeNull();
@@ -323,6 +323,6 @@ describe("sexual content (#170)", () => {
       "Thank you for this house.",
     ];
     expect(cleanLines(lines.join("\n"), 2400, "I want to own a small house by the sea")).toBeNull();
-    expect(cleanLines(lines.join("\n"), 2400, "I want women to be attracted to me")).not.toBeNull();
+    expect(cleanLines(lines.join("\n"), 2400, "I want a romantic evening with my wife")).not.toBeNull();
   });
 });

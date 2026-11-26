@@ -158,14 +158,17 @@ const SENSUAL = /\b(?:sensual\w*|seduc\w+|cleavage|thighs?|caress\w*|lovers?|mak
 const ASKS_FOR_INTIMACY =
   /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive)\b/i;
 
-// A wish about someone under 18, by stated age or by word. When in doubt the
-// sensual exception stays off: sexual content about minors is never written.
+// Fail closed (#170): the sensual exception needs romantic words and a positive
+// adult cue (a spouse, a partner, an adult age), and no sign of a minor. A word
+// list cannot name every minor, so a wish with no adult cue never gets it.
+const ADULT_CUE =
+  /\b(?:wife|husband|spouse|married|fianc\w+|adult|partner|(?:1[89]|[2-9]\d)[- ]?(?:years?[- ]old|yo|y\/o))\b/i;
 const MINOR =
-  /\b(?:(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yo|y\/o)|aged? (?:[1-9]|1[0-7])|teen\w*|minors?|underage|child|children|kids?|boys?|girls?|schoolgirl|schoolboy|high[- ]school\w*|middle[- ]school\w*|daughter|son|sons|students?)\b/i;
+  /\b(?:(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yo|y\/o)|aged? (?:[1-9]|1[0-7])|teen\w*|minors?|underage|child\w*|kids?|boys?|girls?|schoolgirl|schoolboy|students?|pupils?|grade|(?:high|middle|elementary|primary|grammar|prep)[- ]?school\w*|class(?:mate|room)s?|freshman|sophomore|junior|niece|nephew|cousin|little|young\w*|baby|babies|daughter|son|sons|sister|brother)\b/i;
 
-/** True when the wish itself asks for romance or intimacy, and is not about anyone under 18. */
+/** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */
 export function wishAsksForIntimacy(wish: string): boolean {
-  return ASKS_FOR_INTIMACY.test(wish) && !MINOR.test(wish);
+  return ASKS_FOR_INTIMACY.test(wish) && ADULT_CUE.test(wish) && !MINOR.test(wish);
 }
 
 /** The sexual word found in `lines` that the wish did not ask for, or null. */
