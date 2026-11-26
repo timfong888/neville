@@ -1,13 +1,18 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation } from "@/lib/create";
+import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
+import { lineStarts } from "@/lib/audio";
+import { neutralScript, scriptLines, titleFor } from "@/lib/script";
+import { detectPaywallError, type PaywallError } from "@/lib/paywall";
+import { ApiError } from "@/lib/api/client";
 import { resolveVoice } from "@/lib/voices";
 import { currentView } from "../accountStore";
 import { api } from "../api";
+import { PAYWALL_ENABLED } from "../config";
 import { kv } from "../seams/kv";
 import { library } from "../seams/library";
 import { settings } from "../seams/settings";
@@ -29,9 +34,11 @@ export type CreateState = {
   made: Made | null;
   /** The Library id of `made` once saved; empty until then. */
   savedId: string;
+  /** Set when a paywall signal is received (402, 401, or 504 with paywall on). */
+  paywallError: PaywallError | null;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, made: null, savedId: "" };
+let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, made: null, savedId: "", paywallError: null };
 const subs = new Set<() => void>();
 const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
@@ -83,15 +90,63 @@ export async function pickVoice(id: string, asDefault = false): Promise<boolean>
   return asDefault ? settings.write({ voiceId: next.voiceId }) : true;
 }
 
+/** Clears the paywall error state (e.g. when the user dismisses the sheet). */
+export function clearPaywallError(): void {
+  set({ paywallError: null });
+}
+
 let run = 0;
 /** The wish the current `made` was asked for. The form can change afterwards. */
 let asked = { want: "", name: "" };
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
-  set({ making: true, made: null, savedId: "", variant });
+  set({ making: true, made: null, savedId: "", variant, paywallError: null });
   const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
   const { voiceId } = set(voiceNow(chosen.voiceId));
+
+  if (PAYWALL_ENABLED) {
+    // Paywall path: call api.manifest directly so we can intercept 401/402/504.
+    try {
+      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId }));
+      if (run !== mine) return;
+      asked = wish;
+      const voice = resolveVoice(r.voiceId);
+      const made: Made = {
+        title: titleFor(wish.want),
+        lines: r.lines,
+        note: r.source === "template" ? "A personal script could not be written just now, so this is a general one." : "",
+        recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
+      };
+      set({ making: false, made });
+    } catch (e) {
+      if (run !== mine) return;
+      const pe = detectPaywallError(e, true);
+      if (pe) {
+        set({ making: false, paywallError: pe });
+        return;
+      }
+      // Non-paywall error: build a "failed" Made.
+      const withReset = (err: ApiError) =>
+        err.code === "visitor_full" || err.code === "day_full"
+          ? `${err.message} It resets at midnight UTC.`
+          : err.message;
+      const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
+      const written = e instanceof ApiError ? scriptLines(e.lines) : null;
+      const how = canSpeak() ? "in your device's own voice" : "to read";
+      const made: Made = {
+        title: FALLBACK_TITLE,
+        lines: written ?? neutralScript(wish.name.trim()),
+        note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
+        recording: null,
+      };
+      asked = wish;
+      set({ making: false, made });
+    }
+    return;
+  }
+
+  // Original non-paywall path.
   const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;

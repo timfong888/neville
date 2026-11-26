@@ -4,7 +4,11 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
 import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
-import { create, edit, load, reset, useCreate } from "../../src/create/session";
+import { create, clearPaywallError, edit, load, reset, useCreate } from "../../src/create/session";
+import { PAYWALL_ENABLED } from "../../src/config";
+import { refreshCredits, useCredits } from "../../src/creditsStore";
+import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
+import { PaywallSheet } from "../../src/paywall/PaywallSheet";
 import { colors } from "../../src/theme";
 import { Button, Gate, s } from "../../src/create/ui";
 import { Screen } from "../../src/ui/Screen";
@@ -19,11 +23,14 @@ export default function Wish() {
   const access = createAccess(account, checked, c.used);
   const checking = access === "checking";
   const note = freeNoteFor(access, signedIn, c.used);
+  // Always call hook unconditionally; ignore result when paywall is off.
+  const credits = useCredits();
   // Each visit: the draft, the count, the voice, and who is signed in may have changed.
   useFocusEffect(
     useCallback(() => {
       void load();
       refreshAccount().catch(() => undefined);
+      if (PAYWALL_ENABLED) refreshCredits().catch(() => undefined);
     }, []),
   );
   const go = () => {
@@ -31,64 +38,89 @@ export default function Wish() {
   };
 
   return (
-    // The Create button is the footer: it stays in sight and sits just above the keyboard (#149).
-    // The gate shows with it, so a tap that is refused is answered where the tap was.
-    <Screen
-      title="Type what you want. Hear it as already yours."
-      footer={
-        <>
-          {c.gate ? <Gate signedIn={signedIn} /> : null}
-          {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
-          <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
-        </>
-      }
-    >
-      <Text style={s.muted}>No sign-up. One tap. A short affirmation written and recorded for you.</Text>
-      <View style={s.card}>
-        <Text nativeID="want" style={s.muted}>What do you want?</Text>
-        <TextInput
-          accessibilityLabelledBy="want"
-          aria-labelledby="want"
-          style={[s.input, s.area]}
-          multiline
-          // Return ends typing and puts the keyboard away; a wish is one thought, not paragraphs.
-          returnKeyType="done"
-          submitBehavior="blurAndSubmit"
-          value={c.want}
-          maxLength={MAX_WANT}
-          placeholder={EXAMPLES[0]}
-          placeholderTextColor={colors.muted}
-          onChangeText={(want) => edit({ want })}
+    <>
+      {/* The Create button is the footer: it stays in sight and sits just above the keyboard (#149).
+          The gate shows with it, so a tap that is refused is answered where the tap was. */}
+      <Screen
+        title="Type what you want. Hear it as already yours."
+        footer={
+          <>
+            {PAYWALL_ENABLED && c.paywallError?.type === "sign_in" ? (
+              <Text style={s.muted}>Sign in to continue recording.</Text>
+            ) : null}
+            {PAYWALL_ENABLED && c.paywallError?.type === "timeout" ? (
+              <Text style={s.muted}>
+                {c.paywallError.creditReturned ? "Recording timed out. Your credit was returned." : "Recording timed out."}
+              </Text>
+            ) : null}
+            {c.gate ? <Gate signedIn={signedIn} /> : null}
+            {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
+            <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
+          </>
+        }
+      >
+        <Text style={s.muted}>No sign-up. One tap. A short affirmation written and recorded for you.</Text>
+        <View style={s.card}>
+          {PAYWALL_ENABLED && credits?.paywallEnabled ? (
+            <View style={s.row}>
+              <Text style={s.muted} accessibilityLabel="credits balance">
+                {credits.unlimited ? "Unlimited" : `${credits.balance} credit${credits.balance !== 1 ? "s" : ""}`}
+              </Text>
+            </View>
+          ) : null}
+          <Text nativeID="want" style={s.muted}>What do you want?</Text>
+          <TextInput
+            accessibilityLabelledBy="want"
+            aria-labelledby="want"
+            style={[s.input, s.area]}
+            multiline
+            // Return ends typing and puts the keyboard away; a wish is one thought, not paragraphs.
+            returnKeyType="done"
+            submitBehavior="blurAndSubmit"
+            value={c.want}
+            maxLength={MAX_WANT}
+            placeholder={EXAMPLES[0]}
+            placeholderTextColor={colors.muted}
+            onChangeText={(want) => edit({ want })}
+          />
+          <View style={s.row} accessibilityLabel="Examples">
+            {EXAMPLES.map((e) => (
+              <Button key={e} small label={e} onPress={() => edit({ want: e })} />
+            ))}
+          </View>
+          <Text nativeID="name" style={s.muted}>Your first name (optional)</Text>
+          <TextInput
+            accessibilityLabelledBy="name"
+            aria-labelledby="name"
+            style={s.input}
+            value={c.name}
+            maxLength={MAX_NAME}
+            autoComplete="given-name"
+            returnKeyType="done"
+            placeholder="Tim"
+            placeholderTextColor={colors.muted}
+            onChangeText={(name) => edit({ name })}
+          />
+          <View style={s.row}>
+            <Text style={s.muted}>
+              Voice: <Text style={s.p}>{c.voiceName}</Text>
+            </Text>
+            <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
+          </View>
+          <View style={s.row}>
+            {note ? <Text style={s.muted}>{note}</Text> : null}
+            {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}
+          </View>
+        </View>
+      </Screen>
+      {PAYWALL_ENABLED && c.paywallError?.type === "no_credits" && credits ? (
+        <PaywallSheet
+          credits={credits}
+          purchaseClient={mockPurchaseClient}
+          onClose={clearPaywallError}
+          onPurchased={() => { clearPaywallError(); void refreshCredits(); }}
         />
-        <View style={s.row} accessibilityLabel="Examples">
-          {EXAMPLES.map((e) => (
-            <Button key={e} small label={e} onPress={() => edit({ want: e })} />
-          ))}
-        </View>
-        <Text nativeID="name" style={s.muted}>Your first name (optional)</Text>
-        <TextInput
-          accessibilityLabelledBy="name"
-          aria-labelledby="name"
-          style={s.input}
-          value={c.name}
-          maxLength={MAX_NAME}
-          autoComplete="given-name"
-          returnKeyType="done"
-          placeholder="Tim"
-          placeholderTextColor={colors.muted}
-          onChangeText={(name) => edit({ name })}
-        />
-        <View style={s.row}>
-          <Text style={s.muted}>
-            Voice: <Text style={s.p}>{c.voiceName}</Text>
-          </Text>
-          <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
-        </View>
-        <View style={s.row}>
-          {note ? <Text style={s.muted}>{note}</Text> : null}
-          {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}
-        </View>
-      </View>
-    </Screen>
+      ) : null}
+    </>
   );
 }

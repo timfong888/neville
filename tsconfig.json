@@ -40,6 +40,7 @@
     "native",
     "ios-shell",
     "tests/native*.test.ts",
+    "tests/paywall.test.ts",
     "tests/webAudioSeam.test.ts",
     "tests/stubs"
   ]
