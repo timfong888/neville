@@ -201,6 +201,30 @@ describe("Play all on loop, as a job (#157)", () => {
     expect(p?.at(2)).toEqual({ title: "Brave", position: 2, total: 3 });
   });
 
+  it("a Library change tells subscribers and outdates a build under way, which stops copying", async () => {
+    const seen: boolean[] = [];
+    let release: () => void = () => undefined;
+    const p = makePlayAll({
+      save: async (name) => `file:${name}`,
+      load: async (gone) => {
+        await new Promise<void>((r) => (release = r));
+        seen.push(gone());
+        return items;
+      },
+    });
+    const told = vi.fn();
+    p.subscribe(told);
+    const first = p.prepare();
+    p.reset();
+    expect(told).toHaveBeenCalledTimes(1);
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    await first;
+    expect(seen[0]).toBe(true);
+    expect(seen[1]).toBe(false);
+  });
+
   it("has nothing to play for an empty Library, copies once until reset, and retries after a failed read", async () => {
     const empty = make(async () => []);
     expect(await empty.job.prepare()).toBeNull();

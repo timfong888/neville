@@ -5,10 +5,14 @@ import type { AudioSeam } from "../seams/types";
 import { LOOP_GAP_MS, type LoopItem, PLAYLIST_GAP_NAME, loopQueue } from "./loop";
 import type { PlayJob, Prepared } from "./nowPlaying";
 
-export function makePlayAll(d: { save: AudioSeam["save"]; load(): Promise<LoopItem<string>[]> }) {
+export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boolean): Promise<LoopItem<string>[]> }) {
   let ready: Promise<Prepared | null> | null = null;
+  // Bumped by `reset`, so a build the Library has outdated stops copying and cannot replace the new build's names.
+  let gen = 0;
+  const listeners = new Set<() => void>();
   const build = async (): Promise<Prepared | null> => {
-    const items = await d.load();
+    const mine = gen;
+    const items = await d.load(() => mine !== gen);
     if (!items.length) return null;
     const q = loopQueue("all", items, items[0].id, await d.save(PLAYLIST_GAP_NAME, gapClip(true, LOOP_GAP_MS), "audio/wav"));
     const at = (i: number) => {
@@ -23,6 +27,27 @@ export function makePlayAll(d: { save: AudioSeam["save"]; load(): Promise<LoopIt
     p.catch(() => void (ready === p && (ready = null)));
     return p;
   };
-  const job: PlayJob = { id: "all", title: "Neville", route: "/library", empty: "Nothing to play yet. Save a recording first.", prepare };
-  return { job, prepare, /** The Library changed: copy again at the next start. */ reset: () => void (ready = null) };
+  // What a start waits for is never an outdated build.
+  const current = async (): Promise<Prepared | null> => {
+    for (;;) {
+      const mine = gen;
+      const p = await prepare();
+      if (mine === gen) return p;
+    }
+  };
+  const job: PlayJob = { id: "all", title: "Neville", route: "/library", empty: "Nothing to play yet. Save a recording first.", prepare: current };
+  return {
+    job,
+    prepare: current,
+    /** The Library changed: copy again at the next start, and tell whoever made the copies ahead. */
+    reset() {
+      gen++;
+      ready = null;
+      listeners.forEach((fn) => fn());
+    },
+    subscribe(fn: () => void): () => void {
+      listeners.add(fn);
+      return () => void listeners.delete(fn);
+    },
+  };
 }

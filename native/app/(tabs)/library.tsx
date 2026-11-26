@@ -26,6 +26,9 @@ export default function LibraryScreen() {
   const key = recordings.map((m) => `${m.id}:${m.updatedAt}`).join(",");
   // Play waits for the copies, so it starts inside the tap: on the web a wait after the tap loses its permission to play.
   const [copied, setCopied] = useState(false);
+  // Any Library change drops the copies, whether or not the recordings' key changed.
+  const [made, setMade] = useState(0);
+  useEffect(() => playAll.subscribe(() => setMade((n) => n + 1)), []);
   useEffect(() => {
     if (!key) return;
     let live = true;
@@ -34,7 +37,7 @@ export default function LibraryScreen() {
     const done = () => live && setCopied(true);
     playAll.prepare().then(done, done);
     return () => void (live = false);
-  }, [key]);
+  }, [key, made]);
   const busy = now.status !== "idle";
   return (
     <Screen title="My manifestations">

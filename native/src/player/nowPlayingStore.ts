@@ -7,7 +7,7 @@ import { makeNowPlaying } from "./nowPlaying";
 import { makePlayAll } from "./playAll";
 
 export const nowPlaying = makeNowPlaying(audio);
-export const playAll = makePlayAll({ save: (n, b, m) => audio.save(n, b, m), load: () => libraryRecordings(() => false) });
+export const playAll = makePlayAll({ save: (n, b, m) => audio.save(n, b, m), load: (gone) => libraryRecordings(gone) });
 // A recording may be deleted or replaced under what plays (on the phone it plays the Library's own files).
 library.subscribe(() => (playAll.reset(), nowPlaying.stop()));
 
