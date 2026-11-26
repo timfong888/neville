@@ -5,17 +5,22 @@ const GRACE_MS = 2000;
 export function pauseWatch(explain: () => void) {
   let left = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const clear = () => {
-    left = false;
+  const stopTimer = () => {
     if (timer) clearTimeout(timer);
     timer = null;
+  };
+  const clear = () => {
+    left = false;
+    stopTimer();
   };
   return {
     /** The app state changed. `playing`: a clip is active and not paused. */
     appState(st: string, playing: boolean, paused: boolean) {
-      if (st === "background" && playing) left = true;
+      // Leaving again cancels the grace timer of the earlier return.
+      if (st === "background" && playing) (stopTimer(), (left = true));
       if (st === "active" && left) {
         if (paused) return clear(), explain();
+        stopTimer();
         timer = setTimeout(clear, GRACE_MS);
       }
     },

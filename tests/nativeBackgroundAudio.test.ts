@@ -242,6 +242,17 @@ describe("the Create step tells the person why playback paused", () => {
     expect(explain).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+  it("keeps the note for a second trip away within the grace period of the first return", () => {
+    const { explain, w } = setup();
+    w.appState("background", true, false);
+    w.appState("active", true, false);
+    vi.advanceTimersByTime(1000);
+    w.appState("background", true, false);
+    vi.advanceTimersByTime(1500);
+    w.playing(false);
+    expect(explain).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
   it("says nothing after the step resets", () => {
     const { explain, w } = setup();
     w.appState("background", true, false);
