@@ -3,7 +3,8 @@
   "build": {
     "production": {
       "distribution": "store",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_MUSIC": "1" }
     }
   },
   "submit": {
