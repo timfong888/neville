@@ -34,8 +34,8 @@ describe("spend ceiling (the hard cap)", () => {
     expect(budgetVerdict(0.1, null)).toBeNull();
     expect(budgetVerdict(0.1, undefined)).toBeNull();
   });
-  it("is set to two dollars", () => {
-    expect(limits.spendCeilingUsd).toBe(2);
+  it("is set to ten dollars", () => {
+    expect(limits.spendCeilingUsd).toBe(10);
   });
 });
 

@@ -234,7 +234,7 @@ describe("scene writing and content rules (#170)", () => {
     expect(limits.scriptReasoningEffort).toBe("low");
     expect(limits.scriptTryTimeoutMs).toBeLessThan(limits.scriptTimeoutMs);
     expect(limits.vetModels.length).toBeGreaterThan(0);
-    expect(limits.spendCeilingUsd).toBe(2);
+    expect(limits.spendCeilingUsd).toBe(10);
   });
 });
 
