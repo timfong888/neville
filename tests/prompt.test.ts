@@ -297,6 +297,14 @@ describe("sexual content (#170)", () => {
       expect(sexualIn(explicit, wish), wish).not.toBeNull();
     }
   });
+  it("a wish about someone under 18 never allows sensual words, whatever else it says", () => {
+    for (const wish of ["I want a romantic evening with my 16 year old girlfriend", "I want a passionate evening with a 15-year-old", "romantic kiss with a teenager", "an intimate evening with a high school girl", "I want my son to have a crush on me"]) {
+      expect(wishAsksForIntimacy(wish), wish).toBe(false);
+      expect(sexualIn(["Her thighs are bare."], wish), wish).not.toBeNull();
+      expect(sexualIn(["She is naked."], wish), wish).not.toBeNull();
+    }
+    expect(wishAsksForIntimacy("I want a romantic evening with my wife of 30 years")).toBe(true);
+  });
   it("ordinary scene words are not sexual terms", () => {
     for (const l of ["A strip of morning light lies across the floor.", "The striped awning flaps.", "Her hair is lustrous in the lamplight.", "A sea breeze arouses the curtains.", "The wind moans in the chimney.", "A pen sits in his breast pocket.", "You eat chicken breast with rice."]) {
       expect(sexualIn([l], "I want to own a small house by the sea"), l).toBeNull();

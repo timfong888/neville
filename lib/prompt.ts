@@ -158,9 +158,14 @@ const SENSUAL = /\b(?:sensual\w*|seduc\w+|cleavage|thighs?|caress\w*|lovers?|mak
 const ASKS_FOR_INTIMACY =
   /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive)\b/i;
 
-/** True when the wish itself asks for romance, attraction or intimacy. */
+// A wish about someone under 18, by stated age or by word. When in doubt the
+// sensual exception stays off: sexual content about minors is never written.
+const MINOR =
+  /\b(?:(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yo|y\/o)|aged? (?:[1-9]|1[0-7])|teen\w*|minors?|underage|child|children|kids?|boys?|girls?|schoolgirl|schoolboy|high[- ]school\w*|middle[- ]school\w*|daughter|son|sons|students?)\b/i;
+
+/** True when the wish itself asks for romance or intimacy, and is not about anyone under 18. */
 export function wishAsksForIntimacy(wish: string): boolean {
-  return ASKS_FOR_INTIMACY.test(wish);
+  return ASKS_FOR_INTIMACY.test(wish) && !MINOR.test(wish);
 }
 
 /** The sexual word found in `lines` that the wish did not ask for, or null. */
