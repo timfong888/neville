@@ -35,6 +35,12 @@ export default function Player() {
   // Off, one or all (#157). `order` is the titles in a looping session's play order.
   const [loop, setLoop] = useState<LoopMode>(DEFAULT_LOOP);
   const [order, setOrder] = useState<string[]>([]);
+  // True from Play until the session is open, so the Loop control cannot change under a start in progress.
+  const [busy, setBusy] = useState(false);
+  // Set once the listener picks a mode, so the stored choice, read later, does not replace it.
+  const picked = useRef(false);
+  // The Library's recordings copied ahead for loop all, so Play does not wait on them (a browser needs Play inside the tap).
+  const prep = useRef<Promise<LoopItem<string>[]> | null>(null);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const session = useRef<PlaySession | null>(null);
   const starting = useRef(false);
@@ -58,7 +64,8 @@ export default function Player() {
     setIndex(0);
     setNote("");
     audio.configure().catch(() => {});
-    void loopStore.read().then((m) => live && setLoop(m));
+    picked.current = false;
+    void loopStore.read().then((m) => live && !picked.current && setLoop(m));
     (async () => {
       // `/player/demo` is a built-in test tone. Every other id comes from the library seam.
       const demo = String(id) === DEMO_ID;
@@ -85,12 +92,23 @@ export default function Player() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let live = true;
+    prep.current = null;
+    if (loop === "all" && loaded && voice.current) {
+      const me: LoopItem<string> = { id: loaded.id, src: voice.current.src, title: loaded.title || "Untitled" };
+      prep.current = libraryItems(me, () => !live);
+    }
+    return () => void (live = false);
+  }, [loop, loaded]);
+
   const play = async () => {
     if (session.current) return session.current.play();
     const v = voice.current;
     // A second tap while the first is still starting must not open a second session.
     if (!v || !loaded || starting.current) return;
     starting.current = true;
+    setBusy(true);
     const mine = shown.current;
     try {
       const looping = loop !== "off";
@@ -100,7 +118,7 @@ export default function Player() {
       let clips = buildQueue(v.src, gap, repeats);
       if (looping) {
         const me: LoopItem<string> = { id: loaded.id, src: v.src, title: loaded.title || "Untitled" };
-        const q = loopQueue(loop, loop === "all" ? await libraryItems(me, () => shown.current !== mine) : [], loaded.id, gap, me);
+        const q = loopQueue(loop, loop === "all" ? await (prep.current ?? libraryItems(me, () => shown.current !== mine)) : [], loaded.id, gap, me);
         clips = q.clips;
         setOrder(q.items.map((i) => i.title));
       } else setOrder([]);
@@ -126,6 +144,7 @@ export default function Player() {
       stop(`Could not play: ${e instanceof Error ? e.message : e}`);
     } finally {
       starting.current = false;
+      setBusy(false);
     }
   };
 
@@ -136,6 +155,7 @@ export default function Player() {
   const active = phase !== "idle";
   const at = roundAt(index);
   const pick = (m: LoopMode) => {
+    picked.current = true;
     setLoop(m);
     void loopStore.write(m);
   };
@@ -180,10 +200,10 @@ export default function Player() {
         {LOOP_MODES.map((m) => (
           <Pressable
             key={m}
-            disabled={active}
-            style={[s.chip, loop === m && s.on, active && s.off]}
+            disabled={active || busy}
+            style={[s.chip, loop === m && s.on, (active || busy) && s.off]}
             accessibilityRole="radio"
-            accessibilityState={{ selected: loop === m, disabled: active }}
+            accessibilityState={{ selected: loop === m, disabled: active || busy }}
             accessibilityLabel={`Loop ${LOOP_LABEL[m]}`}
             onPress={() => pick(m)}
           >
