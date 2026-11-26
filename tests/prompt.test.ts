@@ -284,8 +284,14 @@ describe("sexual content (#170)", () => {
       expect(sexualIn(["You hold the keys, and the sea wind lifts the curtain."], wish), wish).toBeNull();
     }
   });
+  it("mentioning a wife, a girl, women or attracting clients is not a request for sensual writing", () => {
+    for (const wish of ["I want to attract more clients", "I want my wife to recover from surgery", "I want my daughter, a girl of seven, to sleep well", "I want women to approach me and show interest in me", "I want a loving partnership with my business partner"]) {
+      expect(wishAsksForIntimacy(wish), wish).toBe(false);
+      expect(sexualIn(["Her thighs are bare."], wish), wish).not.toBeNull();
+    }
+  });
   it("a wish for romance or attraction allows sensual detail, never explicit words", () => {
-    for (const wish of ["I want women to approach me", "I want a loving partner who is attracted to me", "I want an intimate evening with my wife"]) {
+    for (const wish of ["I want women to find me attractive", "I want a loving partner who is attracted to me", "I want an intimate evening with my wife"]) {
       expect(wishAsksForIntimacy(wish), wish).toBe(true);
       expect(sexualIn(sensualScene, wish), wish).toBeNull();
       expect(sexualIn(explicit, wish), wish).not.toBeNull();

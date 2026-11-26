@@ -64,6 +64,8 @@ export async function POST(req: Request) {
     return NextResponse.json(budget.refusal, { status: budget.refusal.status });
   }
 
+  // The route has 60 s in all (maxDuration). The script may take up to scriptTimeoutMs, so the voice gets what is left.
+  const started = Date.now();
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
     speed: speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
-    timeoutMs: 42_000,
+    timeoutMs: Math.max(10_000, Math.min(42_000, 56_000 - (Date.now() - started))),
     atomic: voice.atomic === true,
   });
   if (!speech.ok) {

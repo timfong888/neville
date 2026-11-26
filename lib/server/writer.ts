@@ -6,7 +6,7 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, splitRefrain, wishMessage } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -39,6 +39,11 @@ export function scriptModels(): Promise<string[]> {
 /** The cheap models that vet a listener's own script (config/limits.json vetModels). */
 export function vetModels(): Promise<string[]> {
   return listed(limits.vetModels);
+}
+
+/** The refrain is spoken and looped too: it passes the same content guards as the script, or the default is used. */
+function safeRefrain(refrain: string | null, wish: string): string {
+  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) ? refrain : DEFAULT_REFRAIN;
 }
 
 export type Script = {
@@ -140,7 +145,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
       cost += typeof json.usage?.cost === "number" ? json.usage.cost : 0;
-      if (lines) return { lines, source: "model", model, costUsd: cost, refrain: parts?.refrain ?? DEFAULT_REFRAIN };
+      if (lines) return { lines, source: "model", model, costUsd: cost, refrain: safeRefrain(parts?.refrain ?? null, opts.want) };
       failure = { reason: "unusable_reply", status: res.status };
       variant++;
     }

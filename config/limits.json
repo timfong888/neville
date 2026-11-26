@@ -13,8 +13,8 @@
   ],
   "scriptReasoningEffort": "low",
   "scriptMaxTokens": 3000,
-  "scriptTimeoutMs": 40000,
-  "scriptTryTimeoutMs": 25000,
+  "scriptTimeoutMs": 36000,
+  "scriptTryTimeoutMs": 24000,
   "vetModels": [
     "google/gemini-2.5-flash-lite",
     "openai/gpt-4.1-nano",

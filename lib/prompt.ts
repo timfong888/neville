@@ -154,8 +154,9 @@ export function grammarIssue(lines: string[]): string | null {
  */
 const EXPLICIT = /\b(?:nude|naked|nudity|topless|breasts?|nipples?|genitals?|penis|vagina|erections?|orgasms?|intercourse|sex|sexy|sexual\w*|erotic\w*|arous\w+|horny|lust\w*|moan\w*|stripp?\w*|undress\w*|bare[- ]chested)\b/i;
 const SENSUAL = /\b(?:sensual\w*|seduc\w+|cleavage|thighs?|caress\w*|lovers?|make[s]? love|turned on)\b/i;
+// Romantic or intimate intent only. Mentioning a wife, a girl or "attract more clients" is not a request for sensual writing.
 const ASKS_FOR_INTIMACY =
-  /\b(?:attract\w*|romanc\w*|romantic|intima\w*|lovers?|partner|girlfriend|boyfriend|wife|husband|dating|kiss\w*|sensual\w*|sex\w*|passion\w*|crush|love life|woman|women|girls?|guys?|flirt\w*|seduc\w+)\b/i;
+  /\b(?:romanc\w*|romantic|intima\w*|lovers?|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passion\w*|crush|flirt\w*|seduc\w+|(?:loving|life) partner|attracted to me|find me attractive)\b/i;
 
 /** True when the wish itself asks for romance, attraction or intimacy. */
 export function wishAsksForIntimacy(wish: string): boolean {

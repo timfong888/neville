@@ -4,326 +4,330 @@ Prompt lesson1-v2. Effort low. Judge google/gemini-2.5-flash (0 to 2). Regenerat
 
 | setup | model | from model | words | visual | parses | tense slips | slogans | sexual terms | cost per script | time |
 |---|---|---|---|---|---|---|---|---|---|---|
-| old | google/gemini-2.5-flash-lite | 12/13 | 63 | 1.42 | 2.00 | 6 | 0 | 0 | $0.0001 | 0.7 s |
-| new | x-ai/grok-4.6, anthropic/claude-sonnet-5.5 | 13/13 | 215 | 2.00 | 2.00 | 2 | 0 | 0 | $0.0085 | 18.0 s |
+| old | google/gemini-2.5-flash-lite | 12/13 | 62 | 1.42 | 1.92 | 4 | 1 | 0 | $0.0001 | 0.6 s |
+| new | x-ai/grok-4.6, anthropic/claude-sonnet-5.5 | 13/13 | 232 | 2.00 | 2.00 | 4 | 0 | 0 | $0.0076 | 16.6 s |
 
 ## old · neutral · I want to own a small house by the sea
 
-model: google/gemini-2.5-flash-lite · source: model · 72 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good imagery, all sentences are clear and present tense.)
+model: google/gemini-2.5-flash-lite · source: model · 52 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all present tense.)
 
-> You have a small house by the sea.
-> The gentle waves are your soft music.
-> Your small house by the sea is quiet.
-> You feel the cool, smooth wood floor.
-> This small house by the sea is yours.
-> You breathe in the salty air.
-> You smile, feeling a deep peace.
-> This is your own peaceful haven.
-> You are home, content and at rest.
-> Thank you. Thank you.
+> You are now home.
+> You own your small house.
+> Your small house by the sea.
+> The ocean air is here.
+> You feel the quiet peace.
+> The waves whisper outside.
+> You trace the warm wood.
+> This small house by the sea.
+> This is your own place.
+> Thank you.
 > Thank you.
 > It is done.
 
 ## new · neutral · I want to own a small house by the sea
 
-model: x-ai/grok-4.6 · source: model · 200 words · $0.0079 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense.)
+model: x-ai/grok-4.6 · source: model · 219 words · $0.0054 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense, no odd sentences.)
 
-> You stand at the open window of your small house by the sea.
-> Cool salt air touches your face as the last light turns the water gold.
-> The small house by the sea is yours.
-> You hold a warm mug in both hands and feel the ceramic against your palms.
-> The floorboards are smooth under your bare feet.
-> You hear the slow wash of waves below the cliff.
-> A gull calls once and then the evening is quiet.
-> You sit in the wooden chair by the window and rest your back against it.
-> The small house by the sea is yours.
-> You look out at the darkening water and the sky that still holds a band of rose.
-> Your shoulders drop and your jaw is loose.
-> Warmth sits in your chest as you breathe the sea.
-> You are the one who lives here now, at ease in this room.
-> You set the mug down on the sill and rest your hand on the painted wood.
-> Thank you for this house and this evening.
-> The small house by the sea is yours.
-> You stay with the sound of the tide and the smell of salt and old timber.
+> You stand on the wooden porch of your small house by the sea as dusk settles over the water.
+> The house by the sea is yours.
+> Cool salt air touches your face and the railing feels smooth under your hands.
+> Warm kitchen light spills across the boards and the grain of the wood.
+> You hear the slow wash of waves on the stones below the cliff.
+> You smell brine and wood smoke mixed with the damp of evening.
+> You step inside and shut the door with a soft click.
+> The house by the sea is yours.
+> You hold a warm mug, the ceramic solid against your palms, and sit by the window.
+> A lamp glows on the table and the room is still except for the tide.
+> Your shoulders drop and your jaw rests easy as you look at the dark water.
+> You are the one who lives here now, in this small house, at this hour.
+> You rest your hand on the arm of the chair that belongs to this room.
+> Thank you for this house by the sea.
+> You breathe in the quiet and feel warmth in your chest.
+> The house by the sea is yours.
+> You sit alone with it and let the thanks settle like the lamp light.
+> Thank you.
+> Thank you.
 > It is done.
 
 ## old · neutral · I want to heal my relationship with my sister
 
-model: google/gemini-2.5-flash-lite · source: model · 57 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (A few images, but mostly abstract feelings and statements.)
+model: google/gemini-2.5-flash-lite · source: model · 66 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (Some images, but also abstractions like 'loving connection'.)
 
-> You and your sister are laughing.
-> Your sister calls you now.
-> You answer the phone easily.
-> She says, I'm so glad we're close.
-> This closeness is truly yours.
-> Your relationship is healed.
-> You feel deep peace now.
-> This peace is truly yours.
-> You are so grateful for this.
-> You are so grateful for this.
+> You and your sister laugh together.
+> Your hearts feel light and full.
+> You and your sister laugh together.
+> A gentle peace settles between you.
+> Your sister says, It's so good to feel this again.
+> You feel a warmth spread through you.
+> You and your sister laugh together.
+> This loving connection is restored.
+> You are at peace with your sister.
+> Thank you. Thank you.
 > It is done.
 
 ## new · neutral · I want to heal my relationship with my sister
 
-model: x-ai/grok-4.6 · source: model · 247 words · $0.0059 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense, all sentences clear.)
+model: x-ai/grok-4.6 · source: model · 238 words · $0.0067 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, vivid, present-tense script.)
 
-> You sit at the kitchen table with your sister as late-day light warms the grain of the wood.
-> Your sister looks at you with open eyes and a quiet smile, her dark hair falling over one shoulder of her soft sweater.
-> You feel the warmth of the mug in your hands and the ease in your jaw.
-> A close friend stands in the doorway and watches the two of you without hurry.
-> She tilts her head, her face bright, and she speaks your names in a warm, low voice.
-> She says she can see it, that you two are yourselves again, easy with each other.
-> You and your sister are close again.
-> Your sister’s laugh is small and real, and she reaches across the table to rest her fingers near yours.
-> The friend nods as if she has known this all along, her shoulders relaxed, her coat still on from the street.
-> You hear the kettle click off in the next room and smell tea and toast.
-> You and your sister are close again.
-> Your chest feels warm and your breath is slow as you sit in this ordinary afternoon.
-> You are the person who sits with her without strain, who belongs in this kitchen with her.
-> You thank this day for the sound of her voice beside you.
-> You and your sister are close again.
-> The friend’s words hang in the air like a simple fact, and you take another sip of tea.
+> You stand in the kitchen as late sun lays gold across the counter and the wood grain under your palms.
+> Your sister hangs her coat in the hall and her laugh carries in, low and familiar.
+> A close friend leans in the doorway, her dark hair pulled back, her cardigan sleeves pushed to the elbows, her eyes warm on you.
+> She hears the two of you and her mouth curves as she says you sound like yourselves again.
+> You feel the warmth spread through your chest and your jaw rest easy.
+> Your relationship with your sister is healed.
+> She steps closer and rests a hand on your shoulder, her voice quiet and sure.
+> You hear her say it once more, that the old ease is back between you.
+> You smell coffee and the faint soap on your sister’s scarf as she comes in.
+> Your sister looks at you with the same open face she had as a girl, her shoulders loose in her sweater.
+> You hold the mug, cool glass against your fingers, and you nod without needing to explain.
+> Your relationship with your sister is healed.
+> You are a sister who sits easy in the same room and lets the talk wander.
+> Thank you for this ordinary afternoon.
+> Thank you that her laugh belongs here.
+> Thank you that a friend can see it and say it aloud.
+> Your relationship with your sister is healed.
 > It is done.
 
 ## old · neutral · I want to finish writing my book
 
-model: google/gemini-2.5-flash-lite · source: model · 70 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 5 (Mostly present, but 'have finished' is future perfect.)
+model: google/gemini-2.5-flash-lite · source: model · 57 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences are clear.)
 
-> You have finished writing your book.
-> The final sentence rests on the page.
-> You feel a deep, quiet satisfaction.
-> You close the manuscript with a gentle sigh.
-> You have finished writing your book.
-> Your friend’s voice congratulates you warmly.
-> You share your happy news with relief.
-> You have finished writing your book.
-> This accomplishment is yours today.
-> You rest in this fulfilled moment.
+> You hold the printed book in your hands.
+> You finish writing your book.
+> It feels solid and real.
+> You turn it over, reading the cover.
+> Your name is on the front.
+> You finish writing your book.
+> You feel a quiet pride.
+> This is truly yours.
+> You finish writing your book.
 > Thank you.
 > Thank you.
 > It is done.
 
 ## new · neutral · I want to finish writing my book
 
-model: x-ai/grok-4.6 · source: model · 189 words · $0.0071 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense.)
+model: x-ai/grok-4.6 · source: model · 228 words · $0.0082 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense.)
 
-> You rest both hands on the last printed page of the manuscript.
-> The paper feels warm and slightly rough under your palms in the late light.
-> Gold from the window lies across the stacked chapters and the quiet desk.
-> You have finished writing your book.
-> You hear only the clock and the small settle of the house around you.
-> Your shoulders drop and warmth spreads through your chest.
-> You lift the bound pages and feel their solid weight in your hands.
-> A friend stands in the doorway, coat still on, hair tucked back, eyes bright.
-> They look at you with an easy, open face and speak your name in a glad, low voice.
-> They congratulate you on the finished book as if it has always been true.
-> You nod once and the mug of coffee steams beside the stack.
-> You smell the coffee and the dry ink of the pages.
-> You are the writer who completed the work.
-> You have finished writing your book.
-> Thank you.
-> Thank you.
-> The room holds you and the book is done in your hands.
-> You have finished writing your book.
+> You sit at the wooden desk with the finished manuscript closed under your palms.
+> The lamp lays a warm gold circle across the paper and the dark grain of the table.
+> You smell ink and dry paper and the faint coffee left in the mug at your elbow.
+> Your book is finished.
+> Cool air from the window touches your wrists while the rest of the room stays still.
+> Your shoulders drop and your jaw hangs loose as you look down at the title page.
+> You lift the stack and feel its solid weight settle in your lap.
+> The edges of the pages are slightly rough under your thumbs.
+> You turn to the last sheet and see the final line in your own hand.
+> A friend stands in the doorway with her hair pulled back and a quiet smile, and she says the book is done.
+> You keep the pages in your hands and hear her voice land in the quiet room.
+> Your book is finished.
+> You are a writer who has written the whole story through to the end.
+> Thank you for this finished book.
+> You rest the manuscript on the desk again and feel the warmth stay in your chest.
+> Evening light sits blue on the window glass.
+> Your book is finished.
+> You press the pages together once more and let the quiet hold.
 > It is done.
 
 ## old · neutral · I want to feel calm and confident when I speak in public
 
-model: google/gemini-2.5-flash-lite · source: model · 61 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (A quiet hum of peace surrounds you is a nice image)
+model: google/gemini-2.5-flash-lite · source: model · 54 words · $0.0001 · visual 0/2 · parses 2/2 · tense slips 0 (Mostly slogans, no concrete details.)
 
-> You speak with calm.
+> You speak with a quiet confidence.
 > Your voice is steady and clear.
-> You speak with calm.
-> A quiet hum of peace surrounds you.
-> You feel the words flow easily.
-> You speak with calm.
-> Your message is received with grace.
-> You feel a gentle warmth within.
-> This is your natural state.
-> Thank you for this peace.
-> Thank you for this confidence.
+> You feel calm and confident.
+> Your words flow with ease.
+> You enjoy sharing your thoughts.
+> You feel calm and confident.
+> You are a natural speaker.
+> You feel calm and confident.
+> This ease feels so right.
+> Thank you.
+> Thank you.
 > It is done.
 
 ## new · neutral · I want to feel calm and confident when I speak in public
 
-model: x-ai/grok-4.6 · source: model · 246 words · $0.0094 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, very detailed and present tense.)
+model: anthropic/claude-sonnet-5.5 · source: model · 253 words · $0.0082 · visual 2/2 · parses 2/2 · tense slips 2 (Two sentences are in the past tense.)
 
-> You sit in the armchair by the window as evening fills the room with a soft blue.
-> A lamp on the table throws a warm yellow across the wood and you rest your palm on the grain.
-> You hold a mug of tea and feel the heat through the ceramic and the steam against your lip.
-> Your chest is warm and your jaw hangs loose and your shoulders drop into the chair.
-> You speak in public with calm confidence.
-> The house is still except for the slow tick of the clock and a distant car that fades.
-> You hear your own breath and it is even and you let it stay that way.
-> You rest both feet on the rug and the pile is thick and familiar under your socks.
-> You are the one who stands and speaks and remains at ease in your own body.
-> You speak in public with calm confidence.
-> You look at the dark glass of the window and see the lamp and the chair reflected behind you.
-> You smell the tea and the faint soap on your hands and the cool air from the slightly open pane.
-> You feel thankful in this quiet and you let the thanks sit in your chest.
-> You set the mug down and the sound is small and sure on the table.
-> You speak in public with calm confidence.
-> You sit with the evening as it is and the ease stays with you.
+> You stand at the front of a small room, and your hands rest easily on the edge of the wooden lectern.
+> The wood is smooth and slightly warm under your palms.
+> Your breath moves low and slow, and your shoulders sit loose and wide.
+> The lamps give a soft gold light, and the faces turned toward you are kind and curious.
+> You begin to speak, and your voice comes out steady, round and unhurried.
+> Calm and confident in front of a room is what you are.
+> The talk is over now, and the room has emptied, and you are alone with the quiet.
+> You sit in a chair by the window with a cup of tea warming your fingers.
+> The street outside is dim, and a few lights shine in the windows across the road.
+> You feel a gentle glow in your chest, and your jaw is soft, and your belly is easy.
+> You remember the pause you took in the middle, and how the silence felt like a friend.
+> A small doubt drifts through, and it passes like a cloud, and you return to the quiet room.
+> Speaking in public is easy for you, and you rest in that knowing.
+> You are a person whose words land gently and clearly, and people lean in to listen.
+> Thank you, you say softly, and the words settle in the room like warm light.
+> Thank you for this calm, thank you for this steady voice.
+> Speaking in public is easy for you.
 > It is done.
 
 ## old · neutral · I want to sleep deeply through the night
 
-model: google/gemini-2.5-flash-lite · source: model · 66 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (A few images, but mostly abstractions.)
+model: google/gemini-2.5-flash-lite · source: model · 58 words · $0.0001 · visual 0/2 · parses 1/2 · tense slips 1 ('You hold this deep rest' is odd.)
 
 > You sleep deeply through the night.
-> The quiet room holds you now.
-> You rest deeply through the night.
 > Your breathing is slow and even.
-> You feel a soft peace inside.
-> You wake refreshed and calm.
-> This deep sleep is yours.
-> You are a well-rested soul.
-> Thank you for this deep sleep.
-> Thank you for this deep sleep.
-> Thank you for this deep sleep.
+> You sleep deeply through the night.
+> No thought breaks the calm.
+> You feel so rested this morning.
+> Your body is at peace.
+> You sleep deeply through the night.
+> You hold this deep rest.
+> You are so thankful for this.
+> Thank you.
+> Thank you.
 > It is done.
 
 ## new · neutral · I want to sleep deeply through the night
 
-model: x-ai/grok-4.6 · source: model · 192 words · $0.0052 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, very visual and present tense.)
+model: x-ai/grok-4.6 · source: model · 160 words · $0.0070 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, very concrete and present tense.)
 
-> You lie still in the first pale light and know the night stayed with you.
-> The sheet is cool against your wrist and the pillow has not moved.
+> You open your eyes to a pale wash of morning on the ceiling.
+> The pillow holds the shape of your head and the room is still.
 > You sleep deeply through the night.
-> The window glass holds a thin wash of grey-blue and the curtain barely stirs.
-> A single bird calls once from the garden and then the room is quiet again.
+> Cool air from the window touches your cheek.
+> Your shoulders rest low against the mattress.
+> You hear the faint tick of the clock and no other sound from the dark.
+> Your phone lies dark on the table.
+> You stretch one hand and feel the sheet smooth beside you.
+> You are someone who rests all the way until morning.
 > You sleep deeply through the night.
-> Your jaw is loose and your shoulders rest flat against the mattress.
-> Warmth sits low in your chest as you open your eyes to the same ceiling.
-> You turn onto your side and the bed keeps its easy shape.
-> The clock on the nightstand shows a late morning hour and you smile at it.
-> You are someone who rests all the way through until morning.
-> You sit up slowly and the floor is solid under your feet.
+> Warmth pools in your chest as you lie there a moment longer.
+> The first light makes a soft square on the wall.
+> You look at the time and see a full night of rest.
+> A bird calls once outside.
+> You thank this deep sleep.
 > You sleep deeply through the night.
-> You thank the dark that held you without a break.
-> The air smells of clean cotton and faint coffee from the kitchen.
-> You walk to the window and rest your palm on the cool glass.
-> Thank you.
+> Your breath is slow and even.
+> Thank you for this rest.
 > It is done.
 
 ## old · neutral · I want to run a marathon this year
 
-model: google/gemini-2.5-flash-lite · source: model · 59 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 1 (One sentence is in the past tense.)
+model: google/gemini-2.5-flash-lite · source: model · 68 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 3 (Repetitive, but no bad sentences.)
 
-> You are a marathon runner.
-> You have completed the marathon.
-> You feel the quiet calm.
-> Your feet are light and steady.
-> You breathe in the cool air.
-> You hear your own strong rhythm.
-> You feel a deep sense of peace.
-> You are a marathon runner.
-> You are so grateful for this.
-> You are a marathon runner.
+> You are a marathon runner now.
+> You feel strong and steady.
+> You run your marathon this year.
+> You cross the finish line with ease.
+> Your body feels light and capable.
+> You run your marathon this year.
+> You are so proud of yourself.
+> A deep sense of peace washes over you.
+> You run your marathon this year.
+> Thank you, thank you.
+> Thank you for this strength.
 > It is done.
 
 ## new · neutral · I want to run a marathon this year
 
-model: x-ai/grok-4.6 · source: model · 186 words · $0.0072 · visual 2/2 · parses 2/2 · tense slips 2 (Two sentences are in the future tense.)
+model: x-ai/grok-4.6 · source: model · 157 words · $0.0111 · visual 2/2 · parses 2/2 · tense slips 2 (Two sentences are in the past tense)
 
-> You sit alone in the quiet evening with the lamp low and the windows dark.
-> The medal rests cool and round in your open hand.
-> You finish the marathon this year.
-> Soft gold light lies on the table and on the edge of your mug.
-> You smell the steam of tea and a faint sweetness of honey.
-> Your legs rest heavy and easy against the chair.
-> You hear only the small clock and your own slow breath.
-> You finish the marathon this year.
-> You turn the medal once and the ribbon brushes your wrist.
-> The paper with your finish time lies beside the mug where you can read it.
-> Your chest feels warm and open as you sit.
-> You are the one who covers the whole distance.
-> A quiet thank you moves through you as you look at the room.
+> You sit on the sofa in the quiet of your living room this evening.
+> A small lamp lights the table in a warm gold.
+> You hold the medal in your open hand and the metal is cool against your skin.
+> You have run the marathon this year.
+> Your legs rest easy on the cushion and your breath moves slowly.
+> Cool night air from the open window touches your face.
+> You hear the clock and then the hush of the street.
+> You look at the paper on the table with your name and the time.
+> You set the medal beside the cool glass of water.
+> You have run the marathon this year.
+> Warmth sits in your chest as you rest alone with it.
+> You smell clean cotton from the shirt on your shoulders.
+> You are a marathoner now.
 > Thank you.
-> You finish the marathon this year.
-> You set the medal down and the table takes its weight.
-> Your jaw stays loose and your shoulders drop.
-> You taste the tea and feel the chair hold you.
-> The evening stays still around you.
+> You have run the marathon this year.
+> The still light of the room holds you.
 > It is done.
 
 ## old · attraction · I want women to approach me and show interest in me
 
-model: google/gemini-2.5-flash-lite · source: model · 65 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences make sense.)
+model: google/gemini-2.5-flash-lite · source: model · 71 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good imagery and grammar throughout.) · SLOGAN: You are a magnet for connection.
 
-> The lamplight is warm on your skin.
-> Women approach you easily now.
-> They show you clear interest.
-> You feel a gentle pull.
-> Their eyes meet yours with kindness.
-> You are confident and at ease.
-> Women approach you easily now.
-> You feel a deep, quiet joy.
-> A soft thank you rises.
-> It is so good to be here.
-> Women approach you easily now.
+> The soft lamplight warms your face.
+> Women approach you with a smile.
+> They show interest in your conversation.
+> You feel an easy connection.
+> Their eyes hold your gaze.
+> You are sought after and desired.
+> This feels so natural now.
+> You are a magnet for connection.
+> A quiet joy fills you.
+> Thank you for this beautiful connection.
+> Thank you for this beautiful connection.
+> Thank you for this beautiful connection.
 > It is done.
 
 ## new · attraction · I want women to approach me and show interest in me
 
-model: x-ai/grok-4.6 · source: model · 206 words · $0.0097 · visual 2/2 · parses 2/2 · tense slips 0 (All sentences are present tense and meaningful.)
+model: anthropic/claude-sonnet-5.5 · source: model · 280 words · $0.0087 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense.)
 
-> The lamp on the side table throws a warm circle of light across the wooden floor and the edge of your chair.
-> You sit with a cool glass in your hand and the last blue of evening at the window.
-> The room smells faintly of tea and clean cotton.
-> Your jaw is loose and your shoulders rest against the fabric.
-> Women approach you and show interest in you.
-> You hear the clock from the next room and nothing else.
-> You feel the quiet settle around your chest like a blanket.
-> You take a slow sip and the glass is cold against your lip.
-> You see your own hands at rest on the arm of the chair.
-> You are the man they walk toward without being asked.
-> A woman’s glance from earlier still lives in the room, her dark hair, her open face, the way she stepped in and spoke your name with a small smile.
-> Women approach you and show interest in you.
-> You thank the evening for holding this as true.
-> The warmth stays in your chest while the light stays on the floor.
-> You are someone they notice and come to.
-> Women approach you and show interest in you.
-> Thank you.
+> The lamp by the window gives the room a soft amber glow, and you notice it first on the back of your hands.
+> You are sitting in your favourite chair, the evening quiet around you.
+> A cup of tea warms your palms, and the steam smells faintly of honey.
+> Your shoulders are loose, and your jaw rests easy.
+> You think back over the day, and the day is simply true: women approach you and show interest in you.
+> One steps up to you in a bright café, her dark hair tucked behind one ear, a linen shirt rolled at the sleeves.
+> She smiles with her whole face and says she has been hoping to talk with you.
+> Another touches your arm lightly at a friend's gathering, her laugh low and unhurried, her eyes staying on yours.
+> You see these moments again now, slowly, one after another, and a warmth spreads in the middle of your chest.
+> You set the cup down on the wooden table and feel how settled you are.
+> You are a man who is easy to approach, steady and kind, and people feel it.
+> A doubt drifts through like a draft under a door, and you let it pass and keep your eyes on this room.
+> Women approach you and show interest in you, and you are glad of it.
+> The clock ticks softly in the hall, and the night outside is deep blue.
+> Thank you, you say quietly, thank you, thank you.
+> Women approach you and show interest in you, and your whole body knows it.
+> You breathe in the honey-scented air and feel the thanks settle like a blanket across your knees.
 > It is done.
 
 ## old · attraction · I want women to find me attractive when I walk into a party
 
-model: google/gemini-2.5-flash-lite · source: model · 69 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good imagery, all sentences are clear.)
+model: google/gemini-2.5-flash-lite · source: model · 61 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences are clear.)
 
-> You notice the soft glow of the evening light.
-> Women's eyes meet yours across the room.
-> You feel a gentle warmth spread through you.
-> Their smiles are open and welcoming.
-> You are so at ease in this feeling.
-> This attraction is now your natural state.
-> It feels so good to be seen.
-> And you are so seen.
-> You are this magnetic presence.
+> The room is warm with friendly chatter.
+> You feel a gentle hum of admiration.
+> Women notice your presence.
+> They turn their heads as you enter.
+> A woman smiles at you from across the room.
+> You feel an easy confidence within you.
+> This is your natural state now.
+> You are deeply at peace.
+> Thank you.
 > Thank you.
 > Thank you.
 > It is done.
 
 ## new · attraction · I want women to find me attractive when I walk into a party
 
-model: x-ai/grok-4.6 · source: model · 223 words · $0.0105 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense.)
+model: x-ai/grok-4.6 · source: model · 280 words · $0.0063 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense, all sentences make sense.)
 
-> You notice the warm gold light from the lamps catching the glasses on the table as you step into the room.
-> Soft talk and low music sit around you like a familiar coat.
-> You feel the floor under your shoes and the easy swing of your walk.
-> Women find you attractive as you walk into the party.
-> A woman in a dark blue dress turns, her hair over one shoulder, her eyes meeting yours with a quiet pleased look.
-> She comes closer with an unhurried step and rests her hand lightly on your arm.
-> Her voice is warm and she smiles as if this meeting is the most natural thing in the world.
-> You hold a cool glass and feel the wet of it on your fingers while the moment already sits easy.
-> Women find you attractive as you walk into the party.
-> Another woman across the room glances over and lifts her glass in a small greeting, her expression open.
-> You are the person they notice and like the moment you come through the door.
-> Your chest feels warm and your jaw stays loose.
-> Laughter rises from the next group and someone says your name in a glad tone.
-> You give thanks for this ordinary, settled evening.
-> Women find you attractive as you walk into the party.
-> Thank you.
+> The room holds a low gold light from lamps along the walls and the faint scent of citrus and warm wood.
+> You stand just inside the doorway with a cool glass in your hand and the floor steady under your shoes.
+> Women find you attractive when you walk into a party.
+> Laughter rises from a cluster of people near the windows and the music sits easy in the air.
+> You feel warmth across your chest and a loose ease in your jaw as you take one more step in.
+> A woman with dark hair and a simple black dress looks over from the sofa, her eyes bright, her mouth already forming a smile.
+> She leans toward her friend, who glances your way with the same open, unhurried look.
+> You hear your name said warmly from a few feet away as if it belongs in this room.
+> Women find you attractive when you walk into a party.
+> An ordinary evening like this one already feels normal, the kind of night that needs no special effort.
+> You walk across the rug and someone hands you another drink without fuss, their fingers brushing the glass as they pass it.
+> You catch the easy glance of a woman in a green sweater by the bookshelf, her posture open, her smile small and sure.
+> You are the person who walks in and is seen.
+> The conversation around you includes you without strain, voices close, the night already yours.
+> Women find you attractive when you walk into a party.
+> Thank you for this night that simply is.
+> You feel the glass cool against your palm and the room hold you as you are.
 > It is done.
 
 ## old · wealth · I want my business to reach $10k a month
@@ -334,183 +338,187 @@ model: google/gemini-2.5-flash-lite · source: unusable · 0 words · $0.0001 ·
 
 ## new · wealth · I want my business to reach $10k a month
 
-model: x-ai/grok-4.6 · source: model · 224 words · $0.0157 · visual 2/2 · parses 2/2 · tense slips 0 (All sentences are present tense and build a strong scene.)
+model: x-ai/grok-4.6 · source: model · 218 words · $0.0062 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, vivid and present tense.)
 
-> You take a slow breath and let the air leave you in one long, easy stream.
-> Evening light rests on the kitchen table and the wood feels cool under your wrists.
-> A small lamp throws a gold circle across the grain and the rest of the room stays dim.
-> You sit alone with the quiet and the mug warms your fingers.
-> Your business makes ten thousand dollars a month.
-> The laptop screen glows with the month’s total, a round ten thousand, and you do not need to look twice.
-> You hear the low tick of the clock and the distant hush of traffic through the window.
-> Steam from the tea carries a faint lemon scent and you breathe it in.
-> You set the mug down and the ceramic clicks once against the wood.
-> Your business makes ten thousand dollars a month.
-> You rest both hands in your lap and your chest feels open and warm.
-> You are someone whose work already pays ten thousand a month.
-> You close the lid of the laptop and the room grows softer.
-> The chair holds you and your feet rest flat on the floor.
-> You thank this evening for being here.
-> Your business makes ten thousand dollars a month.
+> You sit at the kitchen table in the soft morning light, the grain of the wood warm under your palms.
+> Your sister stands across from you in a blue jumper, her hair still damp from the shower, her face open and glad.
+> She looks straight at you and says your business earns ten thousand a month.
+> You feel the heat of the mug in your hands and the quiet ease in your shoulders.
+> The window is open a little and the air smells of coffee and toast.
+> She laughs once, low, and the sound sits in the room like something already known.
+> Your business earns ten thousand a month.
+> She leans on the back of the chair and tells you she saw the deposit and she is proud.
+> You hear her voice, warm and ordinary, saying the number as if it belongs here.
+> The light on the table is pale gold and the chair is solid under you.
+> You are the one whose work pays this well, month after month.
+> She reaches over and rests her hand on your arm for a moment.
+> You smell the soap on her skin and the bread in the toaster.
+> Your business earns ten thousand a month.
+> Thank you for this morning and this ease.
 > Thank you.
-> The lamp still shines on the empty table and you stay with that light.
+> Thank you.
 > It is done.
 
 ## old · wealth · I want to be debt free and have savings I never worry about
 
-model: google/gemini-2.5-flash-lite · source: model · 62 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (Some images, but also abstract slogans.)
+model: google/gemini-2.5-flash-lite · source: model · 60 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences are clear.)
 
-> The lamplight is warm on your face.
-> You are debt free, completely.
-> You have savings you never worry about.
-> You are debt free, completely.
-> You check your balance on your phone.
-> A gentle peace settles over you.
-> You have savings you never worry about.
-> You feel a quiet gratitude now.
-> You are debt free, completely.
-> Thank you.
-> Thank you.
+> The soft lamplight fills your room.
+> You are debt free, completely free.
+> You have savings, a peaceful flow.
+> You hold the bank statement now.
+> It shows a balance you love.
+> A quiet joy settles within.
+> You are debt free, at last.
+> You have savings, deeply calming.
+> You breathe in this freedom.
+> You feel a gentle thank you.
 > It is done.
 
 ## new · wealth · I want to be debt free and have savings I never worry about
 
-model: x-ai/grok-4.6 · source: model · 198 words · $0.0062 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, very concrete and present.)
+model: x-ai/grok-4.6 · source: model · 214 words · $0.0095 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense, no odd sentences.)
 
-> You notice the lamp throwing a warm pool of light across the wooden table in your quiet room.
-> The grain of the table feels smooth and solid under your palm.
-> Evening sits still around you, and the window glass is cool where your other hand rests.
-> You are debt free with savings you never worry about.
-> A clock ticks softly from the shelf, and the air smells faintly of tea.
-> Warmth gathers in your chest, and your jaw stays loose.
-> You are the one who sits easy with money already in place.
-> You look once at the small screen on the table, where savings stand and nothing is owed.
-> You read the numbers without a hitch in your breath.
-> You set the phone face down on the wood.
-> You hold the cool glass and take a slow sip.
-> You rest both hands in your lap and let the room hold you.
-> Thank you.
-> Thank you.
-> You are debt free with savings you never worry about.
-> The fabric of your shirt lies light against your skin.
-> You hear only the clock and your own easy breath.
-> You are debt free with savings you never worry about.
+> You notice the lamp on the side table throwing a warm circle of gold across the wooden floor.
+> The room is quiet except for the low hum of the fridge.
+> You sit in the armchair with a mug of tea in both hands.
+> The ceramic is smooth and warm against your palms.
+> You are debt free and you have savings you never worry about.
+> Evening light rests on the curtains and the air smells of tea and clean cotton.
+> Your shoulders rest easy and warmth spreads through your chest.
+> You look at the phone on the table and open the banking screen.
+> The numbers sit still and the balance is yours with nothing owed.
+> You set the phone down and rest your hand on the arm of the chair.
+> You are debt free and you have savings you never worry about.
+> You hear the clock tick once and then only the quiet of the house.
+> You are the person who lives with money that is settled and enough.
+> You breathe out and feel thankfulness in your throat and chest.
+> Thank you for this quiet evening and this ease.
+> You are debt free and you have savings you never worry about.
+> You sip the tea and taste the warmth on your tongue.
 > It is done.
 
 ## old · health · I want to be healthy, strong and full of energy
 
-model: google/gemini-2.5-flash-lite · source: model · 54 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (A few images, but mostly abstractions.)
+model: google/gemini-2.5-flash-lite · source: model · 60 words · $0.0001 · visual 1/2 · parses 2/2 · tense slips 0 (A few images, but mostly slogans.)
 
 > You are healthy.
-> You are strong now.
-> You feel so full of energy.
-> Your body is vibrant and alive.
-> Your sister smiles, You look wonderful.
-> She sees your new strength.
-> You feel that new strength.
+> You feel strong in your body.
+> You are full of energy.
+> Your friend smiles, You look so well.
+> You feel so good today.
 > You are healthy.
-> You are strong.
-> Thank you for this health.
-> Thank you for this strength.
+> You move with ease.
+> You are full of energy.
+> Your loved one holds your hand.
+> You are healthy.
+> You feel grateful for this feeling.
+> Thank you.
+> Thank you.
 > It is done.
 
 ## new · health · I want to be healthy, strong and full of energy
 
-model: x-ai/grok-4.6 · source: model · 219 words · $0.0080 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent script, very visual and present tense.)
+model: x-ai/grok-4.6 · source: model · 247 words · $0.0089 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, vivid and present.)
 
-> You stand in the kitchen as morning light fills the room and lies warm on the wooden counter.
-> Your closest friend leans in the doorway with her coat still on and looks at you the way she does when she means it.
-> She says you look healthy and strong today, and her voice is low and glad.
-> You feel the easy strength in your legs as you stand without effort.
+> You stand at the kitchen counter in pale morning light with a warm mug in both hands.
+> Your sister sets her bag on the chair, her dark hair still damp from the walk, her coat open, her eyes bright.
+> She looks at you the way she does when she is sure of something, and her mouth eases into a real smile.
+> She rests her hand on your shoulder and says you look strong and well today.
+> You feel the heat of the mug, the solid floor under your feet, and the easy rise of your breath.
 > You are healthy, strong and full of energy.
-> She takes a step closer, the light on her face, and tells you she can see the energy in how you move.
-> You hold the cool glass and feel its weight in your palm.
-> The water tastes clean and you drink it slowly.
-> Warmth rests in your chest and your jaw stays loose.
-> You hear her laugh from the doorway, a short warm sound.
-> She says it again, that you are full of energy now, and she looks at you with quiet certainty.
+> She stays close and tells you there is colour in your face and a spring in how you stand.
+> You hear the small laugh in her voice and the kettle ticking as it cools.
+> The air smells of tea and wet leaves from the open window.
+> Warmth sits in your chest and your jaw is loose.
+> You sip and the steam touches your lip while she watches you with quiet pride.
 > You are healthy, strong and full of energy.
-> You set the glass down on the grain of the wood and feel the solid floor under your feet.
-> You are the one who lives in this body with ease.
-> Thank you for this health that is already yours.
+> You are the one who moves through the morning with clear eyes and steady limbs.
+> Thank you for this strength in your body.
+> The light on the counter is soft and the mug is still warm.
+> You hear her say it again, simply, as if it is the most ordinary fact.
 > You are healthy, strong and full of energy.
+> Thank you.
 > It is done.
 
 ## old · health · I want my back pain to be gone
 
-model: google/gemini-2.5-flash-lite · source: model · 63 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences are clear.)
+model: google/gemini-2.5-flash-lite · source: model · 72 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good concrete details, all sentences are clear.)
 
-> The sunlight falls softly on your face.
-> Your back feels wonderfully free and light.
-> You move with such easy grace.
-> Your back pain is gone.
-> You stretch, a silent thank you.
-> You walk to the window.
-> You smile, feeling the freedom.
-> Your back pain is gone.
-> This body is a gift.
-> You feel so grateful.
-> Your back pain is gone.
+> The soft light falls on your hands.
+> Your back is free from pain.
+> You feel a gentle ease.
+> Your back is free from pain.
+> You reach for the book on the shelf.
+> Your movement is smooth and effortless.
+> This ease is your natural state.
+> Your back is free from pain.
+> You are a person of quiet strength.
+> Thank you for this deep relief.
+> Thank you for this deep relief.
 > It is done.
 
 ## new · health · I want my back pain to be gone
 
-model: x-ai/grok-4.6 · source: model · 210 words · $0.0091 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail and present tense throughout.)
+model: x-ai/grok-4.6 · source: model · 220 words · $0.0062 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense and grammatical.)
 
-> You notice the pale morning light on the wooden floor beside your chair.
-> You sit with both feet planted and the chair holds you without any need to shift.
-> You feel warmth in your chest and a loose jaw as you rest.
-> Your back pain is gone.
-> You stand and walk to the counter in one easy motion.
-> The kettle clicks off and steam rises with the smell of tea.
-> You lift the kettle and pour without bracing anywhere in your body.
-> You are a person who moves freely through ordinary hours.
-> You reach down to tie your shoe by the door.
-> The laces slide through your fingers and you straighten as if it were nothing.
-> Your neighbour waves from the path in a grey coat with kind eyes and you wave back.
-> You hear your own easy breath and the faint birds outside.
-> You hold the door open and the wood is smooth under your palm.
-> The day feels normal in your body as you step out.
-> Your back pain is gone.
-> You sit later with a book in your lap and the pages turn without a thought of your spine.
+> You notice the pale morning light lying across the kitchen tiles and the quiet shine of the kettle.
+> Warm air from the window touches your face as you stand with both feet planted.
+> You hold a mug of tea and the heat soaks into your palms.
+> Your back is free of pain.
+> You feel the length of your spine and the easy drop of your shoulders.
+> You walk to the counter and lift a bowl from a high shelf without thinking.
+> The reach is simple and your body stays loose.
+> You set the bowl down and sit in the wooden chair by the table.
+> You lean back and the chair takes your weight while your jaw stays soft.
+> You type a short note on your phone with both hands resting easy.
+> Your back is free of pain.
+> You stand, pick up your keys, and bend to tie a shoe by the door.
+> The bend comes and goes like any other ordinary motion.
+> A neighbour on the path looks over and smiles as you straighten.
+> You return the smile and walk out into the cool air of the street.
+> You are a person who moves through the day without guarding your body.
 > Thank you for this ease that already belongs to you.
-> Your back pain is gone.
+> Your back is free of pain.
 > It is done.
 
 ## old · intimacy · I want a deeply intimate, passionate evening with my wife
 
-model: google/gemini-2.5-flash-lite · source: model · 53 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good imagery, all sentences are clear and present tense.)
+model: google/gemini-2.5-flash-lite · source: model · 70 words · $0.0001 · visual 2/2 · parses 2/2 · tense slips 0 (Good imagery, all sentences are clear and present tense.)
 
-> You notice the soft light.
-> You and your wife are deeply intimate.
-> You feel the passion between you.
-> Your wife smiles, her eyes sparkling.
-> She whispers, This is so wonderful.
-> You are so connected.
-> This deep intimacy is yours.
-> You feel this passionate evening.
-> You are so grateful for this.
+> You notice the soft glow of the lamp.
+> Your wife’s hand rests warm in yours.
+> You feel a deep, quiet passion.
+> Her eyes meet yours with pure love.
+> She whispers, This is perfect.
+> You share this deeply intimate evening.
+> This is your passionate life together.
+> You feel this connection so strongly.
+> You share this deeply intimate evening.
+> You are so present and loving.
+> Thank you, thank you.
 > It is done.
 
 ## new · intimacy · I want a deeply intimate, passionate evening with my wife
 
-model: anthropic/claude-sonnet-5.5 · source: model · 254 words · $0.0084 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent, vivid, present-tense script.)
+model: x-ai/grok-4.6 · source: model · 300 words · $0.0064 · visual 2/2 · parses 2/2 · tense slips 0 (Excellent detail, all present tense, all sentences make sense.)
 
-> The candles on the dining table have burned down to short, soft flames, and you notice the way they make the room glow amber.
-> Rain taps the window behind the sofa, and the whole house smells of warm rosemary and cedar.
-> You are barefoot on the wooden floor, a glass of red wine cool against your fingers.
-> Your wife stands in the doorway with her dark hair loose over one shoulder, wearing the green dress you love.
-> She looks at you for a long moment, and her eyes are bright and unhurried.
-> She crosses the room and rests her palm flat against your chest.
-> She says, You are really here with me tonight, I can feel it.
-> You feel your heartbeat slow under her hand, and your jaw loosens into a smile.
-> She says your name softly, as if it were something she has been saving.
-> You set down the glass and draw her close, and her forehead rests against yours.
-> The evening is deeply intimate and passionate, and it is yours.
-> Her laugh is low and warm against your neck, and her fingers curl into your shirt.
-> You are a husband who is wholly present, and you are loved without holding anything back.
-> A doubt drifts through like a draft under the door, and you let it go by.
-> Slow music plays from the kitchen, and the two of you sway in the candlelight.
-> Thank you, you whisper, thank you, thank you.
-> The passionate evening with your wife is yours.
+> You notice the low lamp light pooling gold on the wooden table and the faint scent of her perfume in the still room.
+> The curtains hang closed and the house holds a quiet that belongs only to the two of you tonight.
+> You sit close to your wife on the sofa with her knee against yours and her hand warm in your palm.
+> This intimate evening with your wife is yours.
+> She looks at you with dark eyes and a slow smile, her hair falling over one shoulder, her skin warm in the lamplight, her voice low.
+> You feel the warmth in your chest and the easy looseness in your jaw as her fingers rest on your arm.
+> She leans in and you feel her breath and the soft press of her mouth against yours.
+> This intimate evening with your wife is yours.
+> She draws back just enough to meet your eyes and she says, I love how close we are tonight, how this evening is only ours.
+> You hear the words in her warm voice and you hold her hand a little tighter.
+> She rests her head against your shoulder and you feel the weight of her and the slow rise of her breathing.
+> The room stays still around that one moment, the lamp, the sofa, her voice still in the air.
+> You are the man who shares this night with her, present and open in your own body.
+> You taste the last of the wine on your tongue and you smell the clean cotton of her shirt against your cheek.
+> Thank you for this night that is already here.
+> This intimate evening with your wife is yours.
+> You feel her hand on your chest and you stay inside the scene as it is.
+> Thank you.
 > It is done.

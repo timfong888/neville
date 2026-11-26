@@ -6,7 +6,7 @@ import limits from "@/config/limits.json";
 
 vi.mock("server-only", () => ({}));
 
-type Reply = "ok" | "thin" | "banned" | "sensual" | "slogan" | "garbage" | `${number}`;
+type Reply = "badrefrain" | "ok" | "thin" | "banned" | "sensual" | "slogan" | "garbage" | `${number}`;
 let server: Server;
 // The models come from config/limits.json: the tests follow it, never a name.
 const [M1, M2] = limits.scriptModels;
@@ -52,7 +52,7 @@ beforeAll(async () => {
       }
       // A 200 that is not JSON, and carries text that must never reach a log.
       if (reply === "garbage") return res.end(`${GARBAGE} <html>`);
-      const content = reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Thank you, thank you, thank you.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : GOOD;
+      const content = reply === "badrefrain" ? GOOD + "\nRefrain: You feel sensual and seductive." : reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Thank you, thank you, thank you.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : GOOD;
       res.end(JSON.stringify({ choices: [{ message: { content } }] }));
     });
   });
@@ -135,9 +135,16 @@ describe("writeScript", () => {
 
   it("allows sensual detail when the wish asks for attraction, but never explicit words", async () => {
     plan = { [M1]: ["sensual"] };
-    const s = await write(0, "my journey across Japan, where women are attracted to me");
+    const s = await write(0, "my journey across Japan, and a romantic evening");
     expect(s.source).toBe("model");
     expect(s.lines.join(" ")).toMatch(/thighs/);
+  });
+
+  it("falls back to the default refrain when the refrain is a slogan or sensual for a neutral wish", async () => {
+    plan = { [M1]: ["badrefrain"] };
+    const s = await write(0, "my journey across Japan");
+    expect(s.source).toBe("model");
+    expect(s.refrain).toBe("Thank you, thank you, it is done.");
   });
 
   it("refuses a slogan that does not parse, then asks again", async () => {
