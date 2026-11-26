@@ -26,7 +26,7 @@ const items = [
   { id: "a", src: "a.wav", title: "Awake" },
 ];
 
-type Opts = { title: string; loop?: boolean; onState(s: PlayState): void };
+type Opts = { title: string; loop?: boolean; music?: { src: string | number; volume: number }; onState(s: PlayState): void };
 function fake() {
   const opens: Array<{ srcs: string[]; o: Opts; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
   let count = 0;
@@ -71,6 +71,13 @@ describe("the app-level controller", () => {
     f.opens[0].o.onState(st(2, { playing: false }));
     expect(f.np.state().status).toBe("paused");
     expect(f.opens[0].stop).not.toHaveBeenCalled();
+  });
+
+  it("hands the job's music to the session", async () => {
+    const f = fake();
+    const music = { src: "m.mp3", volume: 0.3 };
+    await f.np.play(job("m1", { prepare: async () => ({ ...(await job("m1").prepare())!, music }) }));
+    expect(f.opens[0].o.music).toEqual(music);
   });
 
   it("shows the bar while playing or paused, and not before or after Stop (acceptance 2)", async () => {

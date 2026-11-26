@@ -50,6 +50,14 @@ export const audio: AudioSeam = {
     const a = new Audio();
     const mine = [...new Set(srcs)];
     for (const u of mine) inUse.set(u, (inUse.get(u) ?? 0) + 1);
+    // The music is a second element that follows the session.
+    let bed: HTMLAudioElement | null = null;
+    if (o.music && typeof o.music.src === "string") {
+      bed = new Audio();
+      bed.loop = true;
+      bed.volume = o.music.volume;
+      bed.src = o.music.src;
+    }
     let index = 0;
     let open = true;
     // What the listener asked for. The element also pauses by itself at the end of each clip.
@@ -96,6 +104,7 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = true;
         start();
+        void bed?.play().catch(() => undefined);
         guard();
         emit();
       },
@@ -103,6 +112,7 @@ export const audio: AudioSeam = {
         if (!open) return;
         want = false;
         a.pause();
+        bed?.pause();
         emit();
       },
       stop() {
@@ -121,6 +131,10 @@ export const audio: AudioSeam = {
         a.onended = a.onpause = a.onplay = a.onerror = a.ontimeupdate = a.onloadeddata = a.oncanplay = a.onplaying = null;
         a.pause();
         a.removeAttribute("src");
+        if (bed) {
+          bed.pause();
+          bed.removeAttribute("src");
+        }
         for (const u of mine) {
           const n = (inUse.get(u) ?? 1) - 1;
           if (n > 0) inUse.set(u, n);
@@ -139,6 +153,7 @@ export const audio: AudioSeam = {
     a.onended = () => {
       if (index + 1 >= srcs.length && !o.loop) {
         want = false;
+        bed?.pause();
         return emit(true);
       }
       switching = true;

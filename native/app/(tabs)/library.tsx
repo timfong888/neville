@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { Link, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
+import { musicNow, useMusic } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
+import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
 
@@ -16,6 +18,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const items = newestFirst(lib.manifestations);
   const np = useNowPlaying();
+  const music = useMusic();
   // The controller plays one thing at a time; this card shows it only when it is the Library loop.
   const now = np.id === "all" ? np : { ...np, status: "idle" as const, note: "" };
   const recordings = items.filter((m) => m.hasAudio);
@@ -39,8 +42,9 @@ export default function LibraryScreen() {
             </>
           ) : (
             <>
-              <Button kind="primary" label="Play all on loop" onPress={() => void nowPlaying.play(playAll.job)} />
+              <Button kind="primary" label="Play all on loop" onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: musicNow(music) }; } })} />
               {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
+              <PlayOptions />
             </>
           )}
         </View>

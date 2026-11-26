@@ -7,11 +7,13 @@ import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { nowPlaying, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { inOrder } from "../../src/player/copies";
+import { musicNow, useMusic } from "../../src/player/musicStore";
 import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
 import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, playerGapName, playerLoop } from "../../src/player/loop";
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
 import { colors } from "../../src/theme";
+import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 
 const loopStore = makeLoopStore(kv);
@@ -29,6 +31,7 @@ export default function Player() {
   const [bellOn, setBellOn] = useState(true);
   // Off or one (#157): whether this item repeats until stopped.
   const [loop, setLoop] = useState<LoopMode>(DEFAULT_LOOP);
+  const music = useMusic();
   // Set once the listener picks a mode, so the stored choice, read later, does not replace it.
   const picked = useRef(false);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
@@ -72,7 +75,7 @@ export default function Player() {
       prepare: async () => {
         const gap = repeats || looping ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, looping ? LOOP_GAP_MS : undefined), "audio/wav") : "";
         const clips = looping ? loopQueue("one", [], item.id, gap, { id: item.id, src: v.src, title: item.title }).clips : buildQueue(v.src, gap, repeats);
-        return { clips, loop: looping, at: (i) => ({ title: item.title, position: roundAt(i).round, total: repeats + 1 }) };
+        return { clips, loop: looping, music: musicNow(music), at: (i) => ({ title: item.title, position: roundAt(i).round, total: repeats + 1 }) };
       },
     });
   };
@@ -149,6 +152,7 @@ export default function Player() {
         ))}
       </View>
       <Text style={s.dim}>{shownLoop === "one" ? "Repeats this recording until you stop it. To loop everything, use Play all on loop in the Library." : "Plays once, then repeats for the minutes below."}</Text>
+      <PlayOptions disabled={active || busy} />
       <Text style={s.label}>Repetition after the first play{shownLoop !== "off" ? " (Off while looping)" : active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>
         {REPEAT_MINUTES.map((m) => (

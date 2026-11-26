@@ -20,7 +20,7 @@ export type NowPlayingState = {
 };
 const IDLE: NowPlayingState = { status: "idle", id: "", title: "", route: "", index: 0, position: 0, total: 0, loop: false, note: "" };
 
-export type Prepared = { clips: string[]; loop: boolean; at(index: number): { title: string; position: number; total: number } };
+export type Prepared = { clips: string[]; loop: boolean; music?: { src: string | number; volume: number }; at(index: number): { title: string; position: number; total: number } };
 /** What to play. `title` is the lock screen's; `at` gives the title and place shown for a position. */
 export type PlayJob = { id: string; title: string; route: string; empty: string; prepare(): Promise<Prepared | null> };
 
@@ -60,6 +60,7 @@ export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "op
         const s = audio.open(p.clips, {
           title: job.title,
           loop: p.loop,
+          music: p.music,
           onState: (st) => {
             if (mine !== run) return;
             if (st.failed) return end({ id: job.id, note: "This recording could not be played." });

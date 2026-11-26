@@ -3,6 +3,8 @@
 // Without one, the device reads the script if it can speak, else the lines are shown in
 // time; both of those need the app in the foreground.
 import { type Made, lineAt } from "@/lib/create";
+import { gapClip } from "@/lib/playerQueue";
+import { LOOP_GAP_MS } from "../player/loop";
 import { audio } from "../seams/audio";
 import type { PlaySession, PlayState } from "../seams/types";
 
@@ -21,8 +23,11 @@ export type Playback = {
   foregroundOnly: boolean;
 };
 
+/** Optional: repeat the recording until stopped, and play a music track under it (#157, #163). */
+export type PlayOptions = { loop?: boolean; music?: { src: string | number; volume: number } };
+
 /** Starts playback. No event fires after `stop`. */
-export function play(made: Made, ev: Events): Playback {
+export function play(made: Made, ev: Events, opts: PlayOptions = {}): Playback {
   let live = true;
   // Set before the player starts: a player that fails at once reports through `guard` straight away.
   let end: () => void = () => undefined;
@@ -39,7 +44,7 @@ export function play(made: Made, ev: Events): Playback {
   };
   let resume = () => {};
   if (made.recording) {
-    const f = playFile(made, made.recording, guard);
+    const f = playFile(made, made.recording, guard, opts);
     end = f.stop;
     resume = f.resume;
   } else end = readAloud(made.lines, guard);
@@ -48,7 +53,7 @@ export function play(made: Made, ev: Events): Playback {
   return { stop, active: () => live, resume: () => live && resume(), foregroundOnly: !made.recording };
 }
 
-function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
+function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events, opts: PlayOptions) {
   let session: PlaySession | null = null;
   let dead = false;
   // The first status updates are the load, not a pause: only a stop after playing began is reported.
@@ -59,7 +64,8 @@ function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
     if (st.ended) return ev.onEnd();
     if (st.playing) started = true;
     if (started) ev.onPlaying(st.playing);
-    if (st.progress !== undefined && st.playing) ev.onLine(lineAt(rec.starts, st.progress));
+    // Looping, the second clip is the pause between rounds: the lines follow only the recording.
+    if (st.progress !== undefined && st.playing && (!opts.loop || st.index === 0)) ev.onLine(lineAt(rec.starts, st.progress));
   };
   void (async () => {
     try {
@@ -71,7 +77,10 @@ function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events) {
       // If it still fails the clip plays in the foreground only; say so instead of failing silently (#153).
       await audio.configure().catch(() => ev.onWarn?.("Background playback could not be switched on, so this may stop when you leave Neville."));
       if (dead) return;
-      session = audio.open([uri], { title: made.title || "Neville", onState });
+      // A loop is the recording and a pause, again and again, so the first line follows the last by the same pause as in the Player.
+      const clips = opts.loop ? [uri, await audio.save("create-gap.wav", gapClip(false, LOOP_GAP_MS), "audio/wav")] : [uri];
+      if (dead) return;
+      session = audio.open(clips, { title: made.title || "Neville", loop: opts.loop, music: opts.music, onState });
       session.play();
     } catch {
       if (!dead) ev.onError("The recording could not be played.");

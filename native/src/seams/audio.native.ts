@@ -55,6 +55,14 @@ export const audio: AudioSeam = {
     const meta = { title: o.title, artist: ARTIST };
     const opts = { showSeekBackward: false, showSeekForward: false };
     list.setActiveForLockScreen(true, meta, opts);
+    // The music is a second player, never the lock screen's: only the voice puts its controls up.
+    const bed = o.music ? createAudioPlayer(o.music.src) : null;
+    if (bed && o.music) {
+      bed.loop = true;
+      bed.volume = o.music.volume;
+    }
+    // Whether the voice is playing, as last seen, so the music follows it when the lock screen, a call or a bar pauses it.
+    let voice: boolean | null = null;
     // Now Playing is only taken up once the audio session is running, which is after Play. Say it again then.
     let announced = false;
     // The playlist status has no error field. A clip that cannot be loaded or decoded
@@ -68,6 +76,12 @@ export const audio: AudioSeam = {
         announced = true;
         try {
           list.setActiveForLockScreen(true, meta, opts);
+        } catch {}
+      }
+      if (bed && s.playing !== voice) {
+        voice = s.playing;
+        try {
+          s.playing ? bed.play() : bed.pause();
         } catch {}
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
@@ -90,9 +104,18 @@ export const audio: AudioSeam = {
       play() {
         if (!open) return;
         list.play();
+        try {
+          bed?.play();
+        } catch {}
         guard();
       },
-      pause: () => void (open && list.pause()),
+      pause() {
+        if (!open) return;
+        list.pause();
+        try {
+          bed?.pause();
+        } catch {}
+      },
       stop() {
         if (!open) return;
         open = false;
@@ -103,6 +126,9 @@ export const audio: AudioSeam = {
           list.pause();
           list.clearLockScreenControls();
           list.destroy();
+        } catch {}
+        try {
+          bed?.remove();
         } catch {}
       },
     };
