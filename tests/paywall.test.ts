@@ -2,21 +2,10 @@
 // Tests for paywall session state and PaywallSheet component are not in this file;
 // those require React Native dependencies not available in this test environment.
 //
-// Note: mockPurchaseClient (native/src/paywall/mockPurchase.ts) is tested inline below
-// rather than via import, because the native/ tsconfig extends expo/tsconfig.base which
-// is not installed in the web test environment. Its implementation is a no-op promise.
-
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { detectPaywallError, isBestValue, shouldShowPaywall } from "@/lib/paywall";
 import type { CreditsResponse } from "@/lib/api/client";
-
-// Inline mock matching native/src/paywall/mockPurchase.ts for test isolation
-const mockPurchaseClient = {
-  async purchase(_packId: string): Promise<void> {
-    // No-op.
-  },
-};
 
 const baseCredits = (): CreditsResponse => ({
   balance: 5,
@@ -85,11 +74,5 @@ describe("isBestValue", () => {
   it("true for pack10, false for starter", () => {
     expect(isBestValue({ id: "pack10", credits: 10, price: "$6.99" })).toBe(true);
     expect(isBestValue({ id: "starter", credits: 3, price: "$2.99" })).toBe(false);
-  });
-});
-
-describe("mockPurchaseClient", () => {
-  it("resolves immediately without throwing", async () => {
-    await expect(mockPurchaseClient.purchase("pack10")).resolves.toBeUndefined();
   });
 });

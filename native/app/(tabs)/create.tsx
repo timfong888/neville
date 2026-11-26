@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
@@ -26,6 +26,11 @@ export default function Wish() {
   const note = freeNoteFor(access, signedIn, c.used);
   // Always call hook unconditionally; ignore result when paywall is off.
   const credits = useCredits();
+  // A 402 has no result, so wait for one before leaving this screen. This keeps the
+  // paywall visible instead of briefly opening Script and being redirected back.
+  useEffect(() => {
+    if (PAYWALL_ENABLED && c.made) router.push("/create/script");
+  }, [c.made, router]);
   // Each visit: the draft, the count, the voice, and who is signed in may have changed.
   useFocusEffect(
     useCallback(() => {
@@ -35,7 +40,7 @@ export default function Wish() {
     }, []),
   );
   const go = () => {
-    if (create()) router.push("/create/script");
+    if (create() && !PAYWALL_ENABLED) router.push("/create/script");
   };
 
   return (
@@ -114,12 +119,12 @@ export default function Wish() {
           </View>
         </View>
       </Screen>
-      {PAYWALL_ENABLED && c.paywallError?.type === "no_credits" && shouldShowPaywall(credits) ? (
+      {PAYWALL_ENABLED && c.paywallError?.type === "no_credits" && credits !== null && shouldShowPaywall(credits) ? (
         <PaywallSheet
           credits={credits}
           purchaseClient={mockPurchaseClient}
           onClose={clearPaywallError}
-          onPurchased={() => { clearPaywallError(); void refreshCredits(); }}
+          onPurchased={clearPaywallError}
         />
       ) : null}
     </>

@@ -32,3 +32,18 @@ export async function refreshCredits(): Promise<void> {
     // Keep old value on error.
   }
 }
+
+/** Adds mock purchase credits without waiting for a payments backend. */
+export function grantMockCredits(packId: string): void {
+  const credits = state.credits;
+  const amount = packId === "starter" ? 3 : packId === "pack10" ? 10 : 0;
+  if (!credits || !amount || credits.unlimited) return;
+  setState({
+    credits: {
+      ...credits,
+      balance: credits.balance + amount,
+      // Mirror the Starter's one-purchase limit while payments remain mocked.
+      packs: packId === "starter" ? credits.packs.filter((pack) => pack.id !== "starter") : credits.packs,
+    },
+  });
+}

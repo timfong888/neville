@@ -87,6 +87,14 @@ describe("api client", () => {
     expect(err).toMatchObject({ status: 502, code: "voice_failed", message: "No voice.", lines: ["A."] });
   });
 
+  it("keeps only safe fields from an unsuccessful response", async () => {
+    const { f } = fake(() => Response.json({ code: "timeout", balance: 2, creditReturned: true, diagnostics: "private", nested: { token: "private" } }, { status: 504 }));
+    const err = await createApi({ baseUrl: "https://x.test", fetch: f }).manifest({ want: "x" }).catch((e) => e);
+    expect(err).toMatchObject({ data: { code: "timeout", balance: 2, creditReturned: true } });
+    expect((err as ApiError).data).not.toHaveProperty("diagnostics");
+    expect((err as ApiError).data).not.toHaveProperty("nested");
+  });
+
   it("returns null for a missing recording and sends writes as PUT and DELETE", async () => {
     const { calls, f } = fake(() => new Response("{}", { status: 404 }));
     const api = createApi({ baseUrl: "https://x.test", fetch: f });
