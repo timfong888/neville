@@ -1,11 +1,11 @@
 // "Play all on loop" (#157) as a job for the app-level controller: every recording in the Library's order,
-// a pause after each, the engine's loop returning to the first after the last.
+// a pause after each (with a soft bell when on), the engine's loop returning to the first after the last.
 import { gapClip, roundAt } from "@/lib/playerQueue";
 import type { AudioSeam } from "../seams/types";
-import { LOOP_GAP_MS, type LoopItem, PLAYLIST_GAP_NAME, loopQueue } from "./loop";
+import { LOOP_GAP_MS, type LoopItem, loopQueue, playlistGapName } from "./loop";
 import type { PlayJob, Prepared } from "./nowPlaying";
 
-export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boolean): Promise<LoopItem<string>[]> }) {
+export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boolean): Promise<LoopItem<string>[]>; /** Whether the gap carries the bell. Read at each build. */ bell(): Promise<boolean> }) {
   let ready: Promise<Prepared | null> | null = null;
   // Bumped by `reset`, so a build the Library has outdated stops copying and cannot replace the new build's names.
   let gen = 0;
@@ -14,7 +14,8 @@ export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boole
     const mine = gen;
     const items = await d.load(() => mine !== gen);
     if (!items.length) return null;
-    const q = loopQueue("all", items, items[0].id, await d.save(PLAYLIST_GAP_NAME, gapClip(true, LOOP_GAP_MS), "audio/wav"));
+    const bell = await d.bell();
+    const q = loopQueue("all", items, items[0].id, await d.save(playlistGapName(bell), gapClip(bell, LOOP_GAP_MS), "audio/wav"));
     const at = (i: number) => {
       const n = Math.min(q.items.length, roundAt(i).round);
       return { title: q.items[n - 1].title, position: n, total: q.items.length };

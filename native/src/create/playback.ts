@@ -4,7 +4,7 @@
 // time; both of those need the app in the foreground.
 import { type Made, lineAt } from "@/lib/create";
 import { gapClip } from "@/lib/playerQueue";
-import { LOOP_GAP_MS } from "../player/loop";
+import { LOOP_GAP_MS, createGapName } from "../player/loop";
 import { audio } from "../seams/audio";
 import type { PlaySession, PlayState } from "../seams/types";
 
@@ -24,7 +24,7 @@ export type Playback = {
 };
 
 /** Optional: repeat the recording until stopped, and play a music track under it (#157, #163). */
-export type PlayOptions = { loop?: boolean; music?: { src: string | number; volume: number } };
+export type PlayOptions = { loop?: boolean; /** A soft bell in the pause between rounds; only with `loop`. */ bell?: boolean; music?: { src: string | number; volume: number } };
 
 /** Starts playback. No event fires after `stop`. */
 export function play(made: Made, ev: Events, opts: PlayOptions = {}): Playback {
@@ -78,7 +78,7 @@ function playFile(made: Made, rec: NonNullable<Made["recording"]>, ev: Events, o
       await audio.configure().catch(() => ev.onWarn?.("Background playback could not be switched on, so this may stop when you leave Neville."));
       if (dead) return;
       // A loop is the recording and a pause, again and again, so the first line follows the last by the same pause as in the Player.
-      const clips = opts.loop ? [uri, await audio.save("create-gap.wav", gapClip(false, LOOP_GAP_MS), "audio/wav")] : [uri];
+      const clips = opts.loop ? [uri, await audio.save(createGapName(!!opts.bell), gapClip(!!opts.bell, LOOP_GAP_MS), "audio/wav")] : [uri];
       if (dead) return;
       session = audio.open(clips, { title: made.title || "Neville", loop: opts.loop, music: opts.music, onState });
       session.play();
