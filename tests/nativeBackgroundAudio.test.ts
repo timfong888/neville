@@ -202,7 +202,9 @@ describe("the Create step tells the person why playback paused", () => {
   const src = readFileSync("native/app/create/recording.tsx", "utf8");
   it("notes when the app left while playing and the system paused it", () => {
     expect(src).toMatch(/leftWhilePlaying/);
-    expect(src).toMatch(/paused by the system/);
+    expect(src).toMatch(/paused while Neville was in the background/);
+    // A pause reported after the app is back in front is explained too.
+    expect(src).toMatch(/!p && leftWhilePlaying\.current && explainPause\(\)/);
   });
   it("shows the warning from the player", () => {
     expect(src).toMatch(/onWarn: setToast/);

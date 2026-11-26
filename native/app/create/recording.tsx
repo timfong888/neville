@@ -26,6 +26,10 @@ export default function Recording() {
   const pausedRef = useRef(false);
   const leftWhilePlaying = useRef(false);
 
+  const explainPause = () => {
+    leftWhilePlaying.current = false;
+    setToast("Playback was paused while Neville was in the background. Tap Play to continue.");
+  };
   const stop = useCallback(() => {
     stopper.current?.stop();
     stopper.current = null;
@@ -42,10 +46,11 @@ export default function Recording() {
       // Not `inactive`: iOS sends it for Control Center and call banners while the app is still in front.
       const pb = stopper.current;
       if (st === "background" && pb?.active()) leftWhilePlaying.current = true;
-      // Back in front: if the system paused it meanwhile, give the reason rather than just a Play button.
+      // Back in front: the pause can be reported before or after this event, so the flag
+      // stays up briefly and `onPlaying` explains a pause that arrives late.
       if (st === "active" && leftWhilePlaying.current) {
-        leftWhilePlaying.current = false;
-        if (pb?.active() && pausedRef.current) setToast("Playback was paused by the system while Neville was in the background. Tap Play to continue.");
+        if (pb?.active() && pausedRef.current) explainPause();
+        else setTimeout(() => (leftWhilePlaying.current = false), 2000);
       }
       // A browser keeps reading and running timers in a hidden tab; only a phone suspends them.
       if (Platform.OS === "web" || st !== "background" || !pb?.foregroundOnly || !pb.active()) return;
@@ -68,7 +73,7 @@ export default function Recording() {
       onLine: setIdx,
       onEnd: () => (setPlaying(false), setPaused(false), setIdx(made.lines.length)),
       onError: (m) => (setPlaying(false), setPaused(false), setToast(m)),
-      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p)),
+      onPlaying: (p) => ((pausedRef.current = !p), setPaused(!p), !p && leftWhilePlaying.current && explainPause()),
       onWarn: setToast,
     });
   };
