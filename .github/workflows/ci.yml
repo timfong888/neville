@@ -103,8 +103,9 @@ jobs:
     timeout-minutes: 20
     env:
       # Paths that, when changed in a PR, make this job do its work (extended regex).
-      # native/ imports from lib/, so lib/ is in the list.
-      NATIVE_PATHS: '^(native/|lib/|tests/native|tests/webAudioSeam|tests/stubs/|vitest\.config\.ts|package(-lock)?\.json|\.github/workflows/ci\.yml)'
+      # native/ imports lib/, and lib/ reads config/*.json, so both are in the list; the
+      # root tsconfig.json is what vite uses to transform the native tests.
+      NATIVE_PATHS: '^(native/|lib/|config/|tests/native|tests/webAudioSeam|tests/stubs/|tsconfig\.json|vitest\.config\.ts|package(-lock)?\.json|\.github/workflows/ci\.yml)'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:

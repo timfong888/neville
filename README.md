@@ -58,7 +58,7 @@ Tests come in three levels. CI runs one job for each, named `unit`,
 | Command | Level | Needs |
 | --- | --- | --- |
 | `npm run test:unit` | Pure functions. No network, no database server. | Nothing |
-| `npm run test:integration` | One real boundary: Postgres. PGlite tests run anywhere; tests that need a server skip without `DATABASE_URL`. | `DATABASE_URL`, after `npm run migrate`, for the server tests |
+| `npm run test:integration` | One real boundary: Postgres. Today all four files run on in-process PGlite. A test that needs a real server must skip without `DATABASE_URL`; the first one arrives with #182. | Nothing today. A server test needs `DATABASE_URL`, after `npm run migrate` |
 | `npm run test:acceptance` | One test per story criterion, named `AT-<ticket>-<n>`. | Nothing yet |
 
 `npm test` runs all three. A file's level comes from its name: `*Db.test.ts`,
