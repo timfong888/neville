@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Manifestation } from "@/lib/library/model";
 import { LOOP_GAP_MS, PLAYLIST_GAP_NAME, playerGapName } from "@/native/src/player/loop";
-import { type PlayJob, makeNowPlaying, showsBar } from "@/native/src/player/nowPlaying";
+import { type PlayJob, type Prepared, makeNowPlaying, showsBar } from "@/native/src/player/nowPlaying";
 import { makePlayAll } from "@/native/src/player/playAll";
 import type { PlayState } from "@/native/src/seams/types";
 
@@ -29,9 +29,12 @@ const items = [
 type Opts = { title: string; loop?: boolean; onState(s: PlayState): void };
 function fake() {
   const opens: Array<{ srcs: string[]; o: Opts; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
+  let count = 0;
   const audio = {
     configure: async () => undefined,
+    opened: () => count,
     open: (srcs: string[], o: Opts) => {
+      count++;
       const s = { srcs, o, play: vi.fn(), pause: vi.fn(), stop: vi.fn() };
       opens.push(s);
       return s;
@@ -40,7 +43,7 @@ function fake() {
   const np = makeNowPlaying(audio);
   const states = [np.state()];
   np.subscribe(() => states.push(np.state()));
-  return { np, opens, states };
+  return { np, opens, states, otherOpens: () => void count++ };
 }
 const job = (id: string, over: Partial<PlayJob> = {}): PlayJob => ({
   id, title: `Lock ${id}`, route: `/player/${id}`, empty: "Nothing here.",
@@ -143,6 +146,18 @@ describe("the app-level controller", () => {
     await f.np.play(job("all", { prepare: async () => null }));
     expect(f.opens).toHaveLength(0);
     expect(f.np.state()).toMatchObject({ status: "idle", id: "all", note: "Nothing here." });
+  });
+
+  it("a session that opens while this one is preparing wins; this one does not start over it", async () => {
+    const f = fake();
+    let release: (p: Prepared) => void = () => undefined;
+    const starting = f.np.play(job("m1", { prepare: () => new Promise((r) => (release = r)) }));
+    await new Promise((r) => setTimeout(r, 0));
+    f.otherOpens();
+    release((await job("m2").prepare())!);
+    await starting;
+    expect(f.opens).toHaveLength(0);
+    expect(f.np.state().status).toBe("idle");
   });
 
   it("opens nothing when stopped while preparing, and says so when preparing fails", async () => {

@@ -47,5 +47,7 @@ export interface AudioSeam {
    * One session at a time: opening one ends the one before it, which gets `ended` and `replaced`.
    */
   open(srcs: string[], o: { title: string; loop?: boolean; onState(s: PlayState): void }): PlaySession;
+  /** How many sessions have opened so far. A caller that sees it change while it waits knows another session took over. */
+  opened(): number;
 
 }

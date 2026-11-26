@@ -27,7 +27,7 @@ export type PlayJob = { id: string; title: string; route: string; empty: string;
 /** The now-playing bar shows while a session plays or is paused. */
 export const showsBar = (s: NowPlayingState) => s.status === "playing" || s.status === "paused";
 
-export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open">) {
+export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "opened">) {
   let state = IDLE;
   const subs = new Set<() => void>();
   let session: PlaySession | null = null;
@@ -48,11 +48,14 @@ export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open">) {
     async play(job: PlayJob) {
       end();
       const mine = run;
+      const seen = audio.opened();
       set({ id: job.id, title: job.title, route: job.route, status: "preparing" });
       try {
         await audio.configure().catch(() => {});
         const p = await job.prepare();
         if (mine !== run) return;
+        // Another session opened while this one was preparing: the later request wins.
+        if (audio.opened() !== seen) return end();
         if (!p) return end({ id: job.id, note: job.empty });
         const s = audio.open(p.clips, {
           title: job.title,

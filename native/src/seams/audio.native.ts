@@ -14,8 +14,10 @@ let configured: Promise<void> | null = null;
 
 // Ends the open session. One at a time: a new session ends the one before it.
 let current: (() => void) | null = null;
+let opened = 0;
 
 export const audio: AudioSeam = {
+  opened: () => opened,
   // Once per launch; a failure is not remembered, so the next call tries again.
   configure() {
     configured ??= setAudioModeAsync(AUDIO_MODE).catch((e) => {
@@ -47,6 +49,7 @@ export const audio: AudioSeam = {
     }
   },
   open(srcs, o) {
+    opened++;
     current?.();
     const list = createAudioPlaylist({ sources: srcs, loop: o.loop ? "all" : "none", updateInterval: 500 });
     const meta = { title: o.title, artist: ARTIST };

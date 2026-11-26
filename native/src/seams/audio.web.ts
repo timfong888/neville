@@ -21,8 +21,10 @@ const media = () => (typeof navigator !== "undefined" && "mediaSession" in navig
 // website's player does, and Media Session gives the lock-screen controls.
 // Ends the open session. One at a time: a new session ends the one before it.
 let current: (() => void) | null = null;
+let opened = 0;
 
 export const audio: AudioSeam = {
+  opened: () => opened,
   async configure() {},
   async save(name, bytes, mime) {
     return put(name, new Blob([bytes as BlobPart], { type: mime }));
@@ -43,6 +45,7 @@ export const audio: AudioSeam = {
     });
   },
   open(srcs, o) {
+    opened++;
     current?.();
     const a = new Audio();
     const mine = [...new Set(srcs)];

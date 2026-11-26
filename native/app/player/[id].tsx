@@ -124,7 +124,7 @@ export default function Player() {
       {active ? (
         <Text style={s.p} accessibilityLiveRegion="polite">
           {loop === "one" ? `Repeating${at.inGap ? ", pause" : ""}`
-            : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? (bellOn ? ", bell" : ", pause") : ""}` : "Playing once"}
+            : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? ", pause" : ""}` : "Playing once"}
         </Text>
       ) : note ? (
         <Text style={s.p}>{note}</Text>
@@ -153,7 +153,7 @@ export default function Player() {
           <Pressable
             key={m}
             disabled={active || loop !== "off"}
-            style={[s.chip, minutes === m && s.on, (active || loop !== "off") && s.off]}
+            style={[s.chip, minutes === m && !active && s.on, (active || loop !== "off") && s.off]}
             accessibilityRole="radio"
             accessibilityState={{ selected: minutes === m, disabled: active || loop !== "off" }}
             accessibilityLabel={m ? `${m} minutes` : "Off"}
