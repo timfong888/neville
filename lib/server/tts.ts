@@ -1,7 +1,7 @@
 // One place that turns text into audio through OpenRouter. Used by the voice
 // bake-off (/api/speak) and by the app itself (/api/manifest).
 import "server-only";
-import { MAX_AUDIO_BYTES, fitPause, silenceBytes, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
+import { MAX_AUDIO_BYTES, fitPause, fitPauses, silenceBytes, splitAtPauses, startShares, stitchPcm } from "@/lib/delivery";
 import { normalizePcm16 } from "@/lib/loudness";
 import { OPENROUTER } from "@/lib/server/openrouter";
 
@@ -186,6 +186,11 @@ export async function synthesize(opts: {
    * between the script's lines are fitted to the size limit.
    */
   tail?: number;
+  /**
+   * Per-gap pause values (ms) for stitched PCM voices. When provided and long
+   * enough, replaces the uniform `pauseMs` between body lines.
+   */
+  pauseMsPerGap?: number[];
   /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
   atomic?: boolean;
   /**
@@ -326,15 +331,23 @@ export async function synthesize(opts: {
   const sizes = chunks.map((c) => c.byteLength);
   const tail = Math.min(Math.max(0, opts.tail ?? 0), chunks.length - 1);
   const body = chunks.slice(0, chunks.length - tail);
-  const pauseMs = fitPause({
-    pauseMs: opts.pauseMs!,
-    gaps: body.length - 1,
-    speechBytes: sizes.reduce((n, b) => n + b, 0),
-    rate,
-    maxBytes: MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0),
-  });
-  const gap = silenceBytes(pauseMs, rate);
-  const joined = tail ? join([stitchPcm(body, gap), ...chunks.slice(body.length)]) : stitchPcm(chunks, gap);
+  const bodyGaps = body.length - 1;
+  const speechBytes = sizes.reduce((n, b) => n + b, 0);
+  const maxBytes = MAX_AUDIO_BYTES - Math.max(0, opts.reserveBytes ?? 0);
+
+  // Per-gap pauses when the caller provided one value per body gap; uniform otherwise.
+  let gapBytes: number | number[];
+  let pauseMs: number;
+  if (opts.pauseMsPerGap && opts.pauseMsPerGap.length >= bodyGaps) {
+    const fitted = fitPauses({ pauseMsArr: opts.pauseMsPerGap.slice(0, bodyGaps), speechBytes, rate, maxBytes });
+    gapBytes = fitted.map((ms) => silenceBytes(ms, rate));
+    pauseMs = fitted.reduce((mx, ms) => Math.max(mx, ms), 0);
+  } else {
+    pauseMs = fitPause({ pauseMs: opts.pauseMs!, gaps: bodyGaps, speechBytes, rate, maxBytes });
+    gapBytes = silenceBytes(pauseMs, rate);
+  }
+
+  const joined = tail ? join([stitchPcm(body, gapBytes), ...chunks.slice(body.length)]) : stitchPcm(chunks, gapBytes);
   const audio = wav(normalizePcm16(joined, rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
@@ -348,18 +361,22 @@ export async function synthesize(opts: {
     sentChars,
     ids,
     speedApplied,
-    starts: tail ? tailStarts(sizes, body.length, gap) : startShares(sizes, gap),
+    starts: tail ? tailStarts(sizes, body.length, gapBytes) : startShares(sizes, gapBytes),
     pauseMs,
   };
 }
 
 /** Line starts when the first `bodyCount` pieces have `gap` bytes between them and the rest follow directly. */
-function tailStarts(sizes: number[], bodyCount: number, gap: number): number[] {
-  const total = sizes.reduce((n, b) => n + b, 0) + Math.max(0, bodyCount - 1) * gap;
+function tailStarts(sizes: number[], bodyCount: number, gap: number | number[]): number[] {
+  const pFor = (i: number) => (typeof gap === "number" ? gap : (gap[i] ?? 0));
+  const totalGap = typeof gap === "number"
+    ? Math.max(0, bodyCount - 1) * gap
+    : (gap as number[]).slice(0, bodyCount - 1).reduce((n, b) => n + b, 0);
+  const total = sizes.reduce((n, b) => n + b, 0) + totalGap;
   let at = 0;
   return sizes.map((b, i) => {
     const start = Math.round((at / total) * 10000) / 10000;
-    at += b + (i < bodyCount - 1 ? gap : 0);
+    at += b + (i < bodyCount - 1 ? pFor(i) : 0);
     return start;
   });
 }
