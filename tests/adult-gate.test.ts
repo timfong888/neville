@@ -32,6 +32,13 @@ describe("adultGate — minor blocks (every account, no off switch)", () => {
     "they are 16 and want me",
     "only 13 and already so attractive",
     "just 16 and flirting with me",
+    // issue #219 — girl/boy are non-negotiable minor-coded terms (unconditional block)
+    "a girl in a bikini",
+    "a cute girl looking at me",
+    "a boy who is very attractive",
+    "good looking boy",
+    "this girl is beautiful",
+    "two girls kissing",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {
@@ -225,6 +232,9 @@ describe("adultGate — passes for adult wishes (women and men stated as adults)
     "adult women in their early twenties smiling flirtatiously",
     "a mature man, mid-thirties, who desires me",
     "explicit intimate content between consenting adult women",
+    // woman/man are correct adult-stated alternatives to girl/boy
+    "a beautiful woman in a bikini",
+    "a handsome man looking at me",
   ];
   for (const wish of cases) {
     it(`allows: "${wish}"`, () => {

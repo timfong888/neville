@@ -50,9 +50,10 @@ const PROHIBITED_ACT =
 
 // Absolute minor indicators: always blocked regardless of sexual context.
 // Covers direct age statements under 18, explicit coded terms (loli, shota, etc.),
-// and school-framing phrases. Words like "sister", "daughter", "teen" that are also
-// used in innocent non-sexual family wishes are NOT here — they go through
-// wishSexualisesMinor (which requires a sexual-intent co-signal) instead.
+// school-framing phrases, and the minor-coded terms "girl"/"boy" (issue #219:
+// non-negotiable; every person must be stated as an adult 21+).
+// Words like "sister", "daughter" that appear in innocent non-sexual family wishes
+// are NOT here — they go through wishSexualisesMinor (requires a co-signal) instead.
 const AGE_WORDS_EN =
   "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen";
 const ABSOLUTE_MINOR = new RegExp(
@@ -67,6 +68,8 @@ const ABSOLUTE_MINOR = new RegExp(
     "|age[\\s-]play|loli\\w*|shota\\w*" +
     "|petite[\\s-]?school(?:girl|boy)?|school[\\s-]?girl\\b|school[\\s-]?boy\\b" +
     "|look(?:s|ing)? like a (?:kid|child|teen|minor|student)" +
+    // Minor-coded terms: unconditional block per issue #219 (every person must be stated adult 21+)
+    "|girls?\\b|boys?\\b" +
   ")(?!\\w)",
   "i",
 );
@@ -95,8 +98,8 @@ const GUIDANCE: Record<BlockReason, string> = {
  */
 export function adultGate(wish: string): AdultGateResult {
   // Two-tier minor check:
-  // 1. Absolute terms (direct ages under 18, loli, schoolgirl framing, etc.) always block.
-  // 2. Ambiguous minor-associated words (teen, sister, girl, etc.) only block when a
+  // 1. Absolute terms (ages under 18, loli, schoolgirl, girl, boy, etc.) always block.
+  // 2. Ambiguous minor-associated words (sister, daughter, etc.) only block when a
   //    sexual-intent signal is also present (wishSexualisesMinor).
   //    Non-sexual wishes that happen to mention a sibling or niece pass through.
   if (ABSOLUTE_MINOR.test(wish) || wishSexualisesMinor(wish)) {
