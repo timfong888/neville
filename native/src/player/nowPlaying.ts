@@ -4,11 +4,11 @@
 import type { AudioSeam, PlaySession } from "../seams/types";
 
 export type NowPlayingState = {
-  status: "idle" | "preparing" | "playing";
+  status: "idle" | "preparing" | "playing" | "stopped-mid";
   /** Which job: a manifestation's id, or "all" for the Library loop. "" when nothing is. */
   id: string;
   title: string;
-  /** Where the now-playing bar goes when tapped. */
+  /** Where the control card navigates when tapped. */
   route: string;
   index: number;
   /** Place in the job (a play of the recording, or a recording in the Library). */
@@ -26,8 +26,10 @@ export type Prepared = { clips: string[]; loop: boolean; /** Put the music playe
 /** What to play. `title` is the lock screen's; `at` gives the title and place shown for a position. */
 export type PlayJob = { id: string; title: string; route: string; empty: string; prepare(): Promise<Prepared | null> };
 
-/** The now-playing bar shows while a session is playing. */
-export const showsBar = (s: NowPlayingState) => s.status === "playing";
+/** True whenever a session is active (playing or stopped mid-way). */
+export const isActive = (s: NowPlayingState) => s.status === "playing" || s.status === "stopped-mid";
+/** @deprecated use isActive */
+export const showsBar = isActive;
 
 export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "opened">) {
   let state = IDLE;
@@ -67,8 +69,8 @@ export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "op
             if (mine !== run) return;
             if (st.failed) return end({ id: job.id, note: "This recording could not be played." });
             if (st.ended) return end(st.replaced ? {} : { id: job.id, note: "Finished." });
-            // External pause (lock screen, headphones) is not surfaced; the bar shows Stop only.
-            if (!st.playing) return;
+            // External pause (lock screen, headphones) → stopped-mid; Resume button appears.
+            if (!st.playing) { set({ status: "stopped-mid" }); return; }
             set({ status: "playing", index: st.index, progress: st.progress ?? state.progress, ...p.at(st.index) });
           },
         });
@@ -79,7 +81,11 @@ export function makeNowPlaying(audio: Pick<AudioSeam, "configure" | "open" | "op
         if (mine === run) end({ id: job.id, note: "Could not start playing." });
       }
     },
-    /** Stops it, or only the job with this id. */
+    /** Pauses playback, retaining position → stopped-mid state. UI "Stop" action. */
+    pause: () => void (state.status === "playing" && (session?.pause(), set({ status: "stopped-mid" }))),
+    /** Resumes from stopped-mid. UI "Resume" action. */
+    resume: () => void (state.status === "stopped-mid" && (session?.play(), set({ status: "playing" }))),
+    /** Ends the session and returns to idle. UI "Start over" and hard-stop. */
     stop: (onlyId?: string) => void ((!onlyId || state.id === onlyId) && end()),
   };
 }

@@ -26,8 +26,12 @@ describe("playingItemId", () => {
     expect(playingItemId(st({ status: "playing", id: "d" }), items)).toBe("d");
   });
 
-  it("returns the id while playing a single item (no paused state)", () => {
+  it("returns the id while playing a single item", () => {
     expect(playingItemId(st({ status: "playing", id: "c" }), items)).toBe("c");
+  });
+
+  it("keeps the id while stopped-mid on a single item", () => {
+    expect(playingItemId(st({ status: "stopped-mid", id: "c" }), items)).toBe("c");
   });
 
   it("returns the id while preparing a single item", () => {
@@ -56,14 +60,17 @@ describe("playingItemId", () => {
       expect(playingItemId(st({ status: "preparing", id: "all", index: 0 }), items)).toBe("a");
     });
 
-    it("highlights the recording clip while playing", () => {
+    it("highlights the recording clip while playing or stopped-mid", () => {
       expect(playingItemId(st({ status: "playing", id: "all", index: 0 }), items)).toBe("a");
       expect(playingItemId(st({ status: "playing", id: "all", index: 2 }), items)).toBe("c");
+      expect(playingItemId(st({ status: "stopped-mid", id: "all", index: 0 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "stopped-mid", id: "all", index: 2 }), items)).toBe("c");
     });
 
-    it("highlights the recording for a gap clip while playing", () => {
+    it("highlights the recording for a gap clip while playing or stopped-mid", () => {
       expect(playingItemId(st({ status: "playing", id: "all", index: 1 }), items)).toBe("a");
-      expect(playingItemId(st({ status: "playing", id: "all", index: 3 }), items)).toBe("c");
+      expect(playingItemId(st({ status: "stopped-mid", id: "all", index: 1 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "stopped-mid", id: "all", index: 3 }), items)).toBe("c");
     });
   });
 });

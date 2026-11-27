@@ -127,7 +127,7 @@ export default function Player() {
 
   const item = loaded;
   const mine = np.id === item.id;
-  const phase = mine && np.status === "playing" ? "playing" : "idle";
+  const phase = mine && (np.status === "playing" || np.status === "stopped-mid") ? np.status : "idle";
 
   if (mine && phase !== "idle") {
     const l = lineForProgress(np.index, np.progress, starts);
@@ -150,14 +150,25 @@ export default function Player() {
       {item.voiceName ? <Text style={s.dim}>Voice: {item.voiceName}</Text> : null}
       {voice.current ? (
         <View style={s.row}>
-          <Pressable
-            style={[s.btn, s.main]}
-            accessibilityRole="button"
-            accessibilityLabel={active ? "Stop" : "Play"}
-            onPress={() => (active ? nowPlaying.stop() : play())}
-          >
-            <Text style={s.mainText}>{active ? "Stop" : "Play"}</Text>
-          </Pressable>
+          {phase === "stopped-mid" ? (
+            <>
+              <Pressable style={[s.btn, s.main]} accessibilityRole="button" accessibilityLabel="Resume" onPress={() => nowPlaying.resume()}>
+                <Text style={s.mainText}>Resume</Text>
+              </Pressable>
+              <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Start over" onPress={() => nowPlaying.stop()}>
+                <Text style={s.btnText}>Start over</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              style={[s.btn, s.main]}
+              accessibilityRole="button"
+              accessibilityLabel={phase === "playing" ? "Stop" : "Play"}
+              onPress={() => (phase === "playing" ? nowPlaying.pause() : play())}
+            >
+              <Text style={s.mainText}>{phase === "playing" ? "Stop" : "Play"}</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <Text style={s.p}>

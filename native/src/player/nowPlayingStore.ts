@@ -19,6 +19,8 @@ library.subscribe(() => {
   if (id === "all" && status === "playing") {
     const currentId = playAll.idAtClipIndex(index) ?? null;
     void nowPlaying.play(playAll.jobFrom(currentId));
+  } else if (id === "all" && status === "stopped-mid") {
+    nowPlaying.stop();
   } else if (id !== "all") {
     nowPlaying.stop();
   }

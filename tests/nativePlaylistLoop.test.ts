@@ -68,9 +68,9 @@ describe("the app-level controller", () => {
     await f.np.play(job("m1"));
     f.opens[0].o.onState(st(2));
     expect(f.np.state()).toMatchObject({ status: "playing", index: 2, title: "Tm12", position: 3 });
-    // External pause (lock screen) is not surfaced as "paused"; status stays "playing" until stop.
+    // External pause (lock screen) → stopped-mid; session stays open.
     f.opens[0].o.onState(st(2, { playing: false }));
-    expect(f.np.state().status).toBe("playing");
+    expect(f.np.state().status).toBe("stopped-mid");
     expect(f.opens[0].stop).not.toHaveBeenCalled();
   });
 
@@ -89,7 +89,8 @@ describe("the app-level controller", () => {
     await starting;
     expect(showsBar(f.np.state())).toBe(true);
     f.opens[0].o.onState(st(0, { playing: false }));
-    // External pause keeps bar visible (session still live).
+    // External pause → stopped-mid; isActive still true.
+    expect(f.np.state().status).toBe("stopped-mid");
     expect(showsBar(f.np.state())).toBe(true);
     f.np.stop();
     expect(showsBar(f.np.state())).toBe(false);
@@ -131,11 +132,17 @@ describe("the app-level controller", () => {
     expect(f.opens).toHaveLength(2);
   });
 
-  it("stop ends the session; there is no pause action", async () => {
+  it("pause → stopped-mid, resume → playing, stop → idle; no toggle", async () => {
     const f = fake();
     await f.np.play(job("m1"));
     expect(f.np.state().status).toBe("playing");
     expect("toggle" in f.np).toBe(false);
+    f.np.pause();
+    expect(f.opens[0].pause).toHaveBeenCalledTimes(1);
+    expect(f.np.state().status).toBe("stopped-mid");
+    f.np.resume();
+    expect(f.opens[0].play).toHaveBeenCalledTimes(2);
+    expect(f.np.state().status).toBe("playing");
     f.np.stop();
     expect(f.opens[0].stop).toHaveBeenCalledTimes(1);
     expect(f.np.state().status).toBe("idle");

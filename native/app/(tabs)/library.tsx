@@ -113,7 +113,29 @@ export default function LibraryScreen() {
     );
   }, [playingId]);
 
-  const busy = now.status !== "idle";
+  const playJob = {
+    ...playAll.job,
+    prepare: async () => {
+      const p = await playAll.job.prepare();
+      if (!p) return null;
+      if (sessionMode === "until-stopped") return { ...p, music: MUSIC_ENABLED };
+      if (sessionMode === "loops") {
+        const allClips = Array.from({ length: sessionLoops }, () => p.clips).flat();
+        const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+        return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+      }
+      if (p.durationSec && p.durationSec > 0) {
+        const gapSec = LOOP_GAP_MS / 1000;
+        const plan = planSession([p.durationSec], "time", sessionTarget, undefined, gapSec);
+        const loops = plan.loops ?? 1;
+        const allClips = Array.from({ length: loops }, () => p.clips).flat();
+        const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+        return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+      }
+      return { ...p, loop: true, music: MUSIC_ENABLED };
+    },
+  };
+  const st = now.status;
   return (
     <Screen
       title="My manifestations"
@@ -124,45 +146,35 @@ export default function LibraryScreen() {
       <Text style={type.muted}>Everything you have saved, newest first. Saved on this device only.</Text>
       {recordings.length > 0 ? (
         <View style={s.card}>
-          {busy ? (
-            <Text style={type.body} accessibilityLiveRegion="polite">
-              {now.status === "preparing" ? "Getting your playlist ready…" : `Playing all on loop: ${now.title} (${now.position} of ${now.total})`}
-            </Text>
-          ) : (
+          {st === "idle" ? (
             <>
               <Button
                 kind="primary"
                 label={copied ? (sessionMode === "until-stopped" ? "Play all on loop" : sessionMode === "loops" ? `Play all · ${sessionLoops} loops` : `Play all · ${sessionTarget} min`) : "Preparing playlist…"}
                 disabled={!copied}
-                onPress={() => void nowPlaying.play({
-                  ...playAll.job,
-                  prepare: async () => {
-                    const p = await playAll.job.prepare();
-                    if (!p) return null;
-                    if (sessionMode === "until-stopped") return { ...p, music: MUSIC_ENABLED };
-                    if (sessionMode === "loops") {
-                      const allClips = Array.from({ length: sessionLoops }, () => p.clips).flat();
-                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
-                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
-                    }
-                    // time mode: use playlist duration to compute how many full passes fit
-                    if (p.durationSec && p.durationSec > 0) {
-                      const gapSec = LOOP_GAP_MS / 1000;
-                      const plan = planSession([p.durationSec], "time", sessionTarget, undefined, gapSec);
-                      const loops = plan.loops ?? 1;
-                      // loopQueue puts a gap after every pass including the last; strip it so
-                      // the finite queue doesn't run past the chosen target.
-                      const allClips = Array.from({ length: loops }, () => p.clips).flat();
-                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
-                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
-                    }
-                    // duration unknown: fall back to until-stopped
-                    return { ...p, loop: true, music: MUSIC_ENABLED };
-                  },
-                })}
+                onPress={() => void nowPlaying.play(playJob)}
               />
               {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
-              <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={np.status !== "idle"} />
+              <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={false} />
+            </>
+          ) : st === "preparing" ? (
+            <Text style={type.body} accessibilityLiveRegion="polite">Getting your playlist ready…</Text>
+          ) : (
+            <>
+              <Text style={type.body} accessibilityLiveRegion="polite">
+                {now.title}{now.total > 0 ? ` · ${now.position} of ${now.total}` : ""}
+              </Text>
+              <View style={s.row}>
+                {st === "stopped-mid" ? (
+                  <>
+                    <Button kind="primary" label="Resume" onPress={() => nowPlaying.resume()} />
+                    <Button label="Start over" onPress={() => nowPlaying.stop()} />
+                  </>
+                ) : (
+                  <Button label="Stop" onPress={() => nowPlaying.pause()} />
+                )}
+              </View>
+              <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={false} />
             </>
           )}
         </View>
@@ -182,7 +194,7 @@ export default function LibraryScreen() {
         <View accessibilityRole="list" style={s.list}>
           {items.map((m) => {
             const isPlaying = playingId === m.id;
-            const isPaused = false;
+            const isPaused = isPlaying && np.status === "stopped-mid";
             return (
               <Link key={m.id} href={`/library/${m.id}`} asChild>
                 <Pressable

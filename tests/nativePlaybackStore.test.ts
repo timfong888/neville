@@ -1,6 +1,6 @@
-// #262: one store, one control. These tests fail on main before this change.
+// #262: one store, one control card. These tests fail on current main before this change.
 import { describe, expect, it, vi } from "vitest";
-import { makeNowPlaying, showsBar } from "@/native/src/player/nowPlaying";
+import { isActive, makeNowPlaying, showsBar } from "@/native/src/player/nowPlaying";
 import { makeMusicStore } from "@/native/src/player/music";
 import { makeMusicPlayer } from "@/native/src/player/musicPlayer";
 import type { KV } from "@/native/src/seams/kv.types";
@@ -33,68 +33,84 @@ const memory = (seed: Record<string, string> = {}): KV => {
   return { get: async (k) => data[k] ?? null, set: async (k, v) => ((data[k] = v), true), remove: async (k) => void delete data[k] };
 };
 
-// Requirement 1: idle → no Stop visible in Library or bar.
-describe("idle state: no Stop visible", () => {
-  it("showsBar is false when idle", () => {
+// Requirement 1: idle → no Stop visible in Library card.
+describe("idle state: no Stop or Resume visible", () => {
+  it("isActive is false when idle", () => {
     const { audio } = fakeAudio();
     const np = makeNowPlaying(audio);
+    expect(isActive(np.state())).toBe(false);
     expect(showsBar(np.state())).toBe(false);
   });
 
-  it("showsBar is false while preparing, true once playing, false after stop", async () => {
+  it("isActive false while preparing, true once playing, false after stop", async () => {
     const { audio, opens } = fakeAudio();
     const np = makeNowPlaying(audio);
     const starting = np.play(job());
-    expect(showsBar(np.state())).toBe(false);
+    expect(isActive(np.state())).toBe(false);
     await starting;
-    expect(showsBar(np.state())).toBe(true);
+    expect(isActive(np.state())).toBe(true);
     opens[0].o.onState({ playing: true, index: 0, ended: false });
-    expect(showsBar(np.state())).toBe(true);
+    expect(isActive(np.state())).toBe(true);
     np.stop();
-    expect(showsBar(np.state())).toBe(false);
+    expect(isActive(np.state())).toBe(false);
   });
 
-  it("both store and bar reflect play then stop from one store instance", async () => {
+  it("both store and card driven by one store instance: idle → playing → stopped-mid → playing → idle", async () => {
     const { audio, opens } = fakeAudio();
     const np = makeNowPlaying(audio);
 
-    // Before play: idle everywhere.
     expect(np.state().status).toBe("idle");
-    expect(showsBar(np.state())).toBe(false);
+    expect(isActive(np.state())).toBe(false);
 
-    // After play: bar visible.
     await np.play(job());
     opens[0].o.onState({ playing: true, index: 0, ended: false });
     expect(np.state().status).toBe("playing");
-    expect(showsBar(np.state())).toBe(true);
+    expect(isActive(np.state())).toBe(true);
 
-    // After stop: idle everywhere.
+    // UI "Stop" → stopped-mid (position retained, session open).
+    np.pause();
+    expect(np.state().status).toBe("stopped-mid");
+    expect(isActive(np.state())).toBe(true);
+    expect(opens[0].stop).not.toHaveBeenCalled();
+
+    // Resume → playing.
+    np.resume();
+    expect(np.state().status).toBe("playing");
+
+    // "Start over" → idle.
     np.stop();
     expect(np.state().status).toBe("idle");
-    expect(showsBar(np.state())).toBe(false);
+    expect(isActive(np.state())).toBe(false);
   });
 });
 
-// Requirement 2: Pause does not exist in the action set.
-describe("Pause is not in the action set", () => {
-  it("makeNowPlaying does not expose toggle", () => {
+// Requirement 2: state machine — no toggle, explicit pause/resume.
+describe("state machine: pause, resume, stop", () => {
+  it("makeNowPlaying exposes pause and resume, not toggle", () => {
     const { audio } = fakeAudio();
     const np = makeNowPlaying(audio);
+    expect("pause" in np).toBe(true);
+    expect("resume" in np).toBe(true);
     expect("toggle" in np).toBe(false);
-    expect("pause" in np).toBe(false);
   });
 
-  it("status type never reaches 'paused' — session reports playing: false without stopping", async () => {
+  it("lock screen / headphone pause → stopped-mid, session not ended", async () => {
     const { audio, opens } = fakeAudio();
     const np = makeNowPlaying(audio);
     await np.play(job());
     opens[0].o.onState({ playing: true, index: 0, ended: false });
-    expect(np.state().status).toBe("playing");
-
-    // Lock screen / headphones pause the audio — status stays "playing".
+    // System pauses audio.
     opens[0].o.onState({ playing: false, index: 0, ended: false });
-    expect(np.state().status).toBe("playing");
+    expect(np.state().status).toBe("stopped-mid");
     expect(opens[0].stop).not.toHaveBeenCalled();
+  });
+
+  it("when session finishes naturally → idle", async () => {
+    const { audio, opens } = fakeAudio();
+    const np = makeNowPlaying(audio);
+    await np.play(job());
+    opens[0].o.onState({ playing: false, index: 0, ended: true });
+    expect(np.state().status).toBe("idle");
   });
 });
 
@@ -112,12 +128,10 @@ describe("music store: single update on change", () => {
 
   it("changing track while playing replaces the previous player (no duplicate audio)", async () => {
     const handles: Array<{ play: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }> = [];
-    let resolveNext: ((h: ReturnType<typeof vi.fn>) => void) | null = null;
     const engine = {
       load: async (_src: unknown, _vol: number) => {
         const h = { play: vi.fn(), pause: vi.fn(), setVolume: vi.fn(), remove: vi.fn() };
         handles.push(h);
-        if (resolveNext) resolveNext(h);
         return h;
       },
     };
@@ -125,16 +139,13 @@ describe("music store: single update on change", () => {
     const f = player.attach();
     f.voice(true);
 
-    // Set track A.
     player.setTarget({ id: "rise" as never, src: "rise.mp3", volume: 0.3 });
     await new Promise((r) => setTimeout(r, 0));
     expect(handles).toHaveLength(1);
     expect(handles[0].play).toHaveBeenCalled();
 
-    // Set track B while A is playing.
     player.setTarget({ id: "night-tide" as never, src: "night-tide.mp3", volume: 0.3 });
     await new Promise((r) => setTimeout(r, 0));
-    // A was removed, B loaded and playing — exactly one active player.
     expect(handles[0].remove).toHaveBeenCalledTimes(1);
     expect(handles).toHaveLength(2);
     expect(handles[1].play).toHaveBeenCalled();
