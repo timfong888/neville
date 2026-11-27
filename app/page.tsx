@@ -22,6 +22,7 @@ import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicS
 import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
+import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
 
 type Stage = "form" | "making" | "player";
 
@@ -672,6 +673,7 @@ export default function DemoPage() {
       <>
         <h1>Making it yours…</h1>
         <p className="lede">This takes up to half a minute. Keep this page open.</p>
+        <WaitingPhrasesWeb />
       </>
     );
   }
