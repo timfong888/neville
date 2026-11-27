@@ -127,7 +127,7 @@ export default function Player() {
 
   const item = loaded;
   const mine = np.id === item.id;
-  const phase = mine && (np.status === "playing" || np.status === "paused") ? np.status : "idle";
+  const phase = mine && np.status === "playing" ? "playing" : "idle";
 
   if (mine && phase !== "idle") {
     const l = lineForProgress(np.index, np.progress, starts);
@@ -153,16 +153,11 @@ export default function Player() {
           <Pressable
             style={[s.btn, s.main]}
             accessibilityRole="button"
-            accessibilityLabel={phase === "playing" ? "Pause" : "Play"}
-            onPress={() => (phase === "idle" ? play() : nowPlaying.toggle())}
+            accessibilityLabel={active ? "Stop" : "Play"}
+            onPress={() => (active ? nowPlaying.stop() : play())}
           >
-            <Text style={s.mainText}>{phase === "playing" ? "Pause" : phase === "paused" ? "Resume" : "Play"}</Text>
+            <Text style={s.mainText}>{active ? "Stop" : "Play"}</Text>
           </Pressable>
-          {active ? (
-            <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Stop" onPress={() => nowPlaying.stop()}>
-              <Text style={s.btnText}>Stop</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : (
         <Text style={s.p}>

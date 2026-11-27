@@ -68,8 +68,9 @@ describe("the app-level controller", () => {
     await f.np.play(job("m1"));
     f.opens[0].o.onState(st(2));
     expect(f.np.state()).toMatchObject({ status: "playing", index: 2, title: "Tm12", position: 3 });
+    // External pause (lock screen) is not surfaced as "paused"; status stays "playing" until stop.
     f.opens[0].o.onState(st(2, { playing: false }));
-    expect(f.np.state().status).toBe("paused");
+    expect(f.np.state().status).toBe("playing");
     expect(f.opens[0].stop).not.toHaveBeenCalled();
   });
 
@@ -80,7 +81,7 @@ describe("the app-level controller", () => {
     expect(f.opens[0].o.music).toEqual(music);
   });
 
-  it("shows the bar while playing or paused, and not before or after Stop (acceptance 2)", async () => {
+  it("shows the bar while playing, and not before or after Stop (acceptance 2)", async () => {
     const f = fake();
     expect(showsBar(f.np.state())).toBe(false);
     const starting = f.np.play(job("m1"));
@@ -88,6 +89,7 @@ describe("the app-level controller", () => {
     await starting;
     expect(showsBar(f.np.state())).toBe(true);
     f.opens[0].o.onState(st(0, { playing: false }));
+    // External pause keeps bar visible (session still live).
     expect(showsBar(f.np.state())).toBe(true);
     f.np.stop();
     expect(showsBar(f.np.state())).toBe(false);
@@ -129,14 +131,14 @@ describe("the app-level controller", () => {
     expect(f.opens).toHaveLength(2);
   });
 
-  it("pauses and resumes the session", async () => {
+  it("stop ends the session; there is no pause action", async () => {
     const f = fake();
     await f.np.play(job("m1"));
-    f.np.toggle();
-    expect(f.opens[0].pause).toHaveBeenCalledTimes(1);
-    f.opens[0].o.onState(st(0, { playing: false }));
-    f.np.toggle();
-    expect(f.opens[0].play).toHaveBeenCalledTimes(2);
+    expect(f.np.state().status).toBe("playing");
+    expect("toggle" in f.np).toBe(false);
+    f.np.stop();
+    expect(f.opens[0].stop).toHaveBeenCalledTimes(1);
+    expect(f.np.state().status).toBe("idle");
   });
 
   it("stop(id) only stops that job", async () => {

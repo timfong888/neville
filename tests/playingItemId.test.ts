@@ -26,8 +26,8 @@ describe("playingItemId", () => {
     expect(playingItemId(st({ status: "playing", id: "d" }), items)).toBe("d");
   });
 
-  it("keeps the id while paused on a single item", () => {
-    expect(playingItemId(st({ status: "paused", id: "c" }), items)).toBe("c");
+  it("returns the id while playing a single item (no paused state)", () => {
+    expect(playingItemId(st({ status: "playing", id: "c" }), items)).toBe("c");
   });
 
   it("returns the id while preparing a single item", () => {
@@ -56,14 +56,14 @@ describe("playingItemId", () => {
       expect(playingItemId(st({ status: "preparing", id: "all", index: 0 }), items)).toBe("a");
     });
 
-    it("keeps the highlight while paused on a recording clip", () => {
-      expect(playingItemId(st({ status: "paused", id: "all", index: 0 }), items)).toBe("a");
-      expect(playingItemId(st({ status: "paused", id: "all", index: 2 }), items)).toBe("c");
+    it("highlights the recording clip while playing", () => {
+      expect(playingItemId(st({ status: "playing", id: "all", index: 0 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "playing", id: "all", index: 2 }), items)).toBe("c");
     });
 
-    it("keeps the highlight while paused in a gap clip", () => {
-      expect(playingItemId(st({ status: "paused", id: "all", index: 1 }), items)).toBe("a");
-      expect(playingItemId(st({ status: "paused", id: "all", index: 3 }), items)).toBe("c");
+    it("highlights the recording for a gap clip while playing", () => {
+      expect(playingItemId(st({ status: "playing", id: "all", index: 1 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "playing", id: "all", index: 3 }), items)).toBe("c");
     });
   });
 });

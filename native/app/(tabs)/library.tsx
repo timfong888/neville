@@ -125,12 +125,9 @@ export default function LibraryScreen() {
       {recordings.length > 0 ? (
         <View style={s.card}>
           {busy ? (
-            <>
-              <Text style={type.body} accessibilityLiveRegion="polite">
-                {now.status === "preparing" ? "Getting your playlist ready…" : `${now.status === "paused" ? "Paused" : "Playing all on loop"}: ${now.title} (${now.position} of ${now.total})`}
-              </Text>
-              <Button label="Stop" onPress={() => nowPlaying.stop()} />
-            </>
+            <Text style={type.body} accessibilityLiveRegion="polite">
+              {now.status === "preparing" ? "Getting your playlist ready…" : `Playing all on loop: ${now.title} (${now.position} of ${now.total})`}
+            </Text>
           ) : (
             <>
               <Button
@@ -185,7 +182,7 @@ export default function LibraryScreen() {
         <View accessibilityRole="list" style={s.list}>
           {items.map((m) => {
             const isPlaying = playingId === m.id;
-            const isPaused = isPlaying && np.status === "paused";
+            const isPaused = false;
             return (
               <Link key={m.id} href={`/library/${m.id}`} asChild>
                 <Pressable
