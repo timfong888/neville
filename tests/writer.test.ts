@@ -466,6 +466,20 @@ describe("writeScript relaxed filter (issue 215)", () => {
     expect(s.source).toBe("template");
     expect(s.reason).toBe("withheld");
   });
+
+  it("withholds step-prefixed family role + intimacy for strict accounts (issue 219 block 4)", async () => {
+    // stepdaughter/stepsister bypass \b word boundary in MINOR; wishSexualisesFamilyRole now covers them for strict too.
+    for (const wish of [
+      "sex with my stepdaughter",
+      "intimate scene with my stepsister",
+      "kiss my stepmother",
+      "romantic night with my stepbrother",
+    ]) {
+      const s = await write(0, wish);
+      expect(s.source, `strict withheld: ${wish}`).toBe("template");
+      expect(s.reason, wish).toBe("withheld");
+    }
+  });
 });
 
 describe("writeScript withheld term field (issue 215)", () => {
@@ -488,6 +502,13 @@ describe("writeScript withheld term field (issue 215)", () => {
     expect(s.source).toBe("template");
     expect(s.reason).toBe("withheld");
     expect(s.term).toBe("sister");
+  });
+
+  it("strict withheld via step-family role: term is the matched family word", async () => {
+    const s = await write(0, "sex with my stepdaughter");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toMatch(/stepdaughter/i);
   });
 
   it("non-withheld script has no term field", async () => {

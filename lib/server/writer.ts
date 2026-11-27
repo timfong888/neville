@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -96,7 +96,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   };
   // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
   // Relaxed accounts use the narrower MINOR_CLEAR list; the check is never fully off.
-  const withheld = opts.relaxed ? wishSexualisesMinorRelaxed(opts.want) : wishSexualisesMinor(opts.want);
+  const withheld = opts.relaxed ? wishSexualisesMinorRelaxed(opts.want) : (wishSexualisesMinor(opts.want) || wishSexualisesFamilyRole(opts.want));
   if (withheld) {
     failure = { reason: "withheld" };
     const category = wishSexualisesMinorCategory(opts.want);

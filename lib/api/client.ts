@@ -25,6 +25,8 @@ export type AccountState = {
   user: { id: string; name: string; email: string; image: string | null } | null;
   missing?: string[];
   providers?: ("google" | "apple")[];
+  /** True when the signed-in user is on the relaxed minor-word filter allowlist. */
+  relaxed?: boolean;
 };
 
 /** What a `POST /api/manifest` or `/api/rerecord` returns: the recording and what it was made from. */

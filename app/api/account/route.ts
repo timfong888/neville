@@ -5,6 +5,7 @@ import { settleAppleRevocations, tryAddPendingRevocations } from "@/lib/server/a
 import { type Db, getPool } from "@/lib/server/db";
 import { type RevokeOutcome, collectAppleTokens, readAppleCode, revokeStoredToken } from "@/lib/server/appleRevoke";
 import { addTombstones, deleteAccount } from "@/lib/server/libraryDb";
+import { isFilterRelaxed } from "@/lib/credits";
 
 export const dynamic = "force-dynamic";
 // Deleting an account can wait on Apple: a few calls, each with a five-second deadline (lib/server/appleRevoke.ts).
@@ -16,7 +17,8 @@ export async function GET(req: Request) {
   const user = enabled ? await currentUser(req).catch(() => null) : null;
   // Variable names only, never values, and only off production.
   const missing = !enabled && process.env.VERCEL_ENV !== "production" ? missingVars() : undefined;
-  return NextResponse.json({ enabled, user, missing, providers: enabled ? signInProviders() : [] }, { headers: { "Cache-Control": "no-store" } });
+  const relaxed = isFilterRelaxed(user);
+  return NextResponse.json({ enabled, user, missing, providers: enabled ? signInProviders() : [], relaxed }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /**

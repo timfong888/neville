@@ -264,8 +264,7 @@ export function wishSexualisesMinorRelaxed(wish: string): boolean {
 export function withheldMinorTerm(wish: string, relaxed = false): string | null {
   const main = (relaxed ? MINOR_CLEAR : MINOR).exec(wish)?.[0];
   if (main) return main;
-  if (relaxed) return FAMILY_ROLES.exec(wish)?.[0] ?? null;
-  return null;
+  return FAMILY_ROLES.exec(wish)?.[0] ?? null;
 }
 
 /** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */

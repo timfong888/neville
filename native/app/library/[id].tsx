@@ -8,6 +8,7 @@ import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
 import { ImageGallery } from "../../src/image/Gallery";
+import { useAccountView } from "../../src/accountStore";
 
 /** Off unless the build sets EXPO_PUBLIC_IMAGES=1. */
 const IMAGES_ENABLED = process.env.EXPO_PUBLIC_IMAGES === "1";
@@ -16,6 +17,7 @@ const IMAGES_ENABLED = process.env.EXPO_PUBLIC_IMAGES === "1";
 export default function LibraryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { account } = useAccountView();
   // The tabs are always underneath this screen. Go back to them; `replace` would put a second tabs screen on the stack.
   const toLibrary = () => router.dismissTo("/library");
   const [m, setM] = useState<Manifestation | null | undefined>(undefined);
@@ -103,7 +105,7 @@ export default function LibraryDetail() {
             {m.hasAudio ? `Recorded in the voice of ${m.voiceName}.` : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`} Saved {new Date(m.createdAt).toLocaleDateString()}.
           </Text>
           <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
-          {IMAGES_ENABLED ? <ImageGallery wish={m.want} /> : null}
+          {IMAGES_ENABLED ? <ImageGallery wish={m.want} relaxed={account?.relaxed ?? false} /> : null}
           <View style={s.script}>
             {m.lines.map((l, i) => (
               <Text key={i} style={type.body}>{l}</Text>
