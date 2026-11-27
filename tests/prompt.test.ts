@@ -432,8 +432,11 @@ describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
   it("withholds family role + intimacy (issue 219 block 4, every account)", () => {
     for (const [wish, label] of [
       ["I want to kiss my sister", "sister+kiss"],
-      ["sleep with my stepmother", "stepmother+sleep"],
+      ["sleep with my stepmother", "stepmother+sleep with"],
       ["I want romantic time with my son", "son+romantic"],
+      ["make love to my daughter", "daughter+make love"],
+      ["making love with my uncle", "uncle+making love"],
+      ["hook up with my stepsister", "stepsister+hook up with"],
     ] as [string, string][]) {
       expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
     }
@@ -445,6 +448,9 @@ describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
       ["my junior girlfriend", "junior (not family role)"],
       ["a hug from my sister", "sister — no intimacy word"],
       ["my mother is proud of me", "mother — no intimacy word"],
+      ["make love to my craft", "make love — no family role"],
+      ["hook up with investors in my network", "hook up — no family role"],
+      ["making love to the music I play", "making love — no family role"],
     ] as [string, string][]) {
       expect(wishSexualisesMinorRelaxed(wish), label).toBe(false);
     }

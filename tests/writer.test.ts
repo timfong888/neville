@@ -447,15 +447,24 @@ describe("writeScript relaxed filter (issue 215)", () => {
     }
   });
 
-  it("withholds family role + intimacy for relaxed (son, stepmother)", async () => {
+  it("withholds family role + intimacy for relaxed (son, stepmother, make love)", async () => {
     for (const wish of [
       "romantic time with my son, journey across Japan",
       "sleep with my stepmother",
+      "make love to my daughter",
+      "hook up with my stepsister",
     ]) {
       const s = await write(0, wish, true);
       expect(s.source, `relaxed withheld: ${wish}`).toBe("template");
       expect(s.reason, wish).toBe("withheld");
     }
+  });
+
+  it("withholds make love to daughter for strict too (make love now in ASKS_FOR_INTIMACY)", async () => {
+    // "daughter" is in MINOR; "make love" is now in ASKS_FOR_INTIMACY
+    const s = await write(0, "make love to my daughter");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
   });
 });
 

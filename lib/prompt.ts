@@ -160,7 +160,7 @@ const EXPLICIT = /\b(?:nude|naked|nudity|topless|breasts|nipples?|genitals?|peni
 const SENSUAL = /\b(?:sensual\w*|seduc\w+|cleavage|thighs?|caress\w*|make[s]? love|turned on)\b/i;
 // Romantic or intimate intent only. Mentioning a wife, a girl or "attract more clients" is not a request for sensual writing.
 const ASKS_FOR_INTIMACY =
-  /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive|sleep(?:ing)? with|slept with)\b/i;
+  /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive|sleep(?:ing)? with|slept with|mak(?:e|es|ing) love|hook(?:ing)? up with|hooked up with)\b/i;
 
 // Fail closed (#170): the sensual exception needs romantic words and a positive
 // adult cue (a spouse, a partner, an adult age), and no sign of a minor. A word
