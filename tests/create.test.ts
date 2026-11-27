@@ -158,6 +158,29 @@ describe("the Create flow (#120)", () => {
   });
 });
 
+describe("exact mode (#229)", () => {
+  it("sends scriptMode: exact in the request body when mode is exact", () => {
+    const req = wishRequest({ want: "I am calm.", name: "", scriptMode: "exact" });
+    expect(req).toMatchObject({ scriptMode: "exact" });
+  });
+  it("omits scriptMode when mode is enhance (default)", () => {
+    const req = wishRequest({ want: "I am calm.", name: "" });
+    expect(req).not.toHaveProperty("scriptMode");
+    const req2 = wishRequest({ want: "I am calm.", name: "", scriptMode: "enhance" });
+    expect(req2).not.toHaveProperty("scriptMode");
+  });
+  it("shows 'Your exact words.' as the note when source is exact", async () => {
+    const m = await makeManifestation(api(rec({ source: "exact", scriptMode: "exact" })), wish, true);
+    expect(m.note).toBe("Your exact words.");
+    expect(m.scriptMode).toBe("exact");
+  });
+  it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
+    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.scriptMode).toBeUndefined();
+  });
+});
+
 describe("X-Title header round trip (#205)", () => {
   it("decodes a base64 UTF-8 title correctly", () => {
     const title = "Magnetic confidence";

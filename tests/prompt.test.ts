@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { exactLines, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -414,5 +414,37 @@ describe("splitTitle (#205)", () => {
   it("asks the model for a 2 to 5 word title", () => {
     expect(SYSTEM).toMatch(/Title:/);
     expect(SYSTEM).toMatch(/2 to 5 words/);
+  });
+});
+
+describe("exactLines (#229)", () => {
+  const WISH = "I am attracting beautiful women. I am effortlessly confident. The women desire me.";
+  it("keeps every sentence in order and unchanged", () => {
+    const { lines } = exactLines(WISH);
+    expect(lines).toEqual([
+      "I am attracting beautiful women.",
+      "I am effortlessly confident.",
+      "The women desire me.",
+    ]);
+  });
+  it("adds nothing to the sentences", () => {
+    const { lines } = exactLines(WISH);
+    const all = lines.join(" ");
+    expect(all).not.toContain("It is done");
+    expect(all.split(/\s+/).length).toBeLessThanOrEqual(WISH.split(/\s+/).length + 2);
+  });
+  it("picks the longest sentence as the refrain", () => {
+    const { refrain } = exactLines(WISH);
+    expect(refrain).toBe("I am attracting beautiful women.");
+  });
+  it("handles a single sentence with no terminal punctuation", () => {
+    const { lines, refrain } = exactLines("I am calm");
+    expect(lines).toEqual(["I am calm"]);
+    expect(refrain).toBe("I am calm.");
+  });
+  it("preserves terminal punctuation on sentences that have it", () => {
+    const { lines } = exactLines("I am calm. I am strong.");
+    expect(lines[0]).toBe("I am calm.");
+    expect(lines[1]).toBe("I am strong.");
   });
 });

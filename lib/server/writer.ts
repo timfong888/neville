@@ -50,7 +50,7 @@ function safeRefrain(refrain: string | null, wish: string): string {
 
 export type Script = {
   lines: string[];
-  source: "model" | "template";
+  source: "model" | "template" | "exact";
   model?: string;
   /** What OpenRouter charged for the reply, when it said. */
   costUsd?: number | null;

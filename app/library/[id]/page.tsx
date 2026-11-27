@@ -3,13 +3,15 @@
 import LibraryError from "@/app/components/LibraryError";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import PlaylistPlayer from "@/app/components/PlaylistPlayer";
 import SharePanel from "@/app/components/SharePanel";
 import { addItem, cleanTitle, linesFromText, makePlaylist, MAX_TITLE, sameLines } from "@/lib/library/model";
 import { useLibrary } from "@/lib/library/useLibrary";
 import { type Manifestation } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
+import { INITIAL_STATE, savedNotRecorded, transition } from "@/lib/rerecordState";
+import { ApiError } from "@/lib/api/client";
 
 export default function ManifestationPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +24,7 @@ export default function ManifestationPage() {
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
   const [target, setTarget] = useState("");
-  const [recording, setRecording] = useState(false);
+  const [rrState, dispatch] = useReducer(transition, m?.hasAudio === false ? savedNotRecorded() : INITIAL_STATE);
 
   useEffect(() => {
     if (m && !editing) {
@@ -51,8 +53,13 @@ export default function ManifestationPage() {
 
   /** Records `base`'s script in `voice` and stores it with the manifestation. */
   const rerecord = async (base: Manifestation) => {
-    setRecording(true);
-    setMsg("Recording… this takes up to half a minute.");
+    dispatch({ type: "record_tap" });
+    // If guard rejected, do nothing (double-tap).
+    // We read the latest state from rrState after dispatch, but React batches,
+    // so we check the transition directly.
+    const after = transition(rrState, { type: "record_tap" });
+    if (after.status !== "recording") return;
+
     try {
       const res = await fetch("/api/rerecord", {
         method: "POST",
@@ -60,10 +67,23 @@ export default function ManifestationPage() {
         body: JSON.stringify({ lines: base.lines, voiceId: voice.id }),
       });
       if (!res.ok) {
-        const j = (await res.json().catch(() => null)) as { error?: string } | null;
-        setMsg(`${j?.error ?? "The recording could not be made just now."} Your device's voice reads it meanwhile.`);
+        const j = (await res.json().catch(() => null)) as {
+          error?: string;
+          code?: string;
+          creditReturned?: boolean;
+        } | null;
+        if (res.status === 402) {
+          dispatch({ type: "server_402" });
+          return;
+        }
+        const reason = j?.error ?? "The recording could not be made just now.";
+        const creditReturned = j?.creditReturned === true;
+        dispatch({ type: "server_failed", reason, creditReturned });
         return;
       }
+      const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
+      dispatch({ type: "server_charged", balance: creditsBalanceHeader });
+
       const used = resolveVoice(res.headers.get("X-Voice-Id"));
       const blob = await res.blob();
       try {
@@ -72,15 +92,14 @@ export default function ManifestationPage() {
           blob,
         );
       } catch {
-        // The recording was made; only keeping it failed (storage full or blocked).
-        setMsg("The new recording was made but this browser could not save it. Free some space and try again.");
+        dispatch({ type: "server_failed", reason: "The new recording was made but this browser could not save it. Free some space and try again.", creditReturned: false });
         return;
       }
-      setMsg(`Re-recorded in the voice of ${used.name}.`);
-    } catch {
-      setMsg("The recording could not be made just now. Your device's voice reads it meanwhile.");
-    } finally {
-      setRecording(false);
+      dispatch({ type: "server_done" });
+    } catch (e) {
+      const reason = e instanceof ApiError ? e.message : "The recording could not be made just now.";
+      const creditReturned = e instanceof ApiError && e.data?.creditReturned === true;
+      dispatch({ type: "server_failed", reason, creditReturned });
     }
   };
 
@@ -92,10 +111,14 @@ export default function ManifestationPage() {
     }
     const next = { ...m, title: t, lines: newLines, updatedAt: Date.now() };
     try {
-      // A recording of the old words would no longer match the script, so it goes.
       await store.updateManifestation(next, scriptChanged ? null : undefined);
       setEditing(false);
-      setMsg(scriptChanged && m.hasAudio ? "Saved. Your device's voice now reads the new words." : "Saved.");
+      if (scriptChanged) {
+        dispatch({ type: "edit_saved" });
+        setMsg("");
+      } else {
+        setMsg("Saved.");
+      }
     } catch {
       setMsg("Could not save on this device.");
       return;
@@ -114,11 +137,11 @@ export default function ManifestationPage() {
       const p = lib.playlists.find((x) => x.id === target);
       if (!p) return;
       if (p.itemIds.includes(m.id)) {
-        setMsg(`Already in “${p.name}”.`);
+        setMsg(`Already in "${p.name}".`);
         return;
       }
       await store.savePlaylist(addItem(p, m.id));
-      setMsg(`Added to “${p.name}”.`);
+      setMsg(`Added to "${p.name}".`);
     } catch {
       setMsg("Could not save on this device.");
     }
@@ -126,12 +149,28 @@ export default function ManifestationPage() {
 
   const remove = async () => {
     const note = store.kind === "account" ? " Its public link, if any, stops working." : "";
-    if (!window.confirm(`Delete “${m.title}”? It is also removed from your playlists.${note}`)) return;
+    if (!window.confirm(`Delete "${m.title}"? It is also removed from your playlists.${note}`)) return;
     await store.deleteManifestation(m.id);
     router.push("/library");
   };
 
   const inPlaylists = lib.playlists.filter((p) => p.itemIds.includes(m.id));
+  const isRecording = rrState.status === "recording";
+  const rrMsg = (() => {
+    switch (rrState.status) {
+      case "saved_not_recorded": return "Script saved. Record it to hear your edit.";
+      case "recording": return "Recording in progress. This takes up to half a minute.";
+      case "charged": return rrState.balance === "unlimited"
+        ? "Unlimited recordings."
+        : rrState.balance !== null ? `1 credit used. ${rrState.balance} left.` : "1 credit used.";
+      case "done": return "Recording done.";
+      case "failed": return rrState.failReason
+        ? (rrState.creditReturned ? `${rrState.failReason} Your credit was returned.` : rrState.failReason)
+        : "";
+      case "no_credits": return "You have no recordings left. Get more to keep going.";
+      default: return "";
+    }
+  })();
 
   return (
     <>
@@ -139,12 +178,18 @@ export default function ManifestationPage() {
         <Link href="/library">← My manifestations</Link>
       </p>
       <h1>{m.title}</h1>
-      <p className="lede">“{m.want || "A general affirmation"}”</p>
+      <p className="lede">"{m.want || "A general affirmation"}"</p>
 
       {!editing && (
         <div className="card">
           <PlaylistPlayer items={[m]} />
         </div>
+      )}
+
+      {rrMsg && (
+        <p className="small muted" role="status">
+          {rrMsg}
+        </p>
       )}
 
       {editing ? (
@@ -164,10 +209,10 @@ export default function ManifestationPage() {
           <div className="controls">
             {scriptChanged ? (
               <>
-                <button className="btn primary" onClick={() => saveEdits(true)} disabled={recording}>
+                <button className="btn primary" onClick={() => saveEdits(true)} disabled={isRecording}>
                   Save and re-record
                 </button>
-                <button className="btn sm" onClick={() => saveEdits()} disabled={recording}>
+                <button className="btn sm" onClick={() => saveEdits()} disabled={isRecording}>
                   Save without recording
                 </button>
               </>
@@ -183,12 +228,12 @@ export default function ManifestationPage() {
         </div>
       ) : (
         <div className="controls">
-          <button className="btn sm" onClick={() => setEditing(true)} disabled={recording}>
+          <button className="btn sm" onClick={() => setEditing(true)} disabled={isRecording}>
             Edit title and script
           </button>
-          {!m.hasAudio && (
-            <button className="btn sm primary" onClick={() => rerecord(m)} disabled={recording}>
-              {recording ? "Recording…" : `Re-record in ${voice.name}`}
+          {(rrState.status === "saved_not_recorded" || rrState.status === "failed" || rrState.status === "no_credits") && (
+            <button className="btn sm primary" onClick={() => void rerecord(m)} disabled={isRecording}>
+              {`Re-record in ${voice.name}`}
             </button>
           )}
           <select aria-label="Add to playlist" value={target} onChange={(e) => setTarget(e.target.value)}>
