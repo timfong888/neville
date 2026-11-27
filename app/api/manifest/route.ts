@@ -184,6 +184,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         ...(script.source === "model" ? { lines: script.lines } : {}),
         // Why the template was used, when it was: the client can show a reason-specific note.
         ...(script.source === "template" && script.reason ? { reason: script.reason } : {}),
+        ...(script.source === "template" && script.reason === "withheld" && script.term ? { term: script.term } : {}),
       },
       { status: 502 },
     );
@@ -207,6 +208,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
       ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),
+      ...(script.source === "template" && script.reason === "withheld" && script.term ? { "X-Script-Term": script.term } : {}),
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
       // Repetition was asked for, but this voice's audio cannot be cut apart to

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, noteForReason, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
@@ -48,10 +48,29 @@ describe("the Create flow (#120)", () => {
     expect(m.title).toBe("A moment of calm");
   });
 
-  it("shows a withheld-specific note when reason is withheld", async () => {
+  it("shows a withheld-specific note when reason is withheld (no term)", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), wish, true);
     expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
     expect(m.title).toBe("A moment of calm");
+  });
+
+  it("shows the term in the note when the server sends one (#214)", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld", term: "sister" })), wish, true);
+    expect(m.note).toBe('That wish was held back because of the word "sister". Try different wording.');
+    expect(m.title).toBe("A moment of calm");
+  });
+
+  it("noteForReason: withheld with term uses the word note; without term uses the generic withheld note (#214)", () => {
+    expect(noteForReason("withheld", "little")).toBe('That wish was held back because of the word "little". Try different wording.');
+    expect(noteForReason("withheld", "young")).toBe('That wish was held back because of the word "young". Try different wording.');
+    expect(noteForReason("withheld")).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(noteForReason("withheld", undefined)).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+  });
+
+  it("noteForReason: non-withheld reasons unchanged (#214)", () => {
+    for (const reason of ["timeout", "no_model", "http_status", "unusable_reply", "exception", undefined]) {
+      expect(noteForReason(reason)).toBe("A personal script could not be written just now, so this is a general one.");
+    }
   });
 
   it("shows the generic template note for all other failure reasons", async () => {

@@ -57,6 +57,8 @@ export type Script = {
   refrain: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** The minor-word that caused the wish to be withheld; set when reason is "withheld". */
+  term?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -85,13 +87,14 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     if (failure.reason !== "withheld") {
       alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started });
     }
-    return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
+    const term = typeof extra.term === "string" ? extra.term : undefined;
+    return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN, ...(term !== undefined ? { term } : {}) };
   };
   // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
   if (wishSexualisesMinor(opts.want)) {
     failure = { reason: "withheld" };
-    const category = wishSexualisesMinorCategory(opts.want);
-    return template(category ? { category } : {});
+    const matched = wishSexualisesMinorCategory(opts.want);
+    return template(matched ? { category: matched.category, ...(matched.term ? { term: matched.term } : {}) } : {});
   }
   try {
     const models = await scriptModels();

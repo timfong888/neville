@@ -37,6 +37,8 @@ export type Recording = {
   source: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** The minor-word that caused the wish to be withheld; set when reason is "withheld". */
+  term?: string;
   /** Line start times as fractions of the clip, when the server sent sound ones. */
   starts?: number[];
 };
@@ -131,6 +133,7 @@ export function createApi(opts: ApiOptions) {
   async function recording(res: Response, lines?: string[]): Promise<Recording> {
     const script = lines ?? readScript(res.headers.get("X-Script"));
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
+    const term = res.headers.get("X-Script-Term") ?? undefined;
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -138,6 +141,7 @@ export function createApi(opts: ApiOptions) {
       voiceId: res.headers.get("X-Voice-Id") ?? "",
       source: res.headers.get("X-Script-Source") ?? "",
       ...(reason !== undefined ? { reason } : {}),
+      ...(term !== undefined ? { term } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
     };
   }

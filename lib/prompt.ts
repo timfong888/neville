@@ -195,11 +195,13 @@ export function wishSexualisesMinor(wish: string): boolean {
   return MINOR.test(wish) && (ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish));
 }
 
-/** Which safety list matched in wishSexualisesMinor — the category name, never the wish text. */
-export function wishSexualisesMinorCategory(wish: string): "minor_word+intimacy_word" | "minor_word+explicit_word" | null {
+/** Which safety list matched in wishSexualisesMinor — the category name and the matched term, never other wish text. */
+export function wishSexualisesMinorCategory(wish: string): { category: "minor_word+intimacy_word" | "minor_word+explicit_word"; term: string | null } | null {
   if (!MINOR.test(wish)) return null;
-  if (ASKS_FOR_INTIMACY.test(wish)) return "minor_word+intimacy_word";
-  if (EXPLICIT.test(wish)) return "minor_word+explicit_word";
+  const rawTerm = MINOR.exec(wish)?.[0]?.toLowerCase() ?? null;
+  const term = rawTerm && /^[a-z][a-z' -]{1,24}$/.test(rawTerm) ? rawTerm : null;
+  if (ASKS_FOR_INTIMACY.test(wish)) return { category: "minor_word+intimacy_word", term };
+  if (EXPLICIT.test(wish)) return { category: "minor_word+explicit_word", term };
   return null;
 }
 
