@@ -14,6 +14,9 @@ import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
 import { PaywallSheet } from "../../src/paywall/PaywallSheet";
 import { editSaved, initSession, startRecording, useRerecordState } from "../../src/rerecordSession";
+import { VoiceSection } from "../../src/ui/VoiceSection";
+import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
+import { resolveVoice } from "@/lib/voices";
 import { useState, useRef } from "react";
 
 /** Off unless the build sets EXPO_PUBLIC_IMAGES=1. */
@@ -31,6 +34,9 @@ export default function LibraryDetail() {
   const [msg, setMsg] = useState("");
   const [paywallOpen, setPaywallOpen] = useState(false);
   const deleting = useRef(false);
+  const [rrVoiceId, setRrVoiceId] = useState<string | null>(null);
+  const [rrSpeed, setRrSpeed] = useState<SpeedStep>(DEFAULT_SPEED_STEP);
+  const [rrCadence, setRrCadence] = useState<CadenceStep>(DEFAULT_CADENCE_STEP);
 
   const credits = useCredits();
   const rrState = useRerecordState(id);
@@ -59,7 +65,12 @@ export default function LibraryDetail() {
 
   // Initialise (or reconnect to) the rerecord session once we know hasAudio.
   useEffect(() => {
-    if (m != null) initSession(id, m.hasAudio);
+    if (m != null) {
+      initSession(id, m.hasAudio);
+      setRrVoiceId(m.voiceId || null);
+      setRrSpeed(resolveSpeed(m.speedStep).id);
+      setRrCadence(resolveCadence(m.cadenceStep).id);
+    }
   }, [id, m]);
 
   // Open the paywall sheet when the session signals no_credits.
@@ -238,8 +249,19 @@ export default function LibraryDetail() {
               ))}
             </View>
 
-            {/* Record button: shown when no audio is saved */}
+            <VoiceSection
+              voiceId={rrVoiceId ?? m.voiceId}
+              voiceName={resolveVoice(rrVoiceId ?? m.voiceId).name}
+              speedStep={rrSpeed}
+              cadenceStep={rrCadence}
+              onPickVoice={(id) => setRrVoiceId(id)}
+              onPickSpeed={(id) => setRrSpeed(id)}
+              onPickCadence={(id) => setRrCadence(id)}
+            />
+
+            {/* Record button: shown when no audio is saved, or when re-recording an existing item */}
             {(rrState.status === "saved_not_recorded" ||
+              rrState.status === "idle" ||
               rrState.status === "failed" ||
               rrState.status === "no_credits") &&
             !isRecording ? (
@@ -247,7 +269,7 @@ export default function LibraryDetail() {
                 kind="primary"
                 label={recordLabel}
                 disabled={isRecording}
-                onPress={() => void startRecording(m)}
+                onPress={() => void startRecording({ ...m, voiceId: rrVoiceId ?? m.voiceId, speedStep: rrSpeed, cadenceStep: rrCadence })}
               />
             ) : null}
 
