@@ -25,8 +25,8 @@ export function splitPhrase(sentence: string, maxWords = PAUSE_DEFAULTS.maxWords
   let remaining = trimmed;
 
   while (remaining.split(/\s+/).length > maxWords) {
-    // Build a window of maxWords+1 words to find the best cut inside maxWords.
-    const window = remaining.split(/\s+/).slice(0, maxWords + 1).join(" ");
+    // Build a window of exactly maxWords words so any cut found is within the limit.
+    const window = remaining.split(/\s+/).slice(0, maxWords).join(" ");
 
     // Prefer the last comma; fall back to the last conjunction.
     const commas = [...window.matchAll(/,/g)];
@@ -64,8 +64,9 @@ export type Segment = {
 
 /**
  * Expand script lines into segments. Long sentences are split into phrases;
- * each phrase is its own segment. `tailCount` trailing lines are refrain entries
- * and get `refrainMs` before them (the last segment of the body gets "refrain").
+ * each phrase is its own segment. The last body segment immediately before the
+ * refrain gets `"refrain"` so that `segmentsToPausedLines` emits `refrainMs`
+ * into that gap (the final segment's `pauseAfter` is always dropped).
  */
 export function segmentLines(
   lines: string[],
@@ -74,14 +75,22 @@ export function segmentLines(
 ): Segment[] {
   const out: Segment[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const isRefrain = tailCount > 0 && i >= lines.length - tailCount;
+    const isRefrainLine = tailCount > 0 && i >= lines.length - tailCount;
+    const isLastBeforeRefrain = tailCount > 0 && i === lines.length - tailCount - 1;
     const phrases = splitPhrase(lines[i], maxWords);
     for (let j = 0; j < phrases.length; j++) {
       const isLastPhrase = j === phrases.length - 1;
-      out.push({
-        text: phrases[j],
-        pauseAfter: isRefrain ? "refrain" : isLastPhrase ? "sentence" : "phrase",
-      });
+      let pauseAfter: PauseType;
+      if (!isLastPhrase) {
+        pauseAfter = "phrase";
+      } else if (isLastBeforeRefrain) {
+        pauseAfter = "refrain";
+      } else if (isRefrainLine) {
+        pauseAfter = "sentence";
+      } else {
+        pauseAfter = "sentence";
+      }
+      out.push({ text: phrases[j], pauseAfter });
     }
   }
   return out;

@@ -57,6 +57,15 @@ describe("splitPhrase", () => {
     const words = Array.from({ length: MAX }, (_, i) => `word${i}`).join(" ") + ".";
     expect(splitPhrase(words, MAX)).toHaveLength(1);
   });
+
+  it("boundary: comma after word 13 does not produce a 13-word phrase", () => {
+    // 13 words then a comma — the splitter must not emit an overlong phrase.
+    const s =
+      "one two three four five six seven eight nine ten eleven twelve thirteen, fourteen fifteen.";
+    for (const p of splitPhrase(s, MAX)) {
+      expect(p.split(/\s+/).length, p).toBeLessThanOrEqual(MAX);
+    }
+  });
 });
 
 describe("segmentLines", () => {
@@ -79,12 +88,14 @@ describe("segmentLines", () => {
     expect(segs[segs.length - 1].pauseAfter).toBe("sentence");
   });
 
-  it("marks trailing refrain lines", () => {
+  it("assigns 'refrain' pause to the last body segment, not the refrain segment", () => {
     const lines = ["You are calm.", "It is done.", "Thank you."];
     const segs = segmentLines(lines, 1);
     expect(segs[0].pauseAfter).toBe("sentence");
-    expect(segs[1].pauseAfter).toBe("sentence");
-    expect(segs[2].pauseAfter).toBe("refrain");
+    // Last body segment carries "refrain" so segmentsToPausedLines emits refrainMs before the refrain.
+    expect(segs[1].pauseAfter).toBe("refrain");
+    // Refrain segment's pauseAfter is ignored (it's the last element, dropped by segmentsToPausedLines).
+    expect(segs[2].pauseAfter).toBe("sentence");
   });
 
   it("short sentences pass through end-to-end without change", () => {
@@ -121,5 +132,15 @@ describe("segmentsToPausedLines", () => {
     const segs = segmentLines([long]);
     const { pauseMsPerGap } = segmentsToPausedLines(segs);
     expect(pauseMsPerGap.every((ms) => ms === PAUSE_DEFAULTS.phraseMs)).toBe(true);
+  });
+
+  it("emits refrainMs in the gap before the refrain line", () => {
+    const lines = ["You are calm.", "It is done.", "Thank you."];
+    const { pauseMsPerGap } = segmentsToPausedLines(segmentLines(lines, 1));
+    // Gap 0: body → body = sentenceMs; Gap 1: body → refrain = refrainMs.
+    expect(pauseMsPerGap).toEqual([
+      PAUSE_DEFAULTS.sentenceMs,
+      PAUSE_DEFAULTS.refrainMs,
+    ]);
   });
 });
