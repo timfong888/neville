@@ -8,7 +8,7 @@ const TABS = [
   { name: "create", title: "Create", glyph: "＋" },
   { name: "library", title: "Library", glyph: "≡" },
   { name: "settings", title: "Settings", glyph: "◐" },
-  { name: "account", title: "Account", glyph: "○" },
+  { name: "account", title: "Profile", glyph: "○" },
 ] as const;
 
 export default function TabsLayout() {

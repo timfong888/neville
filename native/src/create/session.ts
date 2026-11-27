@@ -5,6 +5,7 @@ import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, type ScriptMode, SCRIPT_MO
 import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
+import { getFirstName } from "../profileNameStore";
 import { newId } from "@/lib/library/model";
 import { lineStarts } from "@/lib/audio";
 import { displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
@@ -20,7 +21,6 @@ import { settings } from "../seams/settings";
 
 export type CreateState = {
   want: string;
-  name: string;
   /** Free creations used on this device. */
   used: number;
   variant: number;
@@ -43,7 +43,7 @@ export type CreateState = {
   scriptMode: ScriptMode;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
+let state: CreateState = { want: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
 const subs = new Set<() => void>();
 const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
@@ -78,8 +78,9 @@ export async function load(): Promise<void> {
   const [draft, used, chosen, modeRaw] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read(), read(SCRIPT_MODE_KEY)]);
   const scriptMode: ScriptMode = modeRaw === "exact" ? "exact" : "enhance";
   // Typing that began before storage answered wins over the stored draft.
+  const { want } = parseDraft(draft);
   set({
-    ...(typed ? {} : parseDraft(draft)),
+    ...(typed ? {} : { want }),
     used: parseCount(used),
     ...voiceNow(chosen.voiceId),
     speedStep: resolveSpeed(chosen.speedStep).id,
@@ -101,10 +102,10 @@ export async function pickCadence(id: CadenceStep): Promise<boolean> {
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
-export function edit(p: { want?: string; name?: string }): void {
+export function edit(p: { want?: string }): void {
   typed = true;
   set(p);
-  write(DRAFT_STORAGE_KEY, state.want || state.name ? JSON.stringify({ want: state.want, name: state.name }) : null);
+  write(DRAFT_STORAGE_KEY, state.want ? JSON.stringify({ want: state.want }) : null);
 }
 
 /** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice. */
@@ -138,7 +139,7 @@ async function generate(variant: number): Promise<void> {
   // update state synchronously but write to storage async, so storage may be stale.
   const { speedStep, cadenceStep } = state;
   set({ making: true, made: null, savedId: "", variant, paywallError: null });
-  const wish = { want: state.want, name: state.name };
+  const wish = { want: state.want, name: getFirstName() };
   const chosen = await settings.read();
   const { voiceId } = set(voiceNow(chosen.voiceId));
   const scriptMode = state.scriptMode;

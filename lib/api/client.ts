@@ -200,6 +200,15 @@ export function createApi(opts: ApiOptions) {
       return (await (await call("/api/credits")).json()) as CreditsResponse;
     },
 
+    /** The signed-in user's profile first name and plan. */
+    async profileName(): Promise<{ firstName: string; plan: string }> {
+      return (await (await call("/api/profile")).json()) as { firstName: string; plan: string };
+    },
+    /** Updates the signed-in user's first name. */
+    async saveProfileName(firstName: string): Promise<void> {
+      await call("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName }) });
+    },
+
     async voices(): Promise<unknown> {
       return (await call("/api/voices")).json();
     },
