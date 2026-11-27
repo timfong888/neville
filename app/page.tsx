@@ -10,7 +10,8 @@ import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
-import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice } from "@/lib/deliveryStore";
+import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice, writeSpeedStepChoice, writeCadenceStepChoice } from "@/lib/deliveryStore";
+import { SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -86,6 +87,10 @@ export default function DemoPage() {
     setScriptModeState(mode);
     try { window.localStorage.setItem("nv_script_mode", mode); } catch { /* private mode */ }
   };
+  const [speedStep, setSpeedStepState] = useState<SpeedStep>(() => readSpeedStepChoice());
+  const setSpeedStep = (id: SpeedStep) => { setSpeedStepState(id); writeSpeedStepChoice(id); };
+  const [cadenceStep, setCadenceStepState] = useState<CadenceStep>(() => readCadenceStepChoice());
+  const setCadenceStep = (id: CadenceStep) => { setCadenceStepState(id); writeCadenceStepChoice(id); };
   // Programming mode (#77): minutes of repetition after the script, and the bell between them.
   const [repeatMin, setRepeatMin] = useState(0);
   const [bellOn, setBellOn] = useState(true);
@@ -690,6 +695,34 @@ export default function DemoPage() {
             >
               Exactly my words
             </button>
+          </div>
+          <div className="row">
+            <span className="small muted">Speed</span>
+            {SPEED_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${speedStep === o.id ? " active" : ""}`}
+                aria-pressed={speedStep === o.id}
+                onClick={() => setSpeedStep(o.id as SpeedStep)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <span className="small muted">Cadence</span>
+            {CADENCE_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${cadenceStep === o.id ? " active" : ""}`}
+                aria-pressed={cadenceStep === o.id}
+                onClick={() => setCadenceStep(o.id as CadenceStep)}
+              >
+                {o.label}
+              </button>
+            ))}
           </div>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation

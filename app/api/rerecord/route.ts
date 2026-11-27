@@ -157,7 +157,6 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     model: voice.model,
     voice: voice.voice,
     text,
-    instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
     compact: true,
     timeoutMs: voiceMs,
     // Voices flagged atomic record the edited lines in one request with a
@@ -171,7 +170,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
           ...(cadenceOpt ? { pauseMs: cadenceOpt.pauseMs } : {}),
           atomic: true,
         }
-      : {}),
+      : {
+          instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
+          speed: speedOpt ? speedOpt.speed : DEFAULT_DELIVERY.speed,
+        }),
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests

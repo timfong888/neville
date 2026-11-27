@@ -46,7 +46,7 @@ export function transition(state: RerecordState, event: RerecordEvent): Rerecord
 
     case "record_tap":
       if (state.status === "recording") return state; // double-tap guard
-      if (state.status !== "saved_not_recorded") return state;
+      if (state.status !== "saved_not_recorded" && state.status !== "idle") return state;
       return { status: "recording", balance: null, failReason: null, creditReturned: false };
 
     case "server_charged":

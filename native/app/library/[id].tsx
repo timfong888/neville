@@ -248,8 +248,9 @@ export default function LibraryDetail() {
               onPickCadence={(id) => setRrCadence(id)}
             />
 
-            {/* Record button: shown when no audio is saved */}
+            {/* Record button: shown when no audio is saved, or when re-recording an existing item */}
             {(rrState.status === "saved_not_recorded" ||
+              rrState.status === "idle" ||
               rrState.status === "failed" ||
               rrState.status === "no_credits") &&
             !isRecording ? (
