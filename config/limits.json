@@ -24,5 +24,9 @@
     "openai/gpt-4o-mini",
     "mistralai/mistral-small-3.2-24b-instruct",
     "meta-llama/llama-3.3-70b-instruct"
-  ]
+  ],
+  "nameEveryWords": 50,
+  "nameMin": 5,
+  "nameMax": 8,
+  "minGapWords": 10
 }

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type MusicEngine, type MusicHandle, type Track, makeMusicPlayer } from "@/native/src/player/musicPlayer";
 
 type Fn = ReturnType<typeof vi.fn>;
-type Fake = MusicHandle & { id: string; volume: number; play: Fn; pause: Fn; remove: Fn; setVolume: Fn; removed: boolean };
+type Fake = MusicHandle & { id: string; volume: number; play: Fn; pause: Fn; remove: Fn; setVolume: Fn; fade: Fn; removed: boolean };
 
 /** An engine whose loads finish when the test says so, and which can see every player it ever made. */
 function rig() {
@@ -21,6 +21,7 @@ function rig() {
           pause: vi.fn(),
           setVolume: vi.fn((v: number) => void (fake.volume = v)),
           remove: vi.fn(() => void (fake.removed = true)),
+          fade: vi.fn(),
         };
         made.push(fake);
         waiting.push({ fake, ok: () => resolve(fake), fail: () => ((fake.removed = true), reject(new Error("load"))) });
@@ -513,5 +514,61 @@ describe("double-attach / stale-follower safety (#208)", () => {
     p.attach();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("[music_double_attach]"), expect.anything());
     warn.mockRestore();
+  });
+});
+
+// #236: natural-end fade → immediate new session must not leave two music beds playing.
+// Root cause: fade() cleared `loaded` without tracking the fading handle, so release() on
+// the next attach() had nothing to cancel and the old bed kept fading while the new one loaded.
+describe("natural-end fade safety (#236)", () => {
+  it("starting a new session while the previous one is fading cancels the fade", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+    expect(r.alive()).toHaveLength(1);
+
+    // Natural session end: fade the music over 5 seconds
+    first.fade(5);
+    expect((r.made[0] as Fake).fade).toHaveBeenCalledWith(5);
+    // The player is detached immediately so observers see no active session
+    expect(p.view().active).toBe(false);
+    // But remove() must NOT have been called yet — fade is in progress
+    expect(r.made[0].remove).not.toHaveBeenCalled();
+
+    // A new session starts before the fade completes
+    const second = p.attach();
+    // release() inside attach() must cancel the in-progress fade
+    expect(r.made[0].remove).toHaveBeenCalledTimes(1);
+
+    second.voice(true);
+    await r.finish(1);
+    // Only the new session's player is alive — no overlap
+    expect(r.alive()).toHaveLength(1);
+    expect(r.alive()[0].id).toBe("a.mp3");
+  });
+
+  it("fade completing naturally before the next session does not break the next attach", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+
+    first.fade(5);
+    // Simulate the native platform completing the fade and calling remove internally
+    r.made[0].remove();
+
+    // Now a new session starts — should work normally with no double-remove errors
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+    expect(r.alive()).toHaveLength(1);
+    expect(r.alive()[0].id).toBe("a.mp3");
   });
 });

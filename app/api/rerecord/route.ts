@@ -5,11 +5,13 @@ import { synthesize } from "@/lib/server/tts";
 import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
-import { resolveVoice } from "@/lib/voices";
+import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
+import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
+import { alertFailure } from "@/lib/server/alertFailure";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -52,6 +54,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
+  // With the paywall off, runPaid does not set deadlineAt. Set one now so
+  // voiceBudget caps both voice attempts to remaining time, keeping the total
+  // under maxDuration even when the first attempt runs close to its budget.
+  if (state.deadlineAt === undefined) {
+    state.deadlineAt = Date.now() + (maxDuration * 1_000 - 5_000);
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -61,7 +70,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const parsed = parseRerecord(body, LIMITS.maxScriptChars);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
   const { lines } = parsed.value;
-  const voice = resolveVoice(parsed.value.voiceId);
+  let voice = resolveVoice(parsed.value.voiceId);
+  const speedOpt = parsed.value.speedStep !== null ? resolveSpeed(parsed.value.speedStep) : null;
+  const cadenceOpt = parsed.value.cadenceStep !== null ? resolveCadence(parsed.value.cadenceStep) : null;
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
@@ -130,7 +141,11 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await charged.refund();
     return vet.reason === "rejected"
       ? NextResponse.json(
-          { code: "not_recordable", error: "This script can't be recorded. Your device's voice can still read it." },
+          {
+            code: "not_recordable",
+            error: "The script has content this service won't record in a synthetic voice.",
+            hint: "Sexual, violent, or harmful wording triggers this. To raise the chance it records: replace explicit body or desire language with general terms (warm, alive, connected); keep each line as a personal affirmation about your own feelings or goals; shorten the script if any lines are long. You can also hear the script now in your device's own voice.",
+          },
           { status: 422 },
         )
       : NextResponse.json({ code: "vet_unavailable", error: "Recording is paused for a moment." }, { status: 503 });
@@ -142,32 +157,73 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
-  const text = lines.join(" ");
+  // A blank line between lines is the pause we can ask of non-PCM voices (e.g. HeyGen);
+  // PCM voices that stitch ignore `text` and use `lines` + `pauseMs` directly.
+  const text = lines.join("\n\n");
   // The deadline passed during the check: do not start the voice, the credit is already refunded.
   if (state.timedOut) return timeoutResponse(true);
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s); with it off the budget is the same 42 s as before.
   const voiceMs = voiceBudget(state, 42_000);
   if (voiceMs === null) return timeoutAnswer(state);
-  const speech = await synthesize({
-    key,
-    model: voice.model,
-    voice: voice.voice,
-    text,
-    instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
-    compact: true,
-    timeoutMs: voiceMs,
-    // Voices flagged atomic record the edited lines in one request with a
-    // pause after each, at the default pace's speed, style and pause, as
-    // /api/manifest does (#76). Other voices keep the one-request text above.
-    ...(voice.atomic === true ? { lines, ...DEFAULT_DELIVERY, atomic: true } : {}),
-  });
+
+  const tryVoice = (v: typeof voice, ms: number) =>
+    synthesize({
+      key,
+      model: v.model,
+      voice: v.voice,
+      text,
+      compact: true,
+      timeoutMs: ms,
+      ...(v.atomic === true
+        ? {
+            lines,
+            ...DEFAULT_DELIVERY,
+            ...(speedOpt ? { speed: speedOpt.speed } : {}),
+            ...(cadenceOpt ? { pauseMs: cadenceOpt.pauseMs } : {}),
+            atomic: true,
+          }
+        : {
+            lines,
+            instructions: TAKES_STYLE.test(v.model) ? STYLE : undefined,
+            speed: speedOpt ? speedOpt.speed : DEFAULT_DELIVERY.speed,
+            pauseMs: cadenceOpt ? cadenceOpt.pauseMs : DEFAULT_DELIVERY.pauseMs,
+          }),
+    });
+
+  let speech = await tryVoice(voice, voiceMs);
+
+  // If the voice fails, try the default voice once before giving up.
+  if (!speech.ok && voice.id !== DEFAULT_VOICE_ID && !state.timedOut) {
+    await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
+    console.warn("[voice_failed_retry_fallback]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status }));
+    const fallback = resolveVoice(DEFAULT_VOICE_ID);
+    const leftMs = voiceBudget(state, 20_000);
+    if (leftMs !== null) {
+      speech = await tryVoice(fallback, leftMs);
+      if (speech.ok) voice = fallback;
+    }
+  }
+
+
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
+    alertFailure("voice_failed", { route: "rerecord", model: voice.model, status: speech.status });
     await charged.refund();
-    return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now." }, { status: 502 });
+    const wasCharged = charged.left !== null && charged.left !== "unlimited";
+    const balanceAfterRefund =
+      charged.left === "unlimited" ? "unlimited"
+      : charged.left !== null ? String(Number(charged.left) + 1)
+      : undefined;
+    return NextResponse.json({
+      code: "voice_failed",
+      error: "The voice had a problem recording.",
+      hint: "Provider issues usually clear quickly — tap Try again. If it keeps failing, hear the script now in your device's own voice.",
+      ...(wasCharged ? { creditReturned: true } : {}),
+      ...(balanceAfterRefund !== undefined ? { creditsBalance: balanceAfterRefund } : {}),
+    }, { status: 502 });
   }
   await record({
     route: "rerecord",
@@ -184,7 +240,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
-      ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
+      ...(charged.left !== null ? { "X-Credits-Left": charged.left, "X-Credits-Balance": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),
     },
