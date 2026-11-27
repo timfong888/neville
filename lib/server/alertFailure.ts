@@ -26,13 +26,14 @@ const BUILD = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
 
 export function alertFailure(kind: AlertKind, fields: SafeFields): void {
   const provider = fields.provider ?? providerOf(fields.model);
+  const requestId = fields.requestId ?? crypto.randomUUID().slice(0, 8);
   const enriched = {
     ...fields,
+    requestId,
     ...(provider ? { provider } : {}),
     ...(BUILD ? { build: BUILD } : {}),
   };
   console.error("[ALERT]", kind, JSON.stringify(enriched));
   captureEvent(kind, enriched);
-  const requestId = fields.requestId ?? crypto.randomUUID().slice(0, 8);
   recordFailure(`${kind}:${fields.reason ?? "unknown"}`, requestId);
 }
