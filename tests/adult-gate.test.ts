@@ -26,6 +26,12 @@ describe("adultGate — minor blocks (every account, no off switch)", () => {
     "age-play scenario",
     "looking like a teen",
     "she looks like a kid",
+    // Gap 1 regression — bare age declarations (no "year old" qualifier)
+    "she is 15 and attracted to me",
+    "he was 14 and very cute",
+    "they are 16 and want me",
+    "only 13 and already so attractive",
+    "just 16 and flirting with me",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {
@@ -49,6 +55,10 @@ describe("adultGate — real-person blocks", () => {
     "she resembles Scarlett Johansson",
     "reference photo of a real model",
     "impersonating a celebrity",
+    // Gap 4 regression — selfie without "my" prefix
+    "based on this selfie of me",
+    "based on a selfie I took",
+    "using this selfie",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {
@@ -69,6 +79,9 @@ describe("adultGate — violence blocks", () => {
     "she kills me in a brutal way",
     "slaughtering enemies",
     "assault and abuse",
+    // Gap 2 regression — e-drop inflection
+    "strangling fantasy",
+    "she is strangling me",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {
@@ -91,6 +104,9 @@ describe("adultGate — non-consent blocks", () => {
     "rape fantasy",
     "molesting her",
     "drugging him to get sex",
+    // Gap 3 regression — e-drop inflection
+    "coercing her into it",
+    "coerces him",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {

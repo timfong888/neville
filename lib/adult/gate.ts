@@ -22,16 +22,16 @@ const PROPER_NAME = /\b[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}\b/;
 
 // Phrases indicating a request to base content on a photo or likeness of a real person.
 const LIKENESS =
-  /\b(?:looks? like|style of|resembl\w+|impersonat\w+|my (?:photo|picture|selfie|image|face)|uploaded? (?:photo|image)|reference (?:photo|image)|from (?:a |my )?photo|based on (?:a |my |this )?photo|using (?:a |my )?photo)\b/i;
+  /\b(?:looks? like|style of|resembl\w+|impersonat\w+|my (?:photo|picture|selfie|image|face)|uploaded? (?:photo|image)|reference (?:photo|image)|from (?:a |my |this )?(?:photo|selfie|picture|image)|based on (?:a |my |this )?(?:photo|selfie|picture|image)|using (?:a |my |this )?(?:photo|selfie|picture|image))\b/i;
 
 // Violence, gore, harm (mutilation is in PROHIBITED_ACT to give the more specific reason)
 const VIOLENCE =
-  /\b(?:kill(?:ing|s|ed)?|murder(?:ing|s|er|ed)?|gore|brutal(?:ly|ity)?|slaughter(?:ing|ed|s)?|torture(?:ing|d)?|bleed(?:ing)?|blood(?:y|ied)?|wound(?:ing|ed|s)?|abuse(?:d|r|s|ing)?|assault(?:ed|ing|s)?|stab(?:bing|bed|s)?|chok(?:ing|ed|es?)?|strangle(?:d|ing|s)?|threaten(?:ing|ed)?|harming)\b/i;
+  /\b(?:kill(?:ing|s|ed)?|murder(?:ing|s|er|ed)?|gore|brutal(?:ly|ity)?|slaughter(?:ing|ed|s)?|torture(?:ing|d)?|bleed(?:ing)?|blood(?:y|ied)?|wound(?:ing|ed|s)?|abuse(?:d|r|s|ing)?|assault(?:ed|ing|s)?|stab(?:bing|bed|s)?|chok(?:ing|ed|es?)?|strangl(?:e|ed|es|ing)|threaten(?:ing|ed)?|harming)\b/i;
 
 // Coercion and non-consent: covers both active ("forced her") and passive ("she was forced"),
 // adjective ("non-consensual"), and direct phrase forms.
 const NON_CONSENT =
-  /\b(?:forc(?:e|ed|ing|es)(?:\s+(?:her|him|them|me|you|into|to)|\s+by\s+(?:me|him|her|them|you))?|coerce(?:d|s|ing)?|coercion|blackmail(?:ed|ing|s)?|non[\s-]?(?:consent\b|consensual)|without (?:her|his|their) consent|against (?:her|his|their) will|rape(?:d|s|r|ing)?|molest(?:ed|ing|s)?|kidnap(?:ped|ping|s)?|drugg(?:ed|ing) (?:her|him|them))\b/i;
+  /\b(?:forc(?:e|ed|ing|es)(?:\s+(?:her|him|them|me|you|into|to)|\s+by\s+(?:me|him|her|them|you))?|coerc(?:e|ed|es|ing|ion)|blackmail(?:ed|ing|s)?|non[\s-]?(?:consent\b|consensual)|without (?:her|his|their) consent|against (?:her|his|their) will|rape(?:d|s|r|ing)?|molest(?:ed|ing|s)?|kidnap(?:ped|ping|s)?|drugg(?:ed|ing) (?:her|him|them))\b/i;
 
 // Family or relative role words. Blocking on these alone would refuse innocent wishes
 // ("reconnect with my mother"). They are only blocked when a sexual-context signal is
@@ -60,6 +60,8 @@ const ABSOLUTE_MINOR = new RegExp(
     "(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yrs?\\.?|y\\.? ?o\\.?|y/o|years? of age)" +
     "|(?:" + AGE_WORDS_EN + ")[- ]?(?:years?[- ]old|years?|yrs?\\.?|y\\.? ?o\\.?)" +
     "|aged? (?:[1-9]|1[0-7])|aged? (?:" + AGE_WORDS_EN + ")" +
+    // Bare age declaration: "she is 15", "he was 14", "only 13", "just 16"
+    "|(?:(?:she|he|they|i)\\s+(?:is|was|am|are)\\s+|(?:only|just)\\s+)(?:[1-9]|1[0-7])" +
     "|barely legal|just turned 18|underage|minor\\b|child(?:ren)?\\b|kids?\\b" +
     "|teen\\w*|preteen|youth(?:ful)?\\b" +
     "|age[\\s-]play|loli\\w*|shota\\w*" +
