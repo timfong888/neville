@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MAX_TITLE, type Manifestation, cleanTitle, linesFromText, sameLines } from "@/lib/library/model";
+import { displayTitle } from "@/lib/script";
 import { library } from "../../src/seams/library";
 import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
@@ -83,7 +84,7 @@ export default function LibraryDetail() {
   };
 
   return (
-    <Screen title={editing ? "Edit" : m.title}>
+    <Screen title={editing ? "Edit" : displayTitle(m.title)}>
       {editing ? (
         <>
           <Text style={type.muted}>Title</Text>

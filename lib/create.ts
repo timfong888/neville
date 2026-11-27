@@ -5,7 +5,7 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import { lineStarts } from "@/lib/audio";
 import { MAX_NAME, MAX_WANT, type Draft } from "@/lib/draftStore";
 import type { Manifestation } from "@/lib/library/model";
-import { VARIANT_COUNT, neutralScript, scriptLines, titleFor } from "@/lib/script";
+import { VARIANT_COUNT, displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
 import { resolveVoice } from "@/lib/voices";
 
 export { MAX_NAME, MAX_WANT };
@@ -112,7 +112,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const r = await api.manifest(wishRequest(w));
     const voice = resolveVoice(r.voiceId);
     return {
-      title: r.source === "template" ? FALLBACK_TITLE : titleFor(w.want),
+      title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
       lines: r.lines,
       note: r.source === "template" ? noteForReason(r.reason) : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },

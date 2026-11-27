@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { hashOf, neutralScript, scriptLines, titleFor, VARIANT_COUNT } from "@/lib/script";
+import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIANT_COUNT } from "@/lib/script";
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
@@ -38,6 +38,8 @@ type Made = {
   voiceId: string;
   voiceName: string;
   source: string;
+  /** 2–5 word title from the model, via X-Title. Absent for templates and fallbacks. */
+  title?: string;
   starts?: number[];
   /** Programming mode (#77): the script alone, without the loop, for Save. */
   saveUrl?: string;
@@ -380,10 +382,13 @@ export default function DemoPage() {
         const audio = await res.blob();
         const scriptSource = res.headers.get("X-Script-Source") ?? "";
         scriptReason = res.headers.get("X-Script-Reason") ?? undefined;
+        const titleB64 = res.headers.get("X-Title");
+        const serverTitle = titleB64 ? new TextDecoder().decode(Uint8Array.from(atob(titleB64), (c) => c.charCodeAt(0))) || undefined : undefined;
         const base = {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: scriptSource,
+          ...(serverTitle ? { title: serverTitle } : {}),
         };
         // Programming mode: the server recorded the refrain after the script.
         const refrainB64 = res.headers.get("X-Refrain");
@@ -481,7 +486,7 @@ export default function DemoPage() {
     u.searchParams.set("w", want.trim());
     if (name.trim()) u.searchParams.set("n", name.trim());
     try {
-      if (navigator.share) await navigator.share({ title: titleFor(want), url: u.toString() });
+      if (navigator.share) await navigator.share({ title: made?.title ?? displayTitle(toYouStatement(want)), url: u.toString() });
       else {
         await navigator.clipboard.writeText(u.toString());
         setToast("Link copied.");
@@ -503,7 +508,7 @@ export default function DemoPage() {
       await (await resolveStore()).saveManifestation(
         {
           id,
-          title: made?.source === "template" ? FALLBACK_TITLE : made ? titleFor(want) : FALLBACK_TITLE,
+          title: made?.source === "template" ? FALLBACK_TITLE : made ? (made.title ?? displayTitle(toYouStatement(want))) : FALLBACK_TITLE,
           want: want.trim(),
           firstName: name.trim(),
           lines: made?.saveLines ?? lines,
@@ -675,7 +680,7 @@ export default function DemoPage() {
 
   return (
     <>
-      <h1>{made?.source === "template" ? FALLBACK_TITLE : titleFor(want)}</h1>
+      <h1>{made?.source === "template" ? FALLBACK_TITLE : (made?.title ?? displayTitle(toYouStatement(want)))}</h1>
       <p className="lede">
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>

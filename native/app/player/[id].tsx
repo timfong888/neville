@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { lineForProgress } from "@/lib/create";
 import { lineStarts } from "@/lib/audio";
+import { displayTitle } from "@/lib/script";
 import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
 import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
 import { audio } from "../../src/seams/audio";
@@ -114,7 +115,7 @@ export default function Player() {
   };
   return (
     <Screen>
-      <Text style={s.h1} accessibilityRole="header">{item.title || "Untitled"}</Text>
+      <Text style={s.h1} accessibilityRole="header">{displayTitle(item.title) || "Untitled"}</Text>
       {item.voiceName ? <Text style={s.dim}>Voice: {item.voiceName}</Text> : null}
       {voice.current ? (
         <View style={s.row}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
+import { ApiError, type Recording, type WishRequest, readTitle } from "@/lib/api/client";
 import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
@@ -29,7 +29,7 @@ describe("the Create flow (#120)", () => {
   it("returns the recording with the server's line starts", async () => {
     const m = await makeManifestation(api(rec({ starts: [0, 0.3, 0.8] })), wish, true);
     expect(m.note).toBe("");
-    expect(m.title).toBe("You are calm");
+    expect(m.title).toBe("Calm");
     expect(m.lines).toEqual(LINES);
     expect(m.recording).toMatchObject({ mime: "audio/wav", voiceName: resolveVoice(DEFAULT_VOICE_ID).name, starts: [0, 0.3, 0.8] });
   });
@@ -109,6 +109,20 @@ describe("the Create flow (#120)", () => {
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
   });
+  it("uses the AI title from the server when present", async () => {
+    const m = await makeManifestation(api(rec({ title: "Magnetic confidence" })), wish, true);
+    expect(m.title).toBe("Magnetic confidence");
+  });
+  it("falls back to displayTitle of the wish when server sends no title", async () => {
+    const m = await makeManifestation(api(rec()), wish, true);
+    expect(m.title).toBe("Calm");
+    expect(m.title).not.toMatch(/…|\.\.\./);
+  });
+  it("uses FALLBACK_TITLE for template even when wish is set", async () => {
+    const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
+    expect(m.title).toBe("A moment of calm");
+  });
+
   it("uses the voice picked on Create, else the Settings voice (#150)", async () => {
     const other = ENABLED_VOICES.find((v) => v.generate && v.id !== DEFAULT_VOICE_ID)!;
     const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
@@ -141,5 +155,26 @@ describe("the Create flow (#120)", () => {
     expect(seeSettingsVoice(pickOnCreate(NO_PICK, b, a), a).voiceId).toBe(b);
     // A voice that may not be recorded is not picked.
     expect(pickOnCreate(start, "gone", a).voiceId).toBe(a);
+  });
+});
+
+describe("X-Title header round trip (#205)", () => {
+  it("decodes a base64 UTF-8 title correctly", () => {
+    const title = "Magnetic confidence";
+    const b64 = btoa(unescape(encodeURIComponent(title)));
+    expect(readTitle(b64)).toBe(title);
+  });
+  it("handles UTF-8 multi-byte characters", () => {
+    const title = "Calm état";
+    const bytes = new TextEncoder().encode(title);
+    const b64 = btoa(String.fromCharCode(...bytes));
+    expect(readTitle(b64)).toBe(title);
+  });
+  it("returns undefined for null or empty header", () => {
+    expect(readTitle(null)).toBeUndefined();
+    expect(readTitle("")).toBeUndefined();
+  });
+  it("returns undefined for a corrupt value, not an error", () => {
+    expect(readTitle("not-valid-base64!!!")).toBeUndefined();
   });
 });

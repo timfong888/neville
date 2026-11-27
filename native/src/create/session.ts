@@ -6,7 +6,7 @@ import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
 import { lineStarts } from "@/lib/audio";
-import { neutralScript, scriptLines, titleFor } from "@/lib/script";
+import { displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
 import { detectPaywallError, type PaywallError } from "@/lib/paywall";
 import { ApiError } from "@/lib/api/client";
 import { resolveVoice } from "@/lib/voices";
@@ -113,7 +113,7 @@ async function generate(variant: number): Promise<void> {
       asked = wish;
       const voice = resolveVoice(r.voiceId);
       const made: Made = {
-        title: r.source === "template" ? FALLBACK_TITLE : titleFor(wish.want),
+        title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(wish.want))),
         lines: r.lines,
         note: r.source === "template" ? noteForReason(r.reason) : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
