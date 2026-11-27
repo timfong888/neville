@@ -1,69 +1,78 @@
 import { describe, expect, it } from "vitest";
-import { emptyPhraseState, nextPhrase, PHRASES, waitLine } from "@/lib/waitingPhrases";
+import { emptyQuoteState, nextQuote, QUOTES, waitLine } from "@/lib/waitingQuotes";
 
-describe("nextPhrase", () => {
-  it("returns a phrase from the list", () => {
-    const { phrase } = nextPhrase(emptyPhraseState(), Math.random);
-    expect(PHRASES).toContain(phrase);
+describe("QUOTES data", () => {
+  it("every quote has a non-empty source", () => {
+    for (const q of QUOTES) {
+      expect(q.source.trim().length).toBeGreaterThan(0);
+    }
   });
 
-  it("cycles through all phrases before any repeats", () => {
-    let state = emptyPhraseState();
+  it("contains no thanks or gratitude language", () => {
+    const forbidden = /thank|grateful|gratitude/i;
+    for (const q of QUOTES) {
+      expect(q.text).not.toMatch(forbidden);
+    }
+  });
+
+  it("every quote has a positive durationMs", () => {
+    for (const q of QUOTES) {
+      expect(q.durationMs).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("nextQuote", () => {
+  it("returns a quote from the list", () => {
+    const { quote } = nextQuote(emptyQuoteState(), Math.random);
+    expect(QUOTES).toContainEqual(quote);
+  });
+
+  it("cycles through all quotes before any repeats", () => {
+    let state = emptyQuoteState();
     const seen: string[] = [];
-    for (let i = 0; i < PHRASES.length; i++) {
-      const { phrase, nextState } = nextPhrase(state, Math.random);
-      seen.push(phrase);
+    for (let i = 0; i < QUOTES.length; i++) {
+      const { quote, nextState } = nextQuote(state, Math.random);
+      seen.push(quote.text);
       state = nextState;
     }
-    expect(new Set(seen).size).toBe(PHRASES.length);
-    expect(seen).toHaveLength(PHRASES.length);
+    expect(new Set(seen).size).toBe(QUOTES.length);
+    expect(seen).toHaveLength(QUOTES.length);
   });
 
-  it("starts a new cycle after all phrases are exhausted", () => {
-    let state = emptyPhraseState();
-    for (let i = 0; i < PHRASES.length; i++) {
-      const { nextState } = nextPhrase(state, Math.random);
+  it("starts a new cycle after all quotes are exhausted", () => {
+    let state = emptyQuoteState();
+    for (let i = 0; i < QUOTES.length; i++) {
+      const { nextState } = nextQuote(state, Math.random);
       state = nextState;
     }
-    // remaining is empty after full cycle; next call should start fresh
-    const { phrase } = nextPhrase(state, Math.random);
-    expect(PHRASES).toContain(phrase);
+    const { quote } = nextQuote(state, Math.random);
+    expect(QUOTES).toContainEqual(quote);
   });
 
-  it("covers all phrases across multiple cycles with no within-cycle repeats", () => {
-    let state = emptyPhraseState();
+  it("covers all quotes across multiple cycles with no within-cycle repeats", () => {
+    let state = emptyQuoteState();
     for (let cycle = 0; cycle < 3; cycle++) {
       const cycleResult: string[] = [];
-      for (let i = 0; i < PHRASES.length; i++) {
-        const { phrase, nextState } = nextPhrase(state, Math.random);
-        cycleResult.push(phrase);
+      for (let i = 0; i < QUOTES.length; i++) {
+        const { quote, nextState } = nextQuote(state, Math.random);
+        cycleResult.push(quote.text);
         state = nextState;
       }
-      expect(new Set(cycleResult).size).toBe(PHRASES.length);
+      expect(new Set(cycleResult).size).toBe(QUOTES.length);
     }
   });
 
   it("is deterministic given a fixed rand", () => {
-    const { phrase: a } = nextPhrase(emptyPhraseState(), () => 0);
-    const { phrase: b } = nextPhrase(emptyPhraseState(), () => 0);
-    expect(a).toBe(b);
+    const { quote: a } = nextQuote(emptyQuoteState(), () => 0);
+    const { quote: b } = nextQuote(emptyQuoteState(), () => 0);
+    expect(a.text).toBe(b.text);
   });
 
-  it("picks different items with different rand values", () => {
-    const { phrase: first } = nextPhrase(emptyPhraseState(), () => 0);
-    const { phrase: last } = nextPhrase(emptyPhraseState(), () => 0.999);
-    // With 20 phrases the first and last slot are different
-    expect(first).not.toBe(last);
-  });
-});
-
-describe("PHRASES content", () => {
-  const forbidden = /thank|grateful|gratitude/i;
-
-  it("contains no thanks or gratitude language", () => {
-    for (const phrase of PHRASES) {
-      expect(phrase).not.toMatch(forbidden);
-    }
+  it("picks different quotes with different rand values", () => {
+    const { quote: first } = nextQuote(emptyQuoteState(), () => 0);
+    const { quote: last } = nextQuote(emptyQuoteState(), () => 0.999);
+    expect(first.text).not.toBe(last.text);
   });
 });
 
