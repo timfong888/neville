@@ -472,6 +472,20 @@ describe("firstToSecond (#255)", () => {
   it("leaves second-person sentences unchanged", () => {
     expect(firstToSecond("You are calm and strong.")).toBe("You are calm and strong.");
   });
+  it("converts I'll be to you are (not you will)", () => {
+    expect(firstToSecond("I'll be confident.")).toBe("You are confident.");
+  });
+  it("converts I'll to you (present, not future)", () => {
+    expect(firstToSecond("I'll succeed.")).toBe("You succeed.");
+    expect(firstToSecond("I'll be confident.")).not.toMatch(/you will/i);
+  });
+  it("converts I'd be to you are (not you would)", () => {
+    expect(firstToSecond("I'd be happy.")).toBe("You are happy.");
+  });
+  it("converts I'd to you (present, not conditional)", () => {
+    expect(firstToSecond("I'd love this.")).toBe("You love this.");
+    expect(firstToSecond("I'd be happy.")).not.toMatch(/you would/i);
+  });
 });
 
 describe("addNameToExactLines (#255)", () => {
@@ -493,6 +507,17 @@ describe("addNameToExactLines (#255)", () => {
   it("lowercases the sentence start after the name prefix", () => {
     const out = addNameToExactLines(["You are calm."], "Tim");
     expect(out[0]).toBe("Tim, you are calm.");
+  });
+  it("cycles a single sentence to reach nameMin=5 (#255 regression)", () => {
+    const out = addNameToExactLines(["You are calm."], "Tim");
+    expect(out.filter((l) => l.startsWith("Tim, ")).length).toBeGreaterThanOrEqual(5);
+    expect(out[0]).toBe("Tim, you are calm.");
+    expect(out[4]).toBe("Tim, you are calm.");
+  });
+  it("exactLines: single-sentence wish with name reaches 5 name uses", () => {
+    const { lines } = exactLines("I am calm.", "Tim");
+    const nameCount = lines.filter((l) => l.startsWith("Tim, ")).length;
+    expect(nameCount).toBeGreaterThanOrEqual(5);
   });
 });
 

@@ -46,7 +46,7 @@ export function vetModels(): Promise<string[]> {
 
 /** The refrain is spoken and looped too: it passes the same content guards as the script, or the default is used. */
 function safeRefrain(refrain: string | null, wish: string): string {
-  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) ? refrain : DEFAULT_REFRAIN;
+  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) && !thankYouIn([refrain]) ? refrain : DEFAULT_REFRAIN;
 }
 
 export type Script = {
@@ -189,8 +189,13 @@ export async function writeScript(opts: { key: string; want: string; name: strin
             variant++;
             continue;
           }
-          // Second failure: apply deterministic pronoun transform and proceed.
-          lines = pronounTransform(lines);
+          // Second failure: apply deterministic pronoun transform, strip remaining thank-you lines.
+          const transformed = pronounTransform(lines);
+          lines = transformed.filter(l => !thankYouIn([l]));
+          if (!lines.length) {
+            failure = { reason: "unusable_reply", status: res.status };
+            break;
+          }
         }
         const vr = scoreVividness(lines, opts.name, nameOpts);
         const result: Script = {

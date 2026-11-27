@@ -241,8 +241,10 @@ export function firstToSecond(sentence: string): string {
   let s = sentence;
   s = s.replace(/\bI'm\b/g, "you are");
   s = s.replace(/\bI've\b/g, "you have");
-  s = s.replace(/\bI'll\b/g, "you will");
-  s = s.replace(/\bI'd\b/g, "you would");
+  s = s.replace(/\bI'll be\b/g, "you are");
+  s = s.replace(/\bI'll\b/g, "you");
+  s = s.replace(/\bI'd be\b/g, "you are");
+  s = s.replace(/\bI'd\b/g, "you");
   s = s.replace(/\bI am\b/g, "you are");
   s = s.replace(/\bI\b/g, "you");
   s = s.replace(/\bmy\b/gi, "your");
@@ -252,19 +254,17 @@ export function firstToSecond(sentence: string): string {
 }
 
 /**
- * Prefixes lines with "Name, " to reach nameMin name uses. If the available
- * sentences are fewer than nameMin, all are prefixed (best effort).
- * Returns lines unchanged when name is empty.
+ * Prefixes lines with "Name, " to reach nameMin name uses. Cycles through
+ * lines when fewer are available than nameMin, so short wishes still reach
+ * the required name count. Returns lines unchanged when name is empty.
  */
 export function addNameToExactLines(lines: string[], name: string, nameMin = 5): string[] {
   if (!name || lines.length === 0) return lines;
-  const result = [...lines];
-  const toPrefix = Math.min(nameMin, result.length);
-  for (let i = 0; i < toPrefix; i++) {
-    const s = result[i];
-    result[i] = `${name}, ${s.charAt(0).toLowerCase() + s.slice(1)}`;
-  }
-  return result;
+  const count = Math.max(nameMin, lines.length);
+  return Array.from({ length: count }, (_, i) => {
+    const s = lines[i % lines.length];
+    return `${name}, ${s.charAt(0).toLowerCase() + s.slice(1)}`;
+  });
 }
 
 /** First-person speaker word found in `lines`, or null. Used as a post-check on model output. */
