@@ -167,7 +167,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "rerecord", model: voice.model, status: speech.status });
+    alertFailure("voice_failed", { route: "rerecord", model: voice.model, voice: voice.id, status: speech.status });
     await charged.refund();
     const wasCharged = charged.left !== null && charged.left !== "unlimited";
     const balanceAfterRefund =

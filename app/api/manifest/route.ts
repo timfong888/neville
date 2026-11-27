@@ -195,7 +195,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "manifest", model: voice.model, status: speech.status, elapsedMs: Date.now() - started });
+    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech.status, elapsedMs: Date.now() - started });
     await charged.refund();
     return NextResponse.json(
       {
