@@ -25,6 +25,7 @@ import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
 import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
+import { editEnablesRerecord, linesFromText, rrErrorMessage } from "@/lib/scriptEdit";
 
 type Stage = "form" | "making" | "player";
 
@@ -118,6 +119,12 @@ export default function DemoPage() {
   // The library id once this result is saved; cleared when a new one is made.
   const [savedId, setSavedId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Script editing + re-record state.
+  const [editScript, setEditScript] = useState("");
+  const [rrRunning, setRrRunning] = useState(false);
+  const [rrError, setRrError] = useState("");
+  const [prevMade, setPrevMade] = useState<Made | null>(null);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState("");
@@ -463,7 +470,73 @@ export default function DemoPage() {
             .filter(Boolean)
             .join(" "),
     );
+    setEditScript((next?.saveLines ?? next?.lines ?? written ?? []).join("\n"));
+    setRrError("");
+    setPrevMade(null);
     setStage("player");
+  };
+
+  const rerecordEdit = async () => {
+    if (rrRunning) return;
+    const lines = linesFromText(editScript);
+    if (!lines.length || !made) return;
+    stop();
+    setRrRunning(true);
+    setRrError("");
+    try {
+      const res = await fetch("/api/rerecord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines, voiceId: made.voiceId }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+        setRrError(rrErrorMessage(j?.code, j?.error));
+        return;
+      }
+      const blob = await res.blob();
+      const newUrl = URL.createObjectURL(blob);
+      const usedVoice = resolveVoice(res.headers.get("X-Voice-Id"));
+      const newMade: Made = {
+        ...made,
+        lines,
+        url: newUrl,
+        voiceId: usedVoice.id,
+        voiceName: usedVoice.name,
+        starts: undefined,
+        saveLines: undefined,
+        saveUrl: undefined,
+        speech: undefined,
+      };
+      setPrevMade(made);
+      URL.revokeObjectURL(made.url);
+      if (made.saveUrl) URL.revokeObjectURL(made.saveUrl);
+      setMade(newMade);
+      setEditScript(lines.join("\n"));
+      if (savedId) {
+        try {
+          const store = await resolveStore();
+          const audio = await (await fetch(newUrl)).blob();
+          await store.saveManifestation(
+            { id: savedId, title: newMade.source === "template" ? (note || newMade.voiceName) : (newMade.title ?? displayTitle(toYouStatement(want))), want: want.trim(), firstName: name.trim(), lines, voiceId: usedVoice.id, voiceName: usedVoice.name, hasAudio: true, createdAt: Date.now(), updatedAt: Date.now() },
+            audio,
+          );
+        } catch { /* library save failure is non-fatal: in-memory audio still plays */ }
+      }
+    } catch {
+      setRrError("The recording could not be made just now.");
+    } finally {
+      setRrRunning(false);
+    }
+  };
+
+  const undoRerecord = () => {
+    if (!prevMade) return;
+    URL.revokeObjectURL(made?.url ?? "");
+    setMade(prevMade);
+    setEditScript((prevMade.saveLines ?? prevMade.lines).join("\n"));
+    setPrevMade(null);
+    setRrError("");
   };
 
   const create = () => {
@@ -811,13 +884,42 @@ export default function DemoPage() {
         </p>
       )}
 
-      <ol className="script">
-        {lines.map((l, i) => (
-          <li key={i} className={i === idx ? "now" : i < idx ? "past" : ""}>
-            {l}
-          </li>
-        ))}
-      </ol>
+      {rrRunning ? (
+        <div>
+          <p className="small muted">Recording in progress. This takes up to half a minute.</p>
+          <WaitingPhrasesWeb />
+        </div>
+      ) : (
+        <>
+          <textarea
+            className="script-edit"
+            aria-label="Script"
+            value={editScript}
+            disabled={playing}
+            onChange={(e) => { setEditScript(e.target.value); setRrError(""); }}
+          />
+          {editEnablesRerecord(lines, editScript) && (
+            <div className="controls">
+              <button className="btn sm primary" onClick={() => void rerecordEdit()} disabled={playing}>
+                Re-record
+              </button>
+              {prevMade && (
+                <button className="btn sm ghost" onClick={undoRerecord}>
+                  Undo
+                </button>
+              )}
+            </div>
+          )}
+          {prevMade && !editEnablesRerecord(lines, editScript) && (
+            <div className="controls">
+              <button className="btn sm ghost" onClick={undoRerecord}>
+                Undo re-record
+              </button>
+            </div>
+          )}
+          {rrError && <p className="small muted" role="alert">{rrError}</p>}
+        </>
+      )}
 
       <p className="small muted">
         {made
