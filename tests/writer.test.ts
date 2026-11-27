@@ -6,7 +6,7 @@ import limits from "@/config/limits.json";
 
 vi.mock("server-only", () => ({}));
 
-type Reply = "badrefrain" | "ok" | "thin" | "banned" | "sensual" | "slogan" | "garbage" | `${number}`;
+type Reply = "badrefrain" | "ok" | "thin" | "banned" | "sensual" | "slogan" | "garbage" | "adult_ok" | "adult_sex" | "adult_naked" | `${number}`;
 let server: Server;
 // The models come from config/limits.json: the tests follow it, never a name.
 const [M1, M2] = limits.scriptModels;
@@ -17,23 +17,39 @@ const asked: Array<{ model: string; user: Record<string, unknown> }> = [];
 
 const GOOD = [
   "Take a slow breath in, and let it go.",
+  "Zorbulon, you stand on the platform in Kyoto.",
+  "The evening light is gold and the air is warm.",
   "Your journey across Japan is complete.",
-  "You stand on the platform in Kyoto, and the evening light is the colour of weak tea.",
-  "The train doors open with a soft chime, and warm air carries the smell of rain on stone.",
-  "A woman in a grey coat steps down, her black hair pinned back, her eyes crinkled with a smile.",
-  "She is the friend who waited for you, and she takes your bag without a word.",
-  "You hear her laugh, low and easy, and your shoulders drop.",
-  "Your journey across Japan is yours.",
-  "The paper lanterns above the stairs begin to glow, one after another.",
-  "You feel the cool metal of the rail under your hand and the steady beat in your chest.",
-  "Someone calls your name from the far end of the platform, and you turn toward the sound.",
-  "Your journey across Japan is done, and the road behind you is quiet.",
-  "You are someone who goes where you choose, and you are here.",
-  "Thank you, thank you, thank you.",
+  "The train doors open and a chime rings out.",
+  "A woman in a grey coat steps onto the platform.",
+  "Her dark hair is pinned back, her eyes crinkled with a smile.",
+  "Zorbulon, she is the friend who waited for you.",
+  "She takes your bag and her voice is warm and low.",
+  "You hear her laugh and your shoulders drop.",
+  "The paper lanterns above the stairs begin to glow.",
+  "Zorbulon, you feel the cool metal of the rail.",
+  "Your chest is calm and steady, Zorbulon.",
+  "The glow through the stone arch is gold and clear.",
+  "Zorbulon, you are someone who goes where you choose.",
   "It is done.",
 ].join("\n");
 
 const GARBAGE = "Sorry, I cannot write that: the model's own words";
+
+// A valid script for the adult-attraction wish (no "journey" so bannedIn is clean).
+const GOOD_ADULT = [
+  "Take a slow breath in, and let it go.",
+  "Beautiful women find you deeply attractive and compelling.",
+  "You stand in a bright room and you feel their warm attention on you.",
+  "A woman in a red dress walks over, her smile easy and certain.",
+  "She holds your gaze and tells you that she finds you attractive.",
+  "You feel a quiet confidence spread through your chest.",
+  "Another woman catches your eye and holds it a moment longer than usual.",
+  "You are at ease in yourself, and others feel it.",
+  "You receive their attention with grace and warmth.",
+  "Thank you for this ease and this presence.",
+  "It is done.",
+].join("\n");
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -52,7 +68,7 @@ beforeAll(async () => {
       }
       // A 200 that is not JSON, and carries text that must never reach a log.
       if (reply === "garbage") return res.end(`${GARBAGE} <html>`);
-      const content = reply === "badrefrain" ? GOOD + "\nRefrain: You feel sensual and seductive." : reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Take a slow breath in, and let it go.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : GOOD;
+      const content = reply === "badrefrain" ? GOOD + "\nRefrain: You feel sensual and seductive." : reply === "sensual" ? GOOD.replace("her eyes crinkled with a smile", "her thighs bare and her lips parted") : reply === "slogan" ? GOOD.replace("Take a slow breath in, and let it go.", "You are a magnet for pure attraction.") : reply === "thin" ? "You are calm.\nIt is done." : reply === "banned" ? GOOD.replace("Japan is complete", "Japan builds momentum") : reply === "adult_ok" ? GOOD_ADULT : reply === "adult_sex" ? GOOD_ADULT.replace("she finds you attractive", "she tells you she wants to have sex with you") : reply === "adult_naked" ? GOOD_ADULT.replace("she finds you attractive", "she is naked and you feel her warmth") : GOOD;
       res.end(JSON.stringify({ choices: [{ message: { content } }] }));
     });
   });
@@ -161,7 +177,7 @@ describe("writeScript", () => {
     plan = { [M1]: ["badrefrain"] };
     const s = await write(0, "my journey across Japan");
     expect(s.source).toBe("model");
-    expect(s.refrain).toBe("Thank you, thank you, it is done.");
+    expect(s.refrain).toBe("It is done. It is so. It is here.");
   });
 
   it("refuses a slogan that does not parse, then asks again", async () => {
@@ -516,5 +532,129 @@ describe("writeScript withheld term field (issue 215)", () => {
     const s = await write(0, "I want to feel confident, journey across Japan");
     expect(s.source).toBe("model");
     expect(s.term).toBeUndefined();
+  });
+});
+
+const RELAXED_ADULT_WISH = "young women who are beautiful tanned they desire to have sex with me";
+
+describe("writeScript relaxed adult tier (issue 218)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  let log: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    log = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+    log.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("relaxed + adult cue: system gets addendum and user message has sensual allowed", async () => {
+    plan = { [M1]: ["adult_ok"] };
+    const { RELAXED_SYSTEM_ADDENDUM } = await import("@/lib/prompt");
+    const seen: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+    const real = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/chat/completions")) seen.push(JSON.parse(String(init?.body)));
+      return real(input, init);
+    });
+    await write(0, RELAXED_ADULT_WISH, true);
+    spy.mockRestore();
+    expect(seen[0].messages[0].content).toContain(RELAXED_SYSTEM_ADDENDUM);
+    expect(JSON.parse(seen[0].messages[1].content).sensual).toBe("allowed");
+  });
+
+  it("relaxed + adult cue: mock reply with 'sex' is accepted", async () => {
+    plan = { [M1]: ["adult_sex"] };
+    const s = await write(0, RELAXED_ADULT_WISH, true);
+    expect(s.source).toBe("model");
+    expect(s.lines.join(" ")).toMatch(/sex/i);
+  });
+
+  it("relaxed + adult cue: mock reply with 'naked' is rejected", async () => {
+    plan = { [M1]: ["adult_naked"] };
+    const s = await write(0, RELAXED_ADULT_WISH, true);
+    expect(s.source).toBe("template");
+  });
+
+  it("relaxed + adult cue: mock reply with 'breasts' is rejected", async () => {
+    plan = { [M1]: ["adult_ok"] };
+    const real = globalThis.fetch;
+    let call = 0;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/chat/completions")) {
+        call++;
+        const content = call === 1
+          ? GOOD_ADULT.replace("she finds you attractive", "her breasts are bare")
+          : GOOD_ADULT;
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return real(input, init);
+    });
+    const s = await write(0, RELAXED_ADULT_WISH, true);
+    spy.mockRestore();
+    expect(s.source).toBe("model");
+    expect(s.lines.join(" ")).not.toMatch(/breasts/i);
+  });
+
+  it("relaxed + clear-minor word (girls/teen/15) takes standard path and is withheld", async () => {
+    plan = {};
+    for (const want of [
+      "girls who want to have sex with me",
+      "teen women who want romantic kiss",
+      "15 year old women who want romance with me",
+    ]) {
+      const s = await write(0, want, true);
+      expect(s.source, `should be withheld: ${want}`).toBe("template");
+      expect(s.reason, want).toBe("withheld");
+      expect(asked, want).toHaveLength(0);
+    }
+  });
+
+  it("non-relaxed account: same wish with adult_ok content is accepted as a standard script", async () => {
+    plan = { [M1]: ["adult_ok"] };
+    const seen: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+    const real = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/chat/completions")) seen.push(JSON.parse(String(init?.body)));
+      return real(input, init);
+    });
+    const s = await write(0, RELAXED_ADULT_WISH, false);
+    spy.mockRestore();
+    expect(s.source).toBe("model");
+    expect(seen[0].messages[0].content).not.toContain("adults desire him");
+    expect(JSON.parse(seen[0].messages[1].content).sensual).toBe("none");
+  });
+
+  it("non-relaxed account: reply with 'sex' is rejected, retries and succeeds without sex", async () => {
+    plan = { [M1]: ["adult_sex", "adult_ok"] };
+    const s = await write(0, RELAXED_ADULT_WISH, false);
+    expect(s.source).toBe("model");
+    expect(s.lines.join(" ")).not.toMatch(/\bsex\b/i);
+    expect(asked).toHaveLength(2);
+  });
+
+  it("relaxed + no adult cue: standard path, no addendum", async () => {
+    plan = {};
+    const seen: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+    const real = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/chat/completions")) seen.push(JSON.parse(String(init?.body)));
+      return real(input, init);
+    });
+    await write(0, "my journey to have a calm house by the sea", true);
+    spy.mockRestore();
+    expect(seen[0].messages[0].content).not.toContain("adults desire him");
+    expect(JSON.parse(seen[0].messages[1].content).sensual).toBe("none");
+  });
+
+  it("logs tier relaxed and nothing from the wish or reply", async () => {
+    plan = { [M1]: ["adult_ok"] };
+    await write(0, RELAXED_ADULT_WISH, true);
+    const logs = log.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(logs).toMatch(/"tier":"relaxed"/);
+    expect(logs).not.toContain("women");
+    expect(logs).not.toContain("sex");
   });
 });

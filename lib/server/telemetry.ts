@@ -1,4 +1,5 @@
 import "server-only";
+import { waitUntil } from "@vercel/functions";
 
 export type SafeProps = {
   route?: string;
@@ -23,10 +24,9 @@ export function captureEvent(event: string, properties: SafeProps): void {
       }),
     )
     .catch(() => {});
-  // Schedule with waitUntil when the Vercel runtime provides it, so the
-  // response is not held open but the POST is still delivered; otherwise the
-  // .catch() above already makes this fire-and-forget.
-  import("@vercel/functions")
-    .then((m) => (m as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil?.(work))
-    .catch(() => {});
+  try {
+    waitUntil(work);
+  } catch {
+    // waitUntil unavailable outside a Vercel request context; work is already fire-and-forget
+  }
 }
