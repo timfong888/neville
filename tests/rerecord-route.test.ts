@@ -101,20 +101,35 @@ describe("POST /api/rerecord", () => {
     expect(speech?.body).toMatchObject({ speed: D.speedFor(pace, tone), instructions: D.styleInstruction(pace, tone) });
   });
 
-  it("records a voice without the atomic flag as plain text", async () => {
+  it("records a non-atomic PCM voice (HeyGen) line-by-line so pauses can be stitched", async () => {
+    // HeyGen is a PCM voice: synthesize stitches lines with silence gaps when lines+pauseMs are passed.
     const res = await POST(req({ ...script, voiceId: "heygen-nadine" }));
     expect(res.status).toBe(200);
-    const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
-    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. You are calm and steady.");
+    const speechCalls = calls.filter((c) => c.path.startsWith("/audio/speech"));
+    // Each line goes in its own request so PCM silence can be inserted between them.
+    expect(speechCalls).toHaveLength(2);
+    expect((speechCalls[0]?.body as { input: string }).input).toBe("Take a slow breath.");
+    expect((speechCalls[1]?.body as { input: string }).input).toBe("You are calm and steady.");
   });
 
   it("applies the speedStep to a non-atomic voice re-record (web library fix)", async () => {
     const res = await POST(req({ ...script, voiceId: "heygen-nadine", speedStep: "faster" }));
     expect(res.status).toBe(200);
-    const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
+    const speechCalls = calls.filter((c) => c.path.startsWith("/audio/speech"));
     const V = await import("@/lib/voice/options");
     const faster = V.SPEED_OPTIONS.find((o) => o.id === "faster")!;
-    expect((speech?.body as { speed: number }).speed).toBe(faster.speed);
+    expect((speechCalls[0]?.body as { speed: number }).speed).toBe(faster.speed);
+  });
+
+  it("applies cadenceStep to a non-atomic PCM voice re-record so silence gaps use the right pauseMs", async () => {
+    // With cadenceStep, synthesize receives the resolved pauseMs and stitches that many ms of silence.
+    const res = await POST(req({ ...script, voiceId: "heygen-nadine", cadenceStep: "long" }));
+    expect(res.status).toBe(200);
+    const speechCalls = calls.filter((c) => c.path.startsWith("/audio/speech"));
+    // HeyGen stitches: one request per line.
+    expect(speechCalls).toHaveLength(2);
+    expect((speechCalls[0]?.body as { input: string }).input).toBe("Take a slow breath.");
+    expect((speechCalls[1]?.body as { input: string }).input).toBe("You are calm and steady.");
   });
 
   it("records nothing when the model says no", async () => {

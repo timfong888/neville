@@ -146,7 +146,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
-  const text = lines.join(" ");
+  // A blank line between lines is the pause we can ask of non-PCM voices (e.g. HeyGen);
+  // PCM voices that stitch ignore `text` and use `lines` + `pauseMs` directly.
+  const text = lines.join("\n\n");
   // The deadline passed during the check: do not start the voice, the credit is already refunded.
   if (state.timedOut) return timeoutResponse(true);
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s); with it off the budget is the same 42 s as before.
@@ -161,7 +163,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     timeoutMs: voiceMs,
     // Voices flagged atomic record the edited lines in one request with a
     // pause after each, at the default pace's speed, style and pause, as
-    // /api/manifest does (#76). Other voices keep the one-request text above.
+    // /api/manifest does (#76). Other voices pass lines and pauseMs so PCM
+    // voices can stitch and non-PCM voices receive the blank-line text above.
     ...(voice.atomic === true
       ? {
           lines,
@@ -171,8 +174,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
           atomic: true,
         }
       : {
+          lines,
           instructions: TAKES_STYLE.test(voice.model) ? STYLE : undefined,
           speed: speedOpt ? speedOpt.speed : DEFAULT_DELIVERY.speed,
+          pauseMs: cadenceOpt ? cadenceOpt.pauseMs : DEFAULT_DELIVERY.pauseMs,
         }),
   });
   if (!speech.ok) {
