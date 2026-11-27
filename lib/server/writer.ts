@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -71,7 +71,7 @@ function classify(e: unknown): Failure {
   return name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
 }
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; relaxed?: boolean }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
   let attempt = 0;
@@ -93,10 +93,12 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
   // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
-  if (wishSexualisesMinor(opts.want)) {
+  // Relaxed accounts use the narrower MINOR_CLEAR list; the check is never fully off.
+  const withheld = opts.relaxed ? wishSexualisesMinorRelaxed(opts.want) : wishSexualisesMinor(opts.want);
+  if (withheld) {
     failure = { reason: "withheld" };
     const category = wishSexualisesMinorCategory(opts.want);
-    return template(category ? { category } : {});
+    return template({ ...(category ? { category } : {}), ...(opts.relaxed ? { tier: "relaxed" } : {}) });
   }
   try {
     const models = await scriptModels();

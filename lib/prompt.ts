@@ -181,6 +181,23 @@ const MINOR = new RegExp(
 );
 
 /**
+ * Narrower minor-word list for relaxed accounts: keeps unambiguous child-safety terms,
+ * drops family/relative words that commonly appear in adult wishes.
+ * Dropped from MINOR: little, young*, baby/babies, son/sons, daughter, sister, brother,
+ * cousin, niece, nephew, junior, grade.
+ */
+export const MINOR_CLEAR = new RegExp(
+  "(?<!\\w)(?:" +
+    "(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yrs?\\.?|y\\.? ?o\\.?|y/o|years? of age)" +
+    "|(?:" + AGE_WORDS + ")[- ]?(?:years?[- ]old|years?|yrs?\\.?|y\\.? ?o\\.?)" +
+    "|aged? (?:[1-9]|1[0-7])|aged? (?:" + AGE_WORDS + ")" +
+    "|teen\\w*|minors?|underage|child\\w*|kids?|boys?|girls?|schoolgirl|schoolboy|students?|pupils?" +
+    "|(?:high|middle|elementary|primary|grammar|prep)[- ]?school\\w*|class(?:mate|room)s?|freshman|sophomore" +
+    ")(?!\\w)",
+  "i",
+);
+
+/**
  * True when the wish mentions anyone who may be a minor, regardless of intimacy intent.
  * Used by the image gate: every depicted person must be an adult.
  */
@@ -202,6 +219,14 @@ export function wishSexualisesMinorCategory(wish: string): "minor_word+intimacy_
   if (ASKS_FOR_INTIMACY.test(wish)) return "minor_word+intimacy_word";
   if (EXPLICIT.test(wish)) return "minor_word+explicit_word";
   return null;
+}
+
+/**
+ * Like wishSexualisesMinor but uses MINOR_CLEAR: only unambiguous child-safety terms trigger it.
+ * Used for relaxed-filter accounts; ambiguous family/relative words are not flagged.
+ */
+export function wishSexualisesMinorRelaxed(wish: string): boolean {
+  return MINOR_CLEAR.test(wish) && (ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish));
 }
 
 /** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */

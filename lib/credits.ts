@@ -45,6 +45,22 @@ export function isUnlimited(
   return unlimitedEmails(rawEmails).has(user.email.trim().toLowerCase());
 }
 
+/**
+ * True when the signed-in account is on the relaxed-filter list: its id is on RELAXED_FILTER_IDS,
+ * or its verified email is on RELAXED_FILTER_EMAILS. Same rule as isUnlimited.
+ * Unset env vars mean nobody is relaxed.
+ */
+export function isFilterRelaxed(
+  user: { id?: string | null; email?: string | null; emailVerified?: boolean } | null | undefined,
+  rawEmails: string | undefined = process.env.RELAXED_FILTER_EMAILS,
+  rawIds: string | undefined = process.env.RELAXED_FILTER_IDS,
+): boolean {
+  if (!user) return false;
+  if (user.id && unlimitedIds(rawIds).has(user.id)) return true;
+  if (!user.email || user.emailVerified !== true) return false;
+  return unlimitedEmails(rawEmails).has(user.email.trim().toLowerCase());
+}
+
 export type Pack = { id: string; credits: number };
 
 /** The packs an account may buy: starter only while it has never bought it. */

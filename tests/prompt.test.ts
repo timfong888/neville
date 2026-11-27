@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -374,6 +374,7 @@ describe("sexual content (#170)", () => {
   });
 });
 
+<<<<<<< HEAD
 describe("splitTitle (#205)", () => {
   it("parses a valid Title label and strips it from the script", () => {
     const { script, title } = splitTitle("Line one.\nTitle: Magnetic confidence\nLine two.");
@@ -414,5 +415,37 @@ describe("splitTitle (#205)", () => {
   it("asks the model for a 2 to 5 word title", () => {
     expect(SYSTEM).toMatch(/Title:/);
     expect(SYSTEM).toMatch(/2 to 5 words/);
+=======
+describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
+  it("passes ambiguous-family and age-relative terms with an intimacy word", () => {
+    for (const [wish, label] of [
+      ["I want to kiss my sister", "sister"],
+      ["my little girlfriend", "little"],
+      ["romantic evening with young ladies", "young ladies"],
+      ["I want romantic time with my son", "son"],
+      ["my junior girlfriend", "junior"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(false);
+    }
+  });
+  it("still withholds clear minor-protection terms with an intimacy word", () => {
+    for (const [wish, label] of [
+      ["I want to kiss a teen", "teen"],
+      ["I want to kiss my 15 year old classmate", "age+classmate"],
+      ["romantic relationship with girls", "girls"],
+      ["kiss my student", "student"],
+      ["romantic evening with kids", "kids"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
+    }
+  });
+  it("wishMentionsMinor and wishSexualisesMinor are unchanged (image gate unaffected)", () => {
+    for (const wish of ["I want to kiss my sister", "my little girlfriend", "romantic time with my son"]) {
+      expect(wishSexualisesMinor(wish), wish).toBe(true);
+    }
+    for (const wish of ["I want to kiss a teen", "romantic relationship with girls", "kiss my student"]) {
+      expect(wishSexualisesMinor(wish), wish).toBe(true);
+    }
+>>>>>>> 4b9c7b1 (feat/relaxed-filter-215: relaxed minor-word filter for allowlisted accounts)
   });
 });

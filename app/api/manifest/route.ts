@@ -8,7 +8,7 @@ import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
-import { isUnlimited, paywallEnabled } from "@/lib/credits";
+import { isFilterRelaxed, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +81,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
+  const relaxed = isFilterRelaxed(session);
+  if (relaxed && session) console.info("[relaxed]", session.id);
   const slot = tester ? null : await takeSlot(visitor(req));
   if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
@@ -122,7 +124,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
-  const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+  const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, relaxed });
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
   // can be cut apart in the browser.

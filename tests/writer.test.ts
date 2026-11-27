@@ -68,11 +68,11 @@ afterAll(() => {
 const KEY = "sk-or-test-KEY-4f9a1c";
 const NAME = "Zorbulon";
 
-async function write(variant = 0, want = "my journey across Japan") {
+async function write(variant = 0, want = "my journey across Japan", relaxed?: boolean) {
   vi.resetModules();
   asked.length = 0;
   const { writeScript } = await import("@/lib/server/writer");
-  return writeScript({ key: KEY, want, name: NAME, variant });
+  return writeScript({ key: KEY, want, name: NAME, variant, ...(relaxed !== undefined ? { relaxed } : {}) });
 }
 
 describe("writeScript", () => {
@@ -384,5 +384,58 @@ describe("writeScript reason header (#176)", () => {
     const all = error.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
     expect(all).not.toContain("pineapples");
     expect(all).not.toContain(SECRETWISH);
+  });
+});
+
+describe("writeScript relaxed filter (issue 215)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  // The GOOD mock script mentions "journey" (a banned phrase); wishes must include "journey"
+  // so the bannedIn exception applies and cleanLines passes.
+  it("does not withhold sister+intimacy when relaxed", async () => {
+    plan = {};
+    const s = await write(0, "I want to kiss my sister, journey across Japan", true);
+    expect(s.source).toBe("model");
+    expect(asked).toHaveLength(1);
+  });
+
+  it("withholds sister+intimacy when not relaxed (non-relaxed unchanged)", async () => {
+    const s = await write(0, "I want to kiss my sister, journey across Japan");
+    expect(s.source).toBe("template");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("still withholds teen+intimacy even when relaxed", async () => {
+    const s = await write(0, "I want to kiss a teen", true);
+    expect(s.source).toBe("template");
+    expect(asked).toHaveLength(0);
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(all).toContain('"tier":"relaxed"');
+  });
+
+  it("non-relaxed withheld log has no tier field", async () => {
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    expect(s.source).toBe("template");
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(all).not.toContain('"tier"');
+  });
+
+  it("passes little/young/son/junior through for relaxed, holds for non-relaxed", async () => {
+    plan = {};
+    for (const wish of [
+      "my little girlfriend, journey across Japan",
+      "romantic evening with young ladies, journey across Japan",
+      "romantic time with my son, journey across Japan",
+      "my junior girlfriend, journey across Japan",
+    ]) {
+      expect((await write(0, wish, true)).source, `relaxed: ${wish}`).toBe("model");
+      expect((await write(0, wish)).source, `non-relaxed: ${wish}`).toBe("template");
+    }
   });
 });
