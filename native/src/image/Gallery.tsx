@@ -1,7 +1,7 @@
 // Horizontal image gallery for one manifestation. Only rendered when EXPO_PUBLIC_IMAGES=1.
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from "react-native";
-import { imageGate } from "@/lib/image/gate";
+import { IMAGE_GUIDANCE, imageGate } from "@/lib/image/gate";
 import { imagePrompt } from "@/lib/image/prompt";
 import { mockProvider } from "@/lib/image/provider";
 import { colors, radius, space, type } from "../theme";
@@ -13,7 +13,7 @@ const TILE_H = 192;
 type GalleryItem =
   | { kind: "loading" }
   | { kind: "image"; uri: string }
-  | { kind: "withheld" };
+  | { kind: "withheld"; guidance: string };
 
 function bytesToDataUri(bytes: Uint8Array, mime: string): string {
   let binary = "";
@@ -23,13 +23,13 @@ function bytesToDataUri(bytes: Uint8Array, mime: string): string {
 }
 
 /** A gallery that generates one image for `wish` and shows it inline. */
-export function ImageGallery({ wish }: { wish: string }) {
+export function ImageGallery({ wish, relaxed }: { wish: string; relaxed?: boolean }) {
   const [items, setItems] = useState<GalleryItem[]>([{ kind: "loading" }]);
 
   useEffect(() => {
-    const gate = imageGate(wish);
+    const gate = imageGate(wish, { relaxed });
     if (!gate.allowed) {
-      setItems([{ kind: "withheld" }]);
+      setItems([{ kind: "withheld", guidance: IMAGE_GUIDANCE[gate.reason] }]);
       return;
     }
     setItems([{ kind: "loading" }]);
@@ -62,7 +62,7 @@ export function ImageGallery({ wish }: { wish: string }) {
             ) : item.kind === "image" ? (
               <Image source={{ uri: item.uri }} style={s.img} resizeMode="cover" accessibilityLabel="Generated image for your wish" />
             ) : (
-              <Text style={[type.muted, s.withheld]}>An image cannot be created for this wish.</Text>
+              <Text style={[type.muted, s.withheld]}>{item.guidance}</Text>
             )}
           </View>
         ))}

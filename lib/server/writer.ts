@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -60,6 +60,8 @@ export type Script = {
   reason?: string;
   /** 2–5 word noun phrase from the model; absent when missing or invalid, absent for templates. */
   title?: string;
+  /** The minor word that caused a withheld result, for use in guidance text. Never the full wish. */
+  term?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -98,7 +100,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   if (withheld) {
     failure = { reason: "withheld" };
     const category = wishSexualisesMinorCategory(opts.want);
-    return template({ ...(category ? { category } : {}), ...(opts.relaxed ? { tier: "relaxed" } : {}) });
+    const term = withheldMinorTerm(opts.want, opts.relaxed ?? false);
+    const s = template({ ...(category ? { category } : {}), ...(opts.relaxed ? { tier: "relaxed" } : {}) });
+    return term ? { ...s, term } : s;
   }
   try {
     const models = await scriptModels();

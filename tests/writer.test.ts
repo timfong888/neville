@@ -439,3 +439,26 @@ describe("writeScript relaxed filter (issue 215)", () => {
     }
   });
 });
+
+describe("writeScript withheld term field (issue 215)", () => {
+  it("non-relaxed withheld: term is the matched MINOR word", async () => {
+    const s = await write(0, "I want to kiss my sister, journey across Japan");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toBe("sister");
+  });
+
+  it("relaxed withheld: term is the matched MINOR_CLEAR word", async () => {
+    const s = await write(0, "I want to kiss a teen girl", true);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toMatch(/teen/i);
+  });
+
+  it("non-withheld script has no term field", async () => {
+    plan = {};
+    const s = await write(0, "I want to feel confident, journey across Japan");
+    expect(s.source).toBe("model");
+    expect(s.term).toBeUndefined();
+  });
+});

@@ -229,6 +229,16 @@ export function wishSexualisesMinorRelaxed(wish: string): boolean {
   return MINOR_CLEAR.test(wish) && (ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish));
 }
 
+/**
+ * The first minor-word match in the wish, for use in guidance text.
+ * When relaxed, uses MINOR_CLEAR (the narrower list); otherwise the full MINOR list.
+ * Returns null when no minor word matches (should not happen when the caller
+ * already confirmed a withheld result, but guarded for safety).
+ */
+export function withheldMinorTerm(wish: string, relaxed = false): string | null {
+  return (relaxed ? MINOR_CLEAR : MINOR).exec(wish)?.[0] ?? null;
+}
+
 /** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */
 export function wishAsksForIntimacy(wish: string): boolean {
   return ASKS_FOR_INTIMACY.test(wish) && ADULT_CUE.test(wish) && !MINOR.test(wish);

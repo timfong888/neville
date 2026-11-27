@@ -210,6 +210,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "X-Script-Source": script.source,
       ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),
       ...(script.title ? { "X-Title": Buffer.from(script.title, "utf8").toString("base64") } : {}),
+      ...(script.term ? { "X-Script-Term": script.term } : {}),
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
       // Repetition was asked for, but this voice's audio cannot be cut apart to
