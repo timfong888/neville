@@ -78,3 +78,23 @@ describe("planSession — time mode", () => {
     expect(p.totalSeconds).toBe(601.6);
   });
 });
+
+describe("planSession — library time-mode clip integration", () => {
+  it("clips with trailing gap stripped do not exceed the chosen target", () => {
+    // durationSec from playAll includes a trailing gap (loopQueue appends gap after every item)
+    // 299 s voice + 1.8 s gap = 300.8 s per pass
+    const gapSec = 1.8;
+    const voiceSec = 299;
+    const durationSec = voiceSec + gapSec; // 300.8 — what playAll.durationSec returns
+    const plan = planSession([durationSec], "time", 10, NOW, gapSec);
+    expect(plan.loops).toBe(2);
+    // Simulate library.tsx: N copies of [voice, gap], then slice off the trailing gap
+    type Clip = { name: string; sec: number };
+    const pass: Clip[] = [{ name: "voice", sec: voiceSec }, { name: "gap", sec: gapSec }];
+    const allClips = Array.from({ length: plan.loops! }, () => pass).flat();
+    const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+    const totalSec = clips.reduce((s, c) => s + c.sec, 0);
+    expect(totalSec).toBeCloseTo(voiceSec * 2 + gapSec, 10); // 599.8 s
+    expect(totalSec).toBeLessThanOrEqual(10 * 60); // must not exceed 10-min target
+  });
+});

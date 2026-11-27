@@ -152,7 +152,10 @@ export default function LibraryScreen() {
                       const gapSec = LOOP_GAP_MS / 1000;
                       const plan = planSession([p.durationSec], "time", sessionTarget, undefined, gapSec);
                       const loops = plan.loops ?? 1;
-                      const clips = Array.from({ length: loops }, () => p.clips).flat();
+                      // loopQueue puts a gap after every pass including the last; strip it so
+                      // the finite queue doesn't run past the chosen target.
+                      const allClips = Array.from({ length: loops }, () => p.clips).flat();
+                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
                       return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
                     }
                     // duration unknown: fall back to until-stopped
