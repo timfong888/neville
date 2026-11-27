@@ -11,6 +11,7 @@ import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { segmentLines, segmentsToPausedLines } from "@/lib/speech/pauses";
 import { resolveVoice } from "@/lib/voices";
+import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
@@ -48,7 +49,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
-  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown; repeat?: unknown; scriptMode?: unknown };
+  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown; repeat?: unknown; speedStep?: unknown; cadenceStep?: unknown; scriptMode?: unknown };
   try {
     body = await req.json();
     if (!body || typeof body !== "object") throw new Error("not an object");
@@ -69,6 +70,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // Pace and tone are preset ids too. Speed, pause and instruction come from lib/delivery.ts.
   const pace = resolvePace(body.pace);
   const tone = resolveTone(body.tone);
+  // speedStep / cadenceStep are the simpler create-flow controls; when present they override pace/tone's computed values.
+  const speedOpt = body.speedStep !== undefined ? resolveSpeed(body.speedStep) : null;
+  const cadenceOpt = body.cadenceStep !== undefined ? resolveCadence(body.cadenceStep) : null;
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
@@ -180,9 +184,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // The refrain follows the closing with no pause, and its length does not
     // shorten the pauses between the script's lines.
     tail,
-    pauseMs: pauseFor(pace, tone),
+    pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
     pauseMsPerGap,
-    speed: speedFor(pace, tone),
+    speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.

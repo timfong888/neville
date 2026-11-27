@@ -9,7 +9,7 @@ import type { PlayJob } from "./nowPlaying";
 import { makePlayAll } from "./playAll";
 
 export const nowPlaying = makeNowPlaying(audio);
-export const playAll = makePlayAll({ save: (n, b, m) => audio.save(n, b, m), load: (gone) => libraryRecordings(gone), bell: bellNow });
+export const playAll = makePlayAll({ save: (n, b, m) => audio.save(n, b, m), load: (gone) => libraryRecordings(gone), bell: bellNow, duration: (src) => audio.duration(src) });
 // The gap clip carries the bell or not, so a changed choice makes the copies again (#177).
 onBellChange(() => playAll.reset());
 // A recording may be deleted or replaced under what plays. Rebuild and continue instead of stopping (#237).

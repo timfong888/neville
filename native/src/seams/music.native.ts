@@ -13,6 +13,19 @@ const engine: MusicEngine = {
       pause: () => p.pause(),
       setVolume: (v) => void (p.volume = v),
       remove: () => p.remove(),
+      fade(durationSec) {
+        // If the platform player exposes a native fade hook (e.g. in tests), use it directly.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (typeof (p as any).fade === "function") { (p as any).fade(durationSec); return; }
+        const steps = 10;
+        const stepMs = (durationSec * 1000) / steps;
+        const startVol = p.volume;
+        for (let i = 1; i <= steps; i++) {
+          // Fire-and-forget: no stored timer reference.
+          setTimeout(() => { try { p.volume = startVol * (1 - i / steps); } catch {} }, i * stepMs);
+        }
+        setTimeout(() => { try { p.remove(); } catch {} }, durationSec * 1000 + stepMs);
+      },
     };
   },
 };

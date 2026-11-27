@@ -12,11 +12,11 @@ import type { MusicChoice } from "@/lib/music";
 /** What should be playing: a track, at the level it sits under the voice. */
 export type Track = { id: Exclude<MusicChoice, "none">; src: string | number; volume: number };
 /** One loaded player. `remove` stops and unloads it; nothing is called after it. */
-export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): void; remove(): void };
+export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): void; remove(): void; /** Fade volume to 0 over `durationSec` s, then remove. When present, called instead of `remove` on natural session end. */ fade?(durationSec: number): void };
 /** Loops the track. May finish late, or fail. */
 export type MusicEngine = { load(src: string | number, volume: number): Promise<MusicHandle> };
 /** A session's hold on the music. Calls from a session that has been replaced do nothing. */
-export type Follower = { voice(playing: boolean): void; close(): void };
+export type Follower = { voice(playing: boolean): void; close(): void; /** Fade music to silence over `durationSec` seconds instead of an instant cut-off. */ fade(durationSec: number): void };
 /** What is really there: the track that is loading or loaded ("none" if none), and whether a session holds the music. */
 export type MusicView = { choice: MusicChoice; active: boolean };
 
@@ -34,6 +34,8 @@ export function makeMusicPlayer(engine: MusicEngine) {
   let token = 0;
   let loaded: { track: Track; h: MusicHandle; playing: boolean } | null = null;
   let loading: Track | null = null;
+  /** Handle that is currently fading to silence after a natural session end. Cleared by release(). */
+  let fading: MusicHandle | null = null;
   let snap: MusicView = { choice: "none", active: false };
   const subs = new Set<() => void>();
 
@@ -49,12 +51,13 @@ export function makeMusicPlayer(engine: MusicEngine) {
       h.remove();
     } catch {}
   };
-  /** Stops and unloads whatever exists, and voids any load still on its way. */
+  /** Stops and unloads whatever exists, and voids any load still on its way. Also cancels any in-progress fade. */
   const release = () => {
     token++;
     loading = null;
     if (loaded) drop(loaded.h);
     loaded = null;
+    if (fading) { drop(fading); fading = null; }
   };
   const follow = () => {
     if (!loaded) return;
@@ -144,6 +147,26 @@ export function makeMusicPlayer(engine: MusicEngine) {
           voice = false;
           release();
           publish();
+        },
+        fade(durationSec) {
+          if (session !== mine) return;
+          hasSession = false;
+          voice = false;
+          // Detach the handle from musicPlayer tracking immediately so observers see
+          // no active session, but keep it in `fading` so release() can cancel it
+          // if a new session starts before the fade completes.
+          const h = loaded?.h ?? null;
+          loaded = null;
+          loading = null;
+          token++;
+          publish();
+          if (!h) return;
+          if (h.fade) {
+            fading = h;
+            h.fade(durationSec);
+          } else {
+            drop(h);
+          }
         },
       };
     },
