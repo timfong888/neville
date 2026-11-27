@@ -144,7 +144,8 @@ export default function LibraryScreen() {
                     if (!p) return null;
                     if (sessionMode === "until-stopped") return { ...p, music: MUSIC_ENABLED };
                     if (sessionMode === "loops") {
-                      const clips = Array.from({ length: sessionLoops }, () => p.clips).flat();
+                      const allClips = Array.from({ length: sessionLoops }, () => p.clips).flat();
+                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
                       return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
                     }
                     // time mode: use playlist duration to compute how many full passes fit

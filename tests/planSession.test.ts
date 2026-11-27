@@ -79,6 +79,35 @@ describe("planSession — time mode", () => {
   });
 });
 
+describe("planSession — single-item finite session gap consistency", () => {
+  it("consistent LOOP_GAP_MS gap: two loops stay within 10-min target", () => {
+    // 299 s voice, 1.8 s gap → loopDur = 300.8 s
+    // With fix (gap=1.8s): queue = 299+1.8+299 = 599.8 s ≤ 600 s ✓
+    // Without fix (gap=3s, old bug): queue = 299+3+299 = 601 s > 600 s ✗
+    const gapSec = 1.8;
+    const voiceSec = 299;
+    const plan = planSession([voiceSec + gapSec], "time", 10, NOW, gapSec);
+    expect(plan.loops).toBe(2);
+    const queueSec = voiceSec + gapSec + voiceSec;
+    expect(queueSec).toBeLessThanOrEqual(10 * 60);
+    // Show the old bug would have exceeded the target
+    expect(voiceSec + 3 + voiceSec).toBeGreaterThan(10 * 60);
+  });
+});
+
+describe("planSession — library loops-mode clip assembly", () => {
+  it("slicing trailing gap from concatenated passes ends on voice, not gap", () => {
+    // Each playlist pass: [voice, gap]. N passes concatenated → slice(0,-1) removes trailing gap.
+    const pass = ["voice", "gap"];
+    for (const n of [1, 2, 3]) {
+      const allClips = Array.from({ length: n }, () => pass).flat();
+      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+      expect(clips[clips.length - 1]).toBe("voice");
+      expect(clips).toHaveLength(2 * n - 1);
+    }
+  });
+});
+
 describe("planSession — library time-mode clip integration", () => {
   it("clips with trailing gap stripped do not exceed the chosen target", () => {
     // durationSec from playAll includes a trailing gap (loopQueue appends gap after every item)

@@ -111,7 +111,7 @@ export default function Player() {
       prepare: async () => {
         const hasGap = looping || repeats > 0;
         const gap = hasGap
-          ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, looping ? LOOP_GAP_MS : undefined), "audio/wav")
+          ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, LOOP_GAP_MS), "audio/wav")
           : "";
         const clips = looping
           ? loopQueue("one", [], item.id, gap, { id: item.id, src: v.src, title: item.title }).clips
