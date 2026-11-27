@@ -89,8 +89,8 @@ describe("system prompt", () => {
 
 describe("Neville's method (#78)", () => {
   it("carries the Lesson 1 techniques, paraphrased", () => {
-    expect(METHOD_VERSION).toBe("lesson1-v2");
-    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Who you are now/, /Thanks as the refrain/, /No fighting/]) {
+    expect(METHOD_VERSION).toBe("vivid-v1");
+    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Show evidence/, /Use the senses/, /Body feeling/, /Stay inside the scene/]) {
       expect(SYSTEM).toMatch(idea);
     }
   });
@@ -194,7 +194,8 @@ describe("refrain (#77)", () => {
     // Not addressed to the listener: the "you" of "thank you" does not count.
     expect(splitRefrain("x\nRefrain: The house is finished, thank you.").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
-    expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
+    // Default refrain must be free of thanks language.
+    expect(DEFAULT_REFRAIN).not.toMatch(/thank you/i);
   });
 });
 

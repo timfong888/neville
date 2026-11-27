@@ -1,0 +1,22 @@
+[
+  { "category": "money",      "wish": "My bitcoin portfolio shows a rising value every morning" },
+  { "category": "money",      "wish": "I want to be financially free" },
+  { "category": "money",      "wish": "I have ten million dollars in my account" },
+  { "category": "home",       "wish": "I want a beautiful house by the sea" },
+  { "category": "home",       "wish": "I live in a spacious home with a garden and morning light" },
+  { "category": "home",       "wish": "I hope to own a penthouse in the city" },
+  { "category": "love",       "wish": "I am in a loving relationship with my wife" },
+  { "category": "love",       "wish": "I want to find true love" },
+  { "category": "love",       "wish": "My partner and I laugh together every evening" },
+  { "category": "health",     "wish": "I am strong and healthy, full of easy energy" },
+  { "category": "health",     "wish": "My body heals quickly and I sleep deeply" },
+  { "category": "health",     "wish": "I want to lose weight and feel great in my body" },
+  { "category": "career",     "wish": "I lead a successful company I built from scratch" },
+  { "category": "career",     "wish": "I want to get promoted to senior engineer" },
+  { "category": "career",     "wish": "I am a published author with thousands of readers" },
+  { "category": "travel",     "wish": "I travel the world freely and return home rested" },
+  { "category": "travel",     "wish": "I want to spend a year living in Japan" },
+  { "category": "confidence", "wish": "I speak in public with ease and steady breath" },
+  { "category": "confidence", "wish": "I want to feel confident walking into any room" },
+  { "category": "confidence", "wish": "People notice my calm and I carry it naturally" }
+]
