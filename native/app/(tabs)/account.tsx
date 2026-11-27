@@ -239,7 +239,7 @@ function PlanCard({ signedIn, credits }: PlanCardProps) {
       {balance !== null ? (
         <EntitlementRow label="Creations remaining" value={String(balance)} />
       ) : (
-        <EntitlementRow label="Creations" value={`${CREDITS.freeCredits} included per sign-in`} />
+        <EntitlementRow label="Creations" value={`${CREDITS.freeCredits} included`} />
       )}
       <EntitlementRow label="Voices" value="Standard" />
       <EntitlementRow label="Music" value="Included" />
