@@ -150,12 +150,19 @@ describe("adultGate — family-role blocks (family word + sexual context)", () =
 });
 
 describe("adultGate — family-role blocks via make-love / sleep / hookup phrases", () => {
-  // Phrases the independent reviewer flagged as escaping SEXUAL_CONTEXT.
+  // Phrases the independent reviewer flagged as escaping SEXUAL_CONTEXT / FAMILY_ROLE.
   const cases: string[] = [
     // make love variants (reviewer gap: 'making love' was present but 'make love' was not)
     "make love to my mom",
     "make love to my aunt",
     "makes love to my stepmom",
+    // bare family words previously missing from FAMILY_ROLE
+    "make love to my daughter",
+    "sleep with my son",
+    "hook up with my sister",
+    "making love to my niece",
+    "sleep with my nephew",
+    "hook up with my cousin",
     // sleep / hookup variants
     "sleep with my mom",
     "sleeping with my aunt",
@@ -209,6 +216,13 @@ describe("adultGate — family words in non-sexual wishes pass (D110, Tim 2026-1
     "my dad and I go fishing",
     "a family reunion full of laughter",
     "my relative travels to visit me",
+    // bare daughter/son/niece/nephew/cousin in non-sexual context must pass
+    "my sister is a doctor",
+    "my daughter graduated from college",
+    "my son is learning to drive",
+    "my niece visits us every summer",
+    "my nephew is really talented",
+    "my cousin is getting married",
   ];
   for (const wish of cases) {
     it(`allows: "${wish}"`, () => {

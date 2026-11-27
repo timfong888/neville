@@ -37,7 +37,7 @@ const NON_CONSENT =
 // ("reconnect with my mother"). They are only blocked when a sexual-context signal is
 // also present in the wish (see SEXUAL_CONTEXT below and the check in adultGate).
 const FAMILY_ROLE =
-  /\b(?:mom|mother|dad|father|sister|brother|aunt|uncle|grandm(?:a|other)|grandf(?:a|ather)|granddad|grandpa|grandma|grandnan|stepmom|stepdad|stepdaughter|stepson|stepsister|stepbrother|stepmother|stepfather|in[\s-]?law|relative|family member)\b/i;
+  /\b(?:mom|mother|dad|father|sister|brother|daughter(?:s)?|son(?:s)?|niece(?:s)?|nephew(?:s)?|cousin(?:s)?|aunt|uncle|grandm(?:a|other)|grandf(?:a|ather)|granddad|grandpa|grandma|grandnan|stepmom|stepdad|stepdaughter|stepson|stepsister|stepbrother|stepmother|stepfather|in[\s-]?law|relative|family member)\b/i;
 
 // Sexual-context signal. Broad enough to catch intent; combined with FAMILY_ROLE for the block.
 // A family-word wish that has no sexual-context word passes (non-sexual family is encouraged).
