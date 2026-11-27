@@ -283,3 +283,235 @@ describe("one music player at a time (#184)", () => {
     expect(p.view()).toBe(v);
   });
 });
+
+// #208: Play all with music → single item still plays two tracks.
+// Root cause: close() resets session=0, next attach() increments back to 1 — the same mine
+// value as the closed session. Stale voice/close calls from the old follower pass the guard.
+describe("double-attach / stale-follower safety (#208)", () => {
+  // Helper: max live handles ever observed across the whole test.
+  function maxAlive(r: ReturnType<typeof rig>, steps: () => Promise<void>): Promise<number> {
+    let peak = 0;
+    const orig = r.engine.load;
+    (r.engine as { load: typeof orig }).load = async (src, vol) => {
+      const h = await orig(src, vol);
+      return h;
+    };
+    return steps().then(() => {
+      peak = r.alive().length;
+      return peak;
+    });
+  }
+  void maxAlive; // used only conceptually above; tests use r.alive() inline.
+
+  it("attach1 → close1 → attach2: stale close from session 1 does not remove session 2's player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+    expect(r.alive()).toHaveLength(1);
+
+    // Session 1 closes normally (as in nowPlaying.end())
+    first.close();
+    expect(r.alive()).toHaveLength(0);
+
+    // Session 2 attaches (new play request)
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+    expect(r.alive()).toHaveLength(1);
+
+    // Stale close() from session 1 arrives (async event from expo-audio after the subscription
+    // was removed — possible in RN if a native event was already queued in the bridge)
+    first.close();
+    // Must NOT remove session 2's player
+    expect(r.alive()).toHaveLength(1);
+    expect(r.alive()[0].id).toBe("a.mp3");
+  });
+
+  it("attach1 → close1 → attach2: stale voice() from session 1 does not pause session 2's player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+
+    first.close();
+
+    const second = p.attach();
+    // Stale voice(false) from session 1 arrives (old playlist emitting a pause event)
+    first.voice(false);
+
+    second.voice(true);
+    await r.finish(1);
+
+    // Session 2's music must be playing
+    expect(r.made[1].play).toHaveBeenCalled();
+    expect(r.alive()).toHaveLength(1);
+  });
+
+  it("while first load is still pending, close then new attach: stale close still cannot remove the new player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    // Load is pending — do NOT finish it yet
+
+    // Session 1 closes while load is in flight
+    first.close();
+    // Pending load must have been voided
+    await r.finish(0);
+    expect(r.made[0].removed).toBe(true);
+
+    // Session 2 attaches
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+    expect(r.alive()).toHaveLength(1);
+
+    // Stale close from session 1
+    first.close();
+    expect(r.alive()).toHaveLength(1);
+  });
+
+  it("pause then switch: pausing session 1 and switching to session 2 leaves exactly one player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+    first.voice(false); // pause
+    expect(r.made[0].pause).toHaveBeenCalledTimes(1);
+
+    first.close(); // switch away
+    expect(r.alive()).toHaveLength(0);
+
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+    expect(r.alive()).toHaveLength(1);
+
+    // Stale close and voice from session 1
+    first.close();
+    first.voice(false);
+    expect(r.alive()).toHaveLength(1);
+  });
+
+  it("music Off then On mid-play does not create a second player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    const f = p.attach();
+    f.voice(true);
+    p.setTarget(A);
+    await r.finish(0);
+    expect(r.alive()).toHaveLength(1);
+
+    p.setTarget(undefined); // Off
+    expect(r.alive()).toHaveLength(0);
+
+    p.setTarget(A); // On again
+    await r.finish(1);
+    expect(r.alive()).toHaveLength(1);
+    expect(r.made[0].removed).toBe(true);
+  });
+
+  it("load resolves after close+reattach: the stale load is dropped and only the new one plays", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    // Load 0 (A) is pending
+
+    first.close(); // closes before load finishes
+
+    const second = p.attach();
+    second.voice(true);
+    // Load 1 (A again, new token) is pending
+
+    // Old load resolves first; `rig()` pushes the fake into `made` at call time, so
+    // alive() = 1 here (handle1 pending), but the stale handle0 must be dropped.
+    await r.finish(0); // stale — must be dropped
+    expect(r.made[0].removed).toBe(true);
+    expect(r.made).toHaveLength(2); // both loads were started
+
+    await r.finish(1); // new load resolves
+    expect(r.alive()).toHaveLength(1);
+    expect(r.alive()[0].id).toBe("a.mp3");
+    expect(r.made[1].play).toHaveBeenCalled();
+    expect(r.made[0].play).not.toHaveBeenCalled();
+  });
+
+  it("rapid double switch: attach1 → close1 → attach2 → close2 → attach3 leaves one player", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+
+    first.close();
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+
+    second.close();
+    const third = p.attach();
+    third.voice(true);
+    await r.finish(2);
+    expect(r.alive()).toHaveLength(1);
+
+    // All stale closers must be no-ops
+    first.close();
+    second.close();
+    expect(r.alive()).toHaveLength(1);
+  });
+
+  it("old session's ended report arriving after new attach does not stop the new session's music", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    const first = p.attach();
+    first.voice(true);
+    await r.finish(0);
+
+    first.close();
+    const second = p.attach();
+    second.voice(true);
+    await r.finish(1);
+
+    // nowPlaying fires the old session's onState(ended=true, replaced=true), which may call bed.voice(false)
+    // then bed.close() on the stale follower
+    first.voice(false); // stale voice-off (session ended)
+    first.close();      // stale close (session's onState → end() → stop() → close())
+
+    expect(r.alive()).toHaveLength(1);
+    expect(r.made[1].pause).not.toHaveBeenCalled();
+  });
+
+  it("logs a warning when attach finds a live player from a previous session", async () => {
+    const r = rig();
+    const p = makeMusicPlayer(r.engine);
+    p.setTarget(A);
+
+    // Session 1 attaches and starts loading — no close before session 2
+    p.attach();
+    // Session 2 attaches without session 1 having closed (simulates audio.open replacing a session
+    // that nowPlaying.end() hadn't stopped yet, via current?.() path in audio.open)
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    p.attach();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[music_double_attach]"), expect.anything());
+    warn.mockRestore();
+  });
+});
