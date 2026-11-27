@@ -6,6 +6,7 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
+import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 
@@ -84,6 +85,8 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
     if (failure.reason !== "withheld") {
       alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started });
+    } else {
+      captureEvent("script_withheld", { route: "manifest" });
     }
     return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
