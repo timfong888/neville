@@ -5,6 +5,7 @@ import { canCreate, isSignedIn } from "@/lib/createGate";
 import { useAccount } from "../../src/accountStore";
 import { leave, newVariation, useCreate } from "../../src/create/session";
 import { Button, Gate, s } from "../../src/create/ui";
+import { WaitingPhrases } from "../../src/create/WaitingPhrases";
 import { Screen } from "../../src/ui/Screen";
 
 // Create, step 2: the script. While the one request runs it shows a waiting message; then the lines,
@@ -19,9 +20,7 @@ export default function Script() {
       <Screen title="Making it yours…">
         <Stack.Screen options={{ title: "Your script" }} />
         <Text style={s.muted}>This takes up to half a minute. Keep this page open.</Text>
-        <View style={s.card} accessibilityLiveRegion="polite">
-          <Text style={s.line}>Making it yours…</Text>
-        </View>
+        <WaitingPhrases />
       </Screen>
     );
   }
