@@ -157,6 +157,16 @@ export function lineForProgress(index: number, at: number, starts: number[]): nu
   return lineAt(starts, at);
 }
 
+/** Label for the "go to playlist" button on the recording screen. */
+export const playlistLabel = (savedId: string): string =>
+  savedId ? "My playlist" : "Save and open playlist";
+
+/** The Library tab route in the native app. */
+export const LIBRARY_TAB_ROUTE = "/(tabs)/library" as const;
+
+/** The Library route on the web. */
+export const LIBRARY_WEB_ROUTE = "/library" as const;
+
 /** The Library item for a result, as the website's Save builds it. */
 export function toManifestation(made: Made, w: Wish, id: string, now = Date.now()): Manifestation {
   return {

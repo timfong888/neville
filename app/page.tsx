@@ -5,6 +5,7 @@ import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIA
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
+import { useRouter as useNextRouter } from "next/navigation";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
@@ -19,6 +20,7 @@ import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
+import { LIBRARY_WEB_ROUTE, playlistLabel } from "@/lib/create";
 import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
@@ -76,6 +78,7 @@ function writeCount(n: number) {
 }
 
 export default function DemoPage() {
+  const nextRouter = useNextRouter();
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
   const [scriptMode, setScriptModeState] = useState<"enhance" | "exact">("enhance");
@@ -542,6 +545,11 @@ export default function DemoPage() {
     setTimeout(() => setToast(""), 2500);
   };
 
+  const goToPlaylist = async () => {
+    if (!savedId) await save();
+    nextRouter.push(LIBRARY_WEB_ROUTE);
+  };
+
   const reset = () => {
     stop();
     run.current++;
@@ -763,6 +771,9 @@ export default function DemoPage() {
             {saving ? "Saving…" : "Save"}
           </button>
         )}
+        <button className="btn sm" onClick={goToPlaylist} disabled={saving}>
+          {playlistLabel(savedId)}
+        </button>
         <button
           className="btn sm ghost"
           aria-pressed={music}
