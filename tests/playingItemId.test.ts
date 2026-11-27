@@ -55,5 +55,15 @@ describe("playingItemId", () => {
     it("highlights the first recording while Play all is preparing", () => {
       expect(playingItemId(st({ status: "preparing", id: "all", index: 0 }), items)).toBe("a");
     });
+
+    it("keeps the highlight while paused on a recording clip", () => {
+      expect(playingItemId(st({ status: "paused", id: "all", index: 0 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "paused", id: "all", index: 2 }), items)).toBe("c");
+    });
+
+    it("keeps the highlight while paused in a gap clip", () => {
+      expect(playingItemId(st({ status: "paused", id: "all", index: 1 }), items)).toBe("a");
+      expect(playingItemId(st({ status: "paused", id: "all", index: 3 }), items)).toBe("c");
+    });
   });
 });

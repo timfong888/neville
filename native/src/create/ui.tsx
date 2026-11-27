@@ -40,8 +40,8 @@ export const s = StyleSheet.create({
   chipText: { color: C.text, fontSize: 14 },
   off: { opacity: 0.45 },
   link: { color: C.accentText, fontSize: 16 },
-  line: { color: C.muted, fontSize: 17, lineHeight: 26 },
+  line: { color: C.muted, fontSize: 14, lineHeight: 20 },
   now: { color: C.text, fontWeight: "600" },
-  stage: { minHeight: 150, justifyContent: "center", alignItems: "center" },
-  spoken: { color: C.text, fontSize: 22, lineHeight: 30, textAlign: "center" },
+  stage: { minHeight: 100, justifyContent: "center", alignItems: "center" },
+  spoken: { color: C.text, fontSize: 16, lineHeight: 24, textAlign: "center" },
 });

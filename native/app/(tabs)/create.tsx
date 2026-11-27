@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
 import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
-import { create, clearPaywallError, edit, load, pickCadence, pickSpeed, pickVoice, reset, useCreate } from "../../src/create/session";
+import { create, clearPaywallError, edit, load, pickCadence, pickSpeed, pickVoice, reset, setScriptMode, useCreate } from "../../src/create/session";
 import { VoiceSection } from "../../src/ui/VoiceSection";
 import { PAYWALL_ENABLED } from "../../src/config";
 import { shouldShowPaywall } from "@/lib/paywall";
@@ -75,7 +75,10 @@ export default function Wish() {
               </Text>
             </View>
           ) : null}
-          <Text nativeID="want" style={s.muted}>What do you want?</Text>
+          <Text nativeID="want" style={s.muted}>What is already yours?</Text>
+          <Text style={[s.muted, { fontStyle: "italic", fontSize: 12 }]}>
+            {"To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret."}
+          </Text>
           <TextInput
             accessibilityLabelledBy="want"
             aria-labelledby="want"
@@ -108,6 +111,11 @@ export default function Wish() {
             placeholderTextColor={colors.muted}
             onChangeText={(name) => edit({ name })}
           />
+          <View style={s.row}>
+            <Text style={s.muted}>Script</Text>
+            <Button small label="Enhance with AI" disabled={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />
+            <Button small label="Exactly my words" disabled={c.scriptMode === "exact"} onPress={() => setScriptMode("exact")} />
+          </View>
           <VoiceSection
             voiceId={c.voiceId}
             voiceName={c.voiceName}

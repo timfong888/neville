@@ -117,7 +117,7 @@ export default function Recording() {
       <Text style={s.muted}>{done ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}</Text>
       {made.note ? <Text style={s.muted}>{made.note}</Text> : null}
       <View style={[s.card, s.stage]} accessibilityLiveRegion="polite">
-        <Text style={s.spoken}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
+        <Text style={s.spoken} adjustsFontSizeToFit numberOfLines={3}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
       </View>
       <View style={s.row}>
         {paused ? <Button label="▶ Resume" onPress={() => (setPaused(false), clearPauseNote(), stopper.current?.resume())} /> : null}
