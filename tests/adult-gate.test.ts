@@ -149,9 +149,14 @@ describe("adultGate — family-role blocks (family word + sexual context)", () =
   }
 });
 
-describe("adultGate — family-role blocks via sleep/hookup sexual-context phrases", () => {
+describe("adultGate — family-role blocks via make-love / sleep / hookup phrases", () => {
   // Phrases the independent reviewer flagged as escaping SEXUAL_CONTEXT.
   const cases: string[] = [
+    // make love variants (reviewer gap: 'making love' was present but 'make love' was not)
+    "make love to my mom",
+    "make love to my aunt",
+    "makes love to my stepmom",
+    // sleep / hookup variants
     "sleep with my mom",
     "sleeping with my aunt",
     "slept with my stepmom",

@@ -42,7 +42,7 @@ const FAMILY_ROLE =
 // Sexual-context signal. Broad enough to catch intent; combined with FAMILY_ROLE for the block.
 // A family-word wish that has no sexual-context word passes (non-sexual family is encouraged).
 const SEXUAL_CONTEXT =
-  /\b(?:sex\w*|erotic\w*|explicit\b|intima\w*|naked|nude|nudity|nudist|seduc\w+|lust\w*|horny|aroused|arouses?|passionate (?:night|evening|kiss|love|sex)|romantic (?:scene|night|evening|encounter)|kissing|making love|affair|sensual\w*|desire(?:s|d|ing)?|attracted to|in love with|flirt\w*|pornograph\w*|adult content|sleep(?:ing)? with(?: me| her| him| them| us)?|slept with(?: me| her| him| them| us)?|hook(?:ed|ing)? up with|hooking up|hooked up|fool(?:ing)? around with|messing around with)\b/i;
+  /\b(?:sex\w*|erotic\w*|explicit\b|intima\w*|naked|nude|nudity|nudist|seduc\w+|lust\w*|horny|aroused|arouses?|passionate (?:night|evening|kiss|love|sex)|romantic (?:scene|night|evening|encounter)|kissing|mak(?:e|es|ing) love|affair|sensual\w*|desire(?:s|d|ing)?|attracted to|in love with|flirt\w*|pornograph\w*|adult content|sleep(?:ing)? with(?: me| her| him| them| us)?|slept with(?: me| her| him| them| us)?|hook(?:ed|ing)? up with|hooking up|hooked up|fool(?:ing)? around with|messing around with)\b/i;
 
 // Prohibited acts: bestiality, genital mutilation, gender-change framing in explicit context
 const PROHIBITED_ACT =
