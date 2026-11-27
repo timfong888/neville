@@ -41,6 +41,8 @@ export type Recording = {
   starts?: number[];
   /** 2–5 word title from the model, via X-Title (base64 UTF-8). Absent for templates. */
   title?: string;
+  /** Credits balance after charging. "unlimited" for testers, digit string, or absent when not sent. */
+  creditsBalance?: string | null;
 };
 
 /** Thrown for any non-2xx response. `lines` is the written script when only the voice failed. */
@@ -146,6 +148,7 @@ export function createApi(opts: ApiOptions) {
     const script = lines ?? readScript(res.headers.get("X-Script"));
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
     const title = readTitle(res.headers.get("X-Title"));
+    const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -155,6 +158,7 @@ export function createApi(opts: ApiOptions) {
       ...(reason !== undefined ? { reason } : {}),
       ...(title !== undefined ? { title } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
+      ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
     };
   }
 
