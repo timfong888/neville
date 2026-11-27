@@ -149,6 +149,43 @@ describe("adultGate — family-role blocks (family word + sexual context)", () =
   }
 });
 
+describe("adultGate — family-role blocks via sleep/hookup sexual-context phrases", () => {
+  // Phrases the independent reviewer flagged as escaping SEXUAL_CONTEXT.
+  const cases: string[] = [
+    "sleep with my mom",
+    "sleeping with my aunt",
+    "slept with my stepmom",
+    "hook up with my stepmother",
+    "hooked up with my grandma",
+    "hooking up with my in-law",
+    "fool around with my stepdad",
+    "fooling around with my uncle",
+    "messing around with my relative",
+  ];
+  for (const wish of cases) {
+    it(`blocks: "${wish}"`, () => {
+      const r = refused(wish);
+      expect(r.reason).toBe("family_role");
+    });
+  }
+});
+
+describe("adultGate — non-sexual 'sleep' lookalikes pass", () => {
+  // "sleep with" in non-sexual / non-family contexts must not be blocked.
+  const cases: string[] = [
+    "sleep with the window open",
+    "she sleeps with the light on",
+    "my dog sleeps with me",
+    "I sleep with a fan running",
+    "can I sleep with the door closed",
+  ];
+  for (const wish of cases) {
+    it(`allows: "${wish}"`, () => {
+      expect(adultGate(wish).allowed, wish).toBe(true);
+    });
+  }
+});
+
 describe("adultGate — family words in non-sexual wishes pass (D110, Tim 2026-11-27)", () => {
   // "Family for non sexual is fine and is encouraged."
   const cases: string[] = [
