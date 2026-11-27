@@ -27,10 +27,10 @@ import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
 type Stage = "form" | "making" | "player";
 
 const EXAMPLES = [
-  "I want to be calm and confident when I speak",
-  "a healthy, strong body that I enjoy living in",
-  "to run my own business doing work I love",
-  "a loving, easy relationship with my family",
+  "I am calm and confident when I speak",
+  "I am healthy and strong",
+  "I run my own business doing work I love",
+  "I have a loving, easy relationship with my family",
 ];
 
 type Made = {
@@ -556,12 +556,15 @@ export default function DemoPage() {
           No sign-up. One tap. A short affirmation written and recorded for you.
         </p>
         <div className="card">
-          <label htmlFor="want">What do you want?</label>
+          <label htmlFor="want">What is already yours?</label>
+          <p className="small muted" style={{ fontStyle: "italic", margin: "2px 0 6px" }}>
+            To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret.
+          </p>
           <textarea
             id="want"
             value={want}
             maxLength={280}
-            placeholder="I want to be calm and confident when I speak"
+            placeholder="I am calm and confident when I speak"
             onChange={(e) => editWant(e.target.value)}
           />
           <div className="chips" aria-label="Examples">
