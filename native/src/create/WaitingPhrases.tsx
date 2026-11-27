@@ -3,6 +3,8 @@ import { AccessibilityInfo, ActivityIndicator, Animated, Text, View } from "reac
 import { emptyQuoteState, nextQuote, waitLine, type Quote, type QuoteState } from "@/lib/waitingQuotes";
 import { colors as C, space, type } from "../theme";
 
+const REDUCED_MOTION_MS = 4000;
+
 /**
  * Indeterminate progress indicator with a Neville Goddard quote that fades in and out.
  * Each quote is shown for its own duration (4 s or 6 s for longer quotes). After 45 s a
@@ -45,7 +47,8 @@ export function WaitingPhrases() {
       if (!mountedRef.current) return;
       setCurrentQuote(q);
       if (q.durationMs > 0) {
-        timerRef.current = setTimeout(advance, q.durationMs);
+        // Reduced-motion: fixed 4 s for every quote regardless of length.
+        timerRef.current = setTimeout(advance, rm ? REDUCED_MOTION_MS : q.durationMs);
       }
     };
 

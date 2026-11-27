@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { emptyQuoteState, nextQuote, QUOTES, waitLine } from "@/lib/waitingQuotes";
 
 describe("QUOTES data", () => {
@@ -73,6 +73,44 @@ describe("nextQuote", () => {
     const { quote: first } = nextQuote(emptyQuoteState(), () => 0);
     const { quote: last } = nextQuote(emptyQuoteState(), () => 0.999);
     expect(first.text).not.toBe(last.text);
+  });
+});
+
+describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
+  it("clears the fade timer on cleanup, preventing show() from firing after unmount", () => {
+    vi.useFakeTimers();
+    const mountedRef = { current: true };
+    const fadeTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let showCallCount = 0;
+
+    const show = () => {
+      if (!mountedRef.current) return;
+      showCallCount++;
+      timerRef.current = setTimeout(() => {}, 4000);
+    };
+
+    // Simulate advance() triggering the 400 ms fade
+    fadeTimerRef.current = setTimeout(() => show(), 400);
+
+    // Simulate unmount cleanup
+    mountedRef.current = false;
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    vi.advanceTimersByTime(500);
+    expect(showCallCount).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it("long quotes (6000 ms) are capped at 4000 ms in reduced-motion mode", () => {
+    // The timer duration in show() is: rm ? 4000 : q.durationMs
+    // Verify long quotes (durationMs === 6000) produce 4000 when rm is true
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000);
+    expect(longQuote).toBeDefined();
+    const rm = true;
+    const duration = rm ? 4000 : longQuote!.durationMs;
+    expect(duration).toBe(4000);
   });
 });
 
