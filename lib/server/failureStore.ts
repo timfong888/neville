@@ -1,4 +1,5 @@
 import "server-only";
+import { waitUntil } from "@vercel/functions";
 import { redisEnv } from "@/lib/server/redis";
 
 export type FailureEntry = { count: number; sampleIds: string[] };
@@ -19,7 +20,10 @@ export function recordFailure(reason: string, requestId?: string): void {
   e.count++;
   if (requestId && e.sampleIds.length < MAX_IDS) e.sampleIds.push(requestId);
   mem.set(k, e);
-  redisRecord(todayUTC(), reason, requestId).catch(() => {});
+  const work = redisRecord(todayUTC(), reason, requestId).catch(() => {});
+  try {
+    waitUntil(work);
+  } catch {}
 }
 
 async function redisRecord(day: string, reason: string, id?: string): Promise<void> {

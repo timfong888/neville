@@ -72,7 +72,7 @@ function classify(e: unknown): Failure {
   return name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
 }
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string }): Promise<Script> {
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; voiceId?: string; voiceModel?: string }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
   let attempt = 0;
@@ -87,7 +87,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   const template = (extra: Record<string, unknown> = {}): Script => {
     console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
     if (failure.reason !== "withheld") {
-      alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started });
+      alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? opts.voiceModel ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started, ...(opts.voiceId ? { voice: opts.voiceId } : {}) });
     } else {
       captureEvent("script_withheld", { route: "manifest" });
     }

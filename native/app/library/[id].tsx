@@ -205,9 +205,20 @@ export default function LibraryDetail() {
                 Recording done.
               </Text>
             ) : rrState.status === "failed" ? (
-              <Text accessibilityLiveRegion="polite" style={[type.muted, s.warn]}>
-                {failMessage}
-              </Text>
+              <>
+                <Text accessibilityLiveRegion="polite" style={[type.muted, s.warn]}>
+                  {failMessage}
+                </Text>
+                {rrState.failHint ? (
+                  <Text accessibilityLiveRegion="polite" style={type.muted}>
+                    {rrState.failHint}
+                  </Text>
+                ) : null}
+                {/* Edit script: shown when recording was refused for content (issue 252's editor will replace startEdit when it ships). */}
+                {rrState.failCode === "not_recordable" && (
+                  <Button label="Edit script" onPress={startEdit} />
+                )}
+              </>
             ) : rrState.status === "no_credits" && noCreditsMessage ? (
               <Text accessibilityLiveRegion="polite" style={[type.muted, s.warn]}>
                 {noCreditsMessage}
