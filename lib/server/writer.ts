@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, RELAXED_SYSTEM_ADDENDUM, SYSTEM, adultCueRelaxed, cleanLines, grammarIssue, sexInRelaxed, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -44,8 +44,9 @@ export function vetModels(): Promise<string[]> {
 }
 
 /** The refrain is spoken and looped too: it passes the same content guards as the script, or the default is used. */
-function safeRefrain(refrain: string | null, wish: string): string {
-  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) ? refrain : DEFAULT_REFRAIN;
+function safeRefrain(refrain: string | null, wish: string, sexCheck?: (lines: string[], wish: string) => string | null): string {
+  const check = sexCheck ?? sexualIn;
+  return refrain && !grammarIssue([refrain]) && !check([refrain], wish) ? refrain : DEFAULT_REFRAIN;
 }
 
 export type Script = {
@@ -104,6 +105,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     const s = template({ ...(category ? { category } : {}), ...(opts.relaxed ? { tier: "relaxed" } : {}) });
     return term ? { ...s, term } : s;
   }
+  // Relaxed adult tier: wish has an adult cue and no clear-minor word.
+  const isRelaxedAdult = !!opts.relaxed && adultCueRelaxed(opts.want);
+  if (isRelaxedAdult) console.log("[script_tier]", JSON.stringify({ tier: "relaxed" }));
   try {
     const models = await scriptModels();
     // Up to two tries within the time box (config/limits.json scriptTimeoutMs). A model that is rate-limited or down
@@ -132,10 +136,10 @@ export async function writeScript(opts: { key: string; want: string; name: strin
             reasoning: { effort: limits.scriptReasoningEffort },
             usage: { include: true },
             messages: [
-              { role: "system", content: SYSTEM },
+              { role: "system", content: isRelaxedAdult ? `${SYSTEM}\n\n${RELAXED_SYSTEM_ADDENDUM}` : SYSTEM },
               {
                 role: "user",
-                content: wishMessage(opts.want, opts.name, variant, opts.toneNote),
+                content: wishMessage(opts.want, opts.name, variant, opts.toneNote, isRelaxedAdult ? "allowed" : undefined),
               },
             ],
           }),
@@ -168,14 +172,14 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
-      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }, isRelaxedAdult ? sexInRelaxed : undefined) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
       }
       if (lines) {
         const t = titleParts?.title ?? undefined;
-        return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want), ...(t ? { title: t } : {}) };
+        return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want, isRelaxedAdult ? sexInRelaxed : undefined), ...(t ? { title: t } : {}) };
       }
       failure = { reason: "unusable_reply", status: res.status };
       variant++;

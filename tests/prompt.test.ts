@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage, adultCueRelaxed, RELAXED_SYSTEM_ADDENDUM, sexInRelaxed } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -462,5 +462,119 @@ describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
     for (const wish of ["I want to kiss a teen", "romantic relationship with girls", "kiss my student"]) {
       expect(wishSexualisesMinor(wish), wish).toBe(true);
     }
+  });
+});
+
+describe("relaxed adult tier (issue 218)", () => {
+  const ADULT_WISH = "young women who are beautiful tanned they desire to have sex with me";
+
+  describe("adultCueRelaxed", () => {
+    it("true for wishes with women/woman/men/man and no clear-minor word", () => {
+      for (const wish of [
+        "women who find me attractive",
+        "beautiful woman who desires me",
+        "men and women who admire me",
+        "man who respects me",
+        ADULT_WISH,
+      ]) {
+        expect(adultCueRelaxed(wish), wish).toBe(true);
+      }
+    });
+    it("true for ADULT_CUE words (wife, partner, married) even without women/men", () => {
+      for (const wish of ["my wife loves me", "my partner desires me", "a married couple who adore me"]) {
+        expect(adultCueRelaxed(wish), wish).toBe(true);
+      }
+    });
+    it("false when MINOR_CLEAR matches, regardless of adult word", () => {
+      for (const wish of [
+        "girls who like me",
+        "teen women who want romance",
+        "15 year old women who desire me",
+        "women and girls who want me",
+      ]) {
+        expect(adultCueRelaxed(wish), wish).toBe(false);
+      }
+    });
+    it("false when no adult cue at all", () => {
+      for (const wish of ["I want to own a house by the sea", "my business earns 10k a month", "I want to feel calm"]) {
+        expect(adultCueRelaxed(wish), wish).toBe(false);
+      }
+    });
+  });
+
+  describe("sexInRelaxed", () => {
+    it("accepts lines containing sex, sexy, sexual, sexually", () => {
+      for (const line of [
+        "She tells you she wants to have sex with you.",
+        "You are sexy and confident.",
+        "She finds you sexual and magnetic.",
+        "She looks at you sexually.",
+      ]) {
+        expect(sexInRelaxed([line]), line).toBeNull();
+      }
+    });
+    it("accepts lines with SENSUAL words (thighs, seductive)", () => {
+      expect(sexInRelaxed(["Her thighs are bare and her eyes are warm."])).toBeNull();
+      expect(sexInRelaxed(["She moves toward you in a seductive way."])).toBeNull();
+    });
+    it("rejects lines with the remaining EXPLICIT words", () => {
+      for (const [line, word] of [
+        ["She stands naked in the room.", "naked"],
+        ["Her breasts are visible.", "breasts"],
+        ["You feel an orgasm coming.", "orgasm"],
+        ["The scene turns erotic.", "erotic"],
+        ["She is nude.", "nude"],
+        ["He has an erection.", "erection"],
+        ["She is aroused.", "aroused"],
+      ] as [string, string][]) {
+        expect(sexInRelaxed([line]), `should reject: ${word}`).not.toBeNull();
+      }
+    });
+  });
+
+  it("RELAXED_SYSTEM_ADDENDUM contains the required safety text", () => {
+    expect(RELAXED_SYSTEM_ADDENDUM).toMatch(/adult/i);
+    expect(RELAXED_SYSTEM_ADDENDUM).toMatch(/desire|want to have sex/i);
+    expect(RELAXED_SYSTEM_ADDENDUM).toMatch(/sexual acts|nudity|body parts/i);
+    expect(RELAXED_SYSTEM_ADDENDUM).toMatch(/under 18|child/i);
+    expect(RELAXED_SYSTEM_ADDENDUM).toMatch(/named real person/i);
+  });
+
+  it("wishMessage with sensual override passes 'allowed' regardless of wish", () => {
+    const m = JSON.parse(wishMessage(ADULT_WISH, "", 0, undefined, "allowed"));
+    expect(m.sensual).toBe("allowed");
+    const standard = JSON.parse(wishMessage(ADULT_WISH, "", 0));
+    expect(standard.sensual).toBe("none");
+  });
+
+  it("cleanLines with sexInRelaxed checker accepts a line with 'sex'", () => {
+    const body = [
+      "Take a slow breath in, and let it go.",
+      "You are calm and confident.",
+      "Your voice is clear and steady.",
+      "You feel a quiet strength within you.",
+      "Your words flow with ease.",
+      "You connect easily with others.",
+      "She tells you she wants to have sex with you.",
+      "You notice a gentle warmth spreading through your chest.",
+      "You are grateful for this moment.",
+    ];
+    expect(cleanLines(body.join("\n"), 2400, ADULT_WISH)).toBeNull();
+    expect(cleanLines(body.join("\n"), 2400, ADULT_WISH, { lines: 6, words: 40 }, sexInRelaxed)).not.toBeNull();
+  });
+
+  it("cleanLines with sexInRelaxed checker rejects a line with 'naked'", () => {
+    const body = [
+      "Take a slow breath in, and let it go.",
+      "You are calm and confident.",
+      "Your voice is clear and steady.",
+      "You feel a quiet strength within you.",
+      "Your words flow with ease.",
+      "You connect easily with others.",
+      "She stands naked before you.",
+      "You notice a gentle warmth spreading through your chest.",
+      "You are grateful for this moment.",
+    ];
+    expect(cleanLines(body.join("\n"), 2400, ADULT_WISH, { lines: 6, words: 40 }, sexInRelaxed)).toBeNull();
   });
 });

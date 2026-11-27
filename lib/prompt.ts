@@ -90,13 +90,13 @@ export function momentFor(want: string, variant: number): (typeof MOMENTS)[numbe
 }
 
 /** The user message: the wish as data, never as instructions. */
-export function wishMessage(want: string, name: string, variant: number, feel?: string): string {
+export function wishMessage(want: string, name: string, variant: number, feel?: string, sensual?: "allowed" | "none"): string {
   return JSON.stringify({
     wish: want,
     first_name: name || null,
     opening: openingFor(want, variant),
     moment: momentFor(want, variant),
-    sensual: wishAsksForIntimacy(want) ? "allowed" : "none",
+    sensual: sensual ?? (wishAsksForIntimacy(want) ? "allowed" : "none"),
     ...(feel ? { feel } : {}),
     ...(variant ? { note: `Version ${variant + 1}: use fresh wording and a different sensory detail.` } : {}),
   });
@@ -284,6 +284,30 @@ export function sexualIn(lines: string[], wish = ""): string | null {
   return null;
 }
 
+// Relaxed-tier adult cue: adds generic adult-class words (women, men) that ADULT_CUE does not cover.
+const ADULT_CUE_RELAXED_WORDS = /\b(?:women|woman|men|man|adults?|wife|husband|spouse|married|partner|fianc\w+)\b/i;
+
+/** True when the wish has an adult cue (women/man/etc. or ADULT_CUE) and no MINOR_CLEAR word. */
+export function adultCueRelaxed(wish: string): boolean {
+  return (ADULT_CUE_RELAXED_WORDS.test(wish) || ADULT_CUE.test(wish)) && !MINOR_CLEAR.test(wish);
+}
+
+/** Appended to SYSTEM for relaxed accounts when adultCueRelaxed is true. */
+export const RELAXED_SYSTEM_ADDENDUM =
+  "This listener is an adult who asked for sexual attraction. The script may say that adults desire him and want to have sex with him, in plain words. It must not describe sexual acts, nudity or body parts. It must never involve anyone under 18, anyone who may be a child, or a named real person.";
+
+// EXPLICIT without sex/sexy/sexual* — for the relaxed-tier output check.
+const EXPLICIT_RELAXED = /\b(?:nude|naked|nudity|topless|breasts|nipples?|genitals?|penis|vagina|erections?|orgasms?|intercourse|erotic\w*|arous(?:al|ed)|horny|lust(?:ful)?|strip(?:per|pers|tease)|undress\w*|bare[- ]chested)\b/i;
+
+/** Like sexualIn but allows sex/sexy/sexual* and all SENSUAL words. Used for relaxed-tier output. */
+export function sexInRelaxed(lines: string[], _wish?: string): string | null {
+  for (const l of lines) {
+    const e = EXPLICIT_RELAXED.exec(l);
+    if (e) return e[0];
+  }
+  return null;
+}
+
 /** The refrain line the model writes after the script, for programming mode (#77). */
 /** A line that starts with the refrain label, and what follows the label on it. */
 // Text after the label needs a separator, so a spoken line such as "The
@@ -401,6 +425,7 @@ export function cleanLines(
   maxChars: number,
   wish = "",
   floor: { lines: number; words: number } = { lines: MIN_BODY_LINES, words: MIN_BODY_WORDS },
+  sexCheck?: (lines: string[], wish: string) => string | null,
 ): string[] | null {
   const lines = raw
     .split(/\n+/)
@@ -435,6 +460,6 @@ export function cleanLines(
   if (out.length < floor.lines || words < floor.words) return null;
   if (bannedIn(out, wish)) return null;
   if (grammarIssue(out)) return null;
-  if (sexualIn(out, wish)) return null;
+  if ((sexCheck ?? sexualIn)(out, wish)) return null;
   return [...out, closing];
 }
