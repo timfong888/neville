@@ -16,6 +16,7 @@ export function WaitingPhrases() {
   const opacity = useRef(new Animated.Value(1)).current;
   const startRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
   const mountedRef = useRef(true);
   // Conservative default: cap at REDUCED_MOTION_MS until the async isReduceMotionEnabled() resolves.
   const reduceMotionRef = useRef(true);
@@ -50,8 +51,8 @@ export function WaitingPhrases() {
       setCurrentQuote(q);
       currentQuoteRef.current = q;
       if (q.durationMs > 0) {
-        // Reduced-motion: fixed 4 s for every quote regardless of length.
-        timerRef.current = setTimeout(advance, rm ? REDUCED_MOTION_MS : q.durationMs);
+        // Read ref fresh — rm may be stale if reduce-motion changed during the fade.
+        timerRef.current = setTimeout(advance, reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs);
       }
     };
 
@@ -66,20 +67,29 @@ export function WaitingPhrases() {
     if (rm) {
       show(q);
     } else {
-      Animated.timing(opacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => {
+      const anim = Animated.timing(opacity, { toValue: 0, duration: 400, useNativeDriver: true });
+      animRef.current = anim;
+      anim.start(({ finished }) => {
+        if (animRef.current === anim) animRef.current = null;
+        if (!finished || !mountedRef.current) return;
         show(q);
         Animated.timing(opacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
       });
     }
   }, [opacity]);
 
-  // When reduce-motion preference changes mid-cycle, reschedule the pending timer.
+  // When reduce-motion preference changes mid-cycle, stop any in-flight animation and reschedule.
   useEffect(() => {
     const q = currentQuoteRef.current;
-    if (!q || q.durationMs === 0 || timerRef.current === null) return;
-    clearTimeout(timerRef.current);
+    if (!q || q.durationMs === 0) return;
+    if (animRef.current) {
+      animRef.current.stop();
+      animRef.current = null;
+      opacity.setValue(1);
+    }
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(advance, reduceMotion ? REDUCED_MOTION_MS : q.durationMs);
-  }, [reduceMotion, advance]);
+  }, [reduceMotion, advance, opacity]);
 
   // Pick and show the first quote immediately on mount, then start the cycle.
   useEffect(() => {
@@ -88,7 +98,10 @@ export function WaitingPhrases() {
     setCurrentQuote(q);
     currentQuoteRef.current = q;
     timerRef.current = setTimeout(advance, reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (animRef.current) { animRef.current.stop(); animRef.current = null; }
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [advance]);
 
   if (!currentQuote) return null;

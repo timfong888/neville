@@ -141,6 +141,59 @@ describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
     expect(postResolveDuration).toBe(6000);
   });
 
+  it("reduce-motion change during native fade stops animation and reschedules (timerRef is null while fading)", () => {
+    // Simulates: advance() starts Animated.timing (timerRef.current = null).
+    // Reduce-motion preference fires mid-fade → effect stops animation (finished=false),
+    // reschedules at REDUCED_MOTION_MS, and the stale callback does NOT call show().
+    vi.useFakeTimers();
+    const REDUCED_MOTION_MS = 4000;
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let showCount = 0;
+    const advance = () => { showCount++; };
+
+    // Track whether the fade callback ran with finished=false (should not call show)
+    let fadeCbCallCount = 0;
+    let fadeCbFinishedArg: boolean | null = null;
+    let storedFadeCb: ((result: { finished: boolean }) => void) | null = null;
+    const mockAnim = {
+      stop() {
+        // Animated.timing.stop() calls the start callback with finished=false
+        if (storedFadeCb) storedFadeCb({ finished: false });
+      },
+    };
+
+    // Simulate advance() entering the else branch: starts fade, timerRef is null
+    storedFadeCb = ({ finished }) => {
+      fadeCbCallCount++;
+      fadeCbFinishedArg = finished;
+      if (!finished) return; // guard — do not call show
+      showCount++; // would be show(q) in real code
+      timerRef.current = setTimeout(advance, 6000); // 6 s long quote
+    };
+    const animRef = { current: mockAnim as typeof mockAnim | null };
+    // timerRef.current remains null (we're in the fade)
+
+    // Mid-cycle useEffect fires when reduce-motion changes:
+    if (animRef.current) {
+      animRef.current.stop(); // calls fadeCb({ finished: false })
+      animRef.current = null;
+    }
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(advance, REDUCED_MOTION_MS);
+
+    // Fade callback fired with finished=false → no show, no 6 s timer from fade
+    expect(fadeCbCallCount).toBe(1);
+    expect(fadeCbFinishedArg).toBe(false);
+    expect(showCount).toBe(0);
+
+    // Effect scheduled 4 s timer
+    expect(timerRef.current).not.toBeNull();
+    vi.advanceTimersByTime(4001);
+    expect(showCount).toBe(1); // advance() fires at 4 s
+
+    vi.useRealTimers();
+  });
+
   it("mid-cycle reduce-motion change clears old timer and reschedules at 4000 ms (native logic)", () => {
     // Simulates the reschedule useEffect([reduceMotion, advance]):
     // a 6 s timer is running; user enables reduce-motion; it is cleared and replaced with 4 s.
