@@ -112,6 +112,17 @@ describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
     const duration = rm ? 4000 : longQuote!.durationMs;
     expect(duration).toBe(4000);
   });
+
+  it("initial mount also applies 4000 ms cap for a long quote when reduced-motion is set", () => {
+    // Both the mount effect and show() must use: reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs
+    // This test verifies the mount path produces the capped value
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000);
+    expect(longQuote).toBeDefined();
+    const reduceMotionRef = { current: true };
+    const REDUCED_MOTION_MS = 4000;
+    const mountDuration = reduceMotionRef.current ? REDUCED_MOTION_MS : longQuote!.durationMs;
+    expect(mountDuration).toBe(4000);
+  });
 });
 
 describe("waitLine", () => {

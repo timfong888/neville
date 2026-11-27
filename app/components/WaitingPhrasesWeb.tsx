@@ -70,7 +70,7 @@ export function WaitingPhrasesWeb() {
     const { quote: q, nextState } = nextQuote(stateRef.current, Math.random);
     stateRef.current = nextState;
     setCurrentQuote(q);
-    timerRef.current = setTimeout(advance, q.durationMs);
+    timerRef.current = setTimeout(advance, reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
