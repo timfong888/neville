@@ -9,7 +9,7 @@ import { buildAdultVoiceChain } from "@/lib/adult/tts";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
-import { resolveVoice } from "@/lib/voices";
+import { resolveVoiceForUser } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
@@ -63,8 +63,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       { status: 400 },
     );
   }
-  // The browser sends only an id. The model and voice come from the config.
-  const voice = resolveVoice(typeof body.voiceId === "string" ? body.voiceId : null);
+  // voiceId is resolved after session/adult-tier check; adultOnly voices are blocked for non-adult users.
+  const reqVoiceId = typeof body.voiceId === "string" ? body.voiceId : null;
   // Pace and tone are preset ids too. Speed, pause and instruction come from lib/delivery.ts.
   const pace = resolvePace(body.pace);
   const tone = resolveTone(body.tone);
@@ -137,6 +137,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
   // Adult-tier path: allowlisted users get the uncensored model.
   const isAdult = isAdultTierUser(session?.email ?? null);
+  const voice = resolveVoiceForUser(reqVoiceId, isAdult);
   if (isAdult) {
     const adultResult = await writeAdultScript({ key, want, name, variant });
     if (!adultResult.ok) {

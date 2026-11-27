@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import config from "@/config/voices.json";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
 
-const CHEAP = ["heygen/heygen-voice-1-turbo", "google/gemini-3.8-flash-lite-tts", "hexgrad/kokoro-82m", "fish-audio/s2.1-pro-free:free"];
+const CHEAP = ["heygen/heygen-voice-1-turbo", "google/gemini-3.8-flash-lite-tts", "hexgrad/kokoro-82m", "fish-audio/s2.1-pro-free:free", "canopylabs/orpheus-3b-0.1-ft"];
 
 describe("voice choice", () => {
   it("returns the chosen voice when it may be recorded", () => {

@@ -33,11 +33,13 @@ export type Voice = {
    */
   atomic?: boolean;
   tier: Tier;
+  /** When true, this voice is only shown and accessible to adult-tier accounts. */
+  adultOnly?: boolean;
 };
 
 const TIERS: Tier[] = ["free", "cheap", "low", "mid", "premium"];
 
-function load(): { all: Voice[]; defaultId: string } {
+function load(): { all: Voice[]; defaultId: string; adultDefaultId: string } {
   const all = config.voices as Voice[];
   const ids = new Set<string>();
   for (const v of all) {
@@ -55,6 +57,7 @@ function load(): { all: Voice[]; defaultId: string } {
       throw new Error(`config/voices.json: "${v.id}" has an empty or invalid "desc".`);
     }
     if (v.atomic !== undefined && typeof v.atomic !== "boolean") throw new Error(`config/voices.json: "${v.id}" has "atomic" that is not true or false.`);
+    if (v.adultOnly !== undefined && typeof v.adultOnly !== "boolean") throw new Error(`config/voices.json: "${v.id}" has "adultOnly" that is not true or false.`);
     if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);
@@ -65,12 +68,20 @@ function load(): { all: Voice[]; defaultId: string } {
   if (!def) throw new Error(`config/voices.json: default "${config.default}" is not in the list.`);
   if (!def.enabled) throw new Error(`config/voices.json: default "${config.default}" is not enabled.`);
   if (!def.generate) throw new Error(`config/voices.json: default "${config.default}" must have generate on.`);
-  return { all, defaultId: def.id };
+  const adultDefaultKey = (config as { default: string; adultDefault?: string }).adultDefault;
+  if (!adultDefaultKey) throw new Error(`config/voices.json: missing "adultDefault".`);
+  const adultDef = all.find((v) => v.id === adultDefaultKey);
+  if (!adultDef) throw new Error(`config/voices.json: adultDefault "${adultDefaultKey}" is not in the list.`);
+  if (!adultDef.enabled) throw new Error(`config/voices.json: adultDefault "${adultDefaultKey}" is not enabled.`);
+  if (!adultDef.generate) throw new Error(`config/voices.json: adultDefault "${adultDefaultKey}" must have generate on.`);
+  return { all, defaultId: def.id, adultDefaultId: adultDef.id };
 }
 
-const { all, defaultId } = load();
+const { all, defaultId, adultDefaultId } = load();
 
 export const DEFAULT_VOICE_ID = defaultId;
+/** Default voice for adult-tier accounts. Change config/voices.json "adultDefault" to revert. */
+export const ADULT_DEFAULT_VOICE_ID = adultDefaultId;
 
 /** The voices on offer, in the order of the config file. */
 export const ENABLED_VOICES: Voice[] = all.filter((v) => v.enabled);
@@ -85,6 +96,28 @@ export function resolveVoice(id: string | null | undefined): Voice {
   return (
     ENABLED_VOICES.find((v) => v.id === id && v.generate) ?? ENABLED_VOICES.find((v) => v.id === defaultId)!
   );
+}
+
+/**
+ * Like resolveVoice, but respects adult-tier status.
+ * - Non-adult users cannot reach adultOnly voices; they fall back to the standard default.
+ * - Adult users fall back to ADULT_DEFAULT_VOICE_ID instead of DEFAULT_VOICE_ID.
+ */
+export function resolveVoiceForUser(id: string | null | undefined, isAdult: boolean): Voice {
+  const v = ENABLED_VOICES.find((vv) => vv.id === id && vv.generate);
+  if (v) {
+    // Block adult-only voices for non-adult accounts.
+    if (v.adultOnly && !isAdult) return ENABLED_VOICES.find((vv) => vv.id === defaultId)!;
+    return v;
+  }
+  // Unknown / sample-only / missing: use tier-appropriate default.
+  const fallbackId = isAdult ? adultDefaultId : defaultId;
+  return ENABLED_VOICES.find((vv) => vv.id === fallbackId)!;
+}
+
+/** Voices visible in a picker for this user's tier. */
+export function visibleVoices(isAdult: boolean): Voice[] {
+  return isAdult ? ENABLED_VOICES : ENABLED_VOICES.filter((v) => !v.adultOnly);
 }
 
 export const TIER_LABEL: Record<Tier, string> = {

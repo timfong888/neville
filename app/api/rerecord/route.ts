@@ -5,7 +5,7 @@ import { synthesize } from "@/lib/server/tts";
 import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
-import { resolveVoice } from "@/lib/voices";
+import { resolveVoiceForUser } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
@@ -62,7 +62,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const parsed = parseRerecord(body, LIMITS.maxScriptChars);
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
   const { lines } = parsed.value;
-  const voice = resolveVoice(parsed.value.voiceId);
+  const reqVoiceId = parsed.value.voiceId;
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
@@ -80,6 +80,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
   const isAdult = isAdultTierUser(session?.email ?? null);
+  const voice = resolveVoiceForUser(reqVoiceId, isAdult);
   const slot = tester ? null : await takeSlot(visitor(req));
   if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 

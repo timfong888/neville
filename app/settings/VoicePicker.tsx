@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ADULT_DEFAULT_VOICE_ID,
   DEFAULT_VOICE_ID,
-  ENABLED_VOICES,
   TIER_LABEL,
   resolveVoice,
+  visibleVoices,
   voiceBlurb,
 } from "@/lib/voices";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
@@ -17,13 +18,22 @@ export default function VoicePicker() {
   const [chosen, setChosen] = useState(DEFAULT_VOICE_ID);
   const [playing, setPlaying] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [isAdult, setIsAdult] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/adult-tier-status").then((r) => r.json()).then((j: { allowed?: boolean }) => {
+      if (j.allowed) setIsAdult(true);
+    }).catch(() => {});
+  }, []);
 
   // The stored choice is read after the page loads; an id that is no longer
   // offered falls back to the default.
   useEffect(() => {
     setChosen(resolveVoice(readVoiceChoice()).id);
   }, []);
+
+  const voices = visibleVoices(isAdult);
 
   const stop = useCallback(() => {
     audio.current?.pause();
@@ -63,9 +73,9 @@ export default function VoicePicker() {
     <>
       <fieldset className="voicelist">
         <legend className="small muted">
-          {ENABLED_VOICES.length} voices. Samples are pre-made, so listening is free.
+          {voices.length} voices. Samples are pre-made, so listening is free.
         </legend>
-        {ENABLED_VOICES.map((v) => (
+        {voices.map((v) => (
           <div key={v.id} className={`voicerow${chosen === v.id ? " on" : ""}`}>
             <label>
               <input
@@ -78,7 +88,7 @@ export default function VoicePicker() {
               />
               <span className="vname">
                 {v.name}
-                {v.id === DEFAULT_VOICE_ID && <span className="pill">Default</span>}
+                {v.id === (isAdult ? ADULT_DEFAULT_VOICE_ID : DEFAULT_VOICE_ID) && <span className="pill">Default</span>}
               </span>
               <span className="small muted">
                 {[v.generate ? "" : "Sample only", voiceBlurb(v), v.provider, TIER_LABEL[v.tier], v.generate ? PACE_LABEL[paceSupport(v)] : ""]
