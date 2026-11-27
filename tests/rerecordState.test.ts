@@ -50,9 +50,9 @@ describe("rerecordState", () => {
       expect(next).toBe(recording); // identity: same object
     });
 
-    it("does nothing from idle", () => {
+    it("transitions from idle to recording (re-record an already-recorded item)", () => {
       const next = transition(idle, { type: "record_tap" });
-      expect(next).toBe(idle);
+      expect(next.status).toBe("recording");
     });
 
     it("does nothing from done", () => {
