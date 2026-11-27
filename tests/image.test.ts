@@ -181,9 +181,23 @@ describe("imageGate minor-word check", () => {
 // ── imageGate relaxed (issue 215) ────────────────────────────────────────────
 
 describe("imageGate relaxed (issue 215)", () => {
-  it("allows ambiguous family/relative words that strict mode refuses", () => {
-    // "sister", "little" are in MINOR but not MINOR_CLEAR
+  it("allows non-sexual family wishes and ambiguous words", () => {
+    // "sister", "little" are in MINOR but not MINOR_CLEAR; no intimacy word → allowed
     expect(imageGate("my little sister smiling", { relaxed: true }).allowed).toBe(true);
+    expect(imageGate("a hug from my sister", { relaxed: true }).allowed).toBe(true);
+    expect(imageGate("my mother is proud of me", { relaxed: true }).allowed).toBe(true);
+  });
+
+  it("refuses family role + intimacy for relaxed (issue 219 block 4)", () => {
+    const cases: [string, string][] = [
+      ["kiss my sister", "minor"],
+      ["sleep with my stepmother", "minor"],
+    ];
+    for (const [wish, reason] of cases) {
+      const result = imageGate(wish, { relaxed: true });
+      expect(result.allowed, wish).toBe(false);
+      if (!result.allowed) expect(result.reason, wish).toBe(reason);
+    }
   });
 
   it("still refuses MINOR_CLEAR terms even when relaxed", () => {

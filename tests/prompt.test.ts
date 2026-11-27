@@ -374,7 +374,6 @@ describe("sexual content (#170)", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("splitTitle (#205)", () => {
   it("parses a valid Title label and strips it from the script", () => {
     const { script, title } = splitTitle("Line one.\nTitle: Magnetic confidence\nLine two.");
@@ -415,20 +414,11 @@ describe("splitTitle (#205)", () => {
   it("asks the model for a 2 to 5 word title", () => {
     expect(SYSTEM).toMatch(/Title:/);
     expect(SYSTEM).toMatch(/2 to 5 words/);
-=======
-describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
-  it("passes ambiguous-family and age-relative terms with an intimacy word", () => {
-    for (const [wish, label] of [
-      ["I want to kiss my sister", "sister"],
-      ["my little girlfriend", "little"],
-      ["romantic evening with young ladies", "young ladies"],
-      ["I want romantic time with my son", "son"],
-      ["my junior girlfriend", "junior"],
-    ] as [string, string][]) {
-      expect(wishSexualisesMinorRelaxed(wish), label).toBe(false);
-    }
   });
-  it("still withholds clear minor-protection terms with an intimacy word", () => {
+});
+
+describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
+  it("withholds clear minor-protection terms with an intimacy word", () => {
     for (const [wish, label] of [
       ["I want to kiss a teen", "teen"],
       ["I want to kiss my 15 year old classmate", "age+classmate"],
@@ -439,13 +429,32 @@ describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
       expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
     }
   });
-  it("wishMentionsMinor and wishSexualisesMinor are unchanged (image gate unaffected)", () => {
+  it("withholds family role + intimacy (issue 219 block 4, every account)", () => {
+    for (const [wish, label] of [
+      ["I want to kiss my sister", "sister+kiss"],
+      ["sleep with my stepmother", "stepmother+sleep"],
+      ["I want romantic time with my son", "son+romantic"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
+    }
+  });
+  it("passes ambiguous non-family terms and non-sexual family wishes", () => {
+    for (const [wish, label] of [
+      ["my little girlfriend", "little (not family role)"],
+      ["romantic evening with young ladies", "young exception"],
+      ["my junior girlfriend", "junior (not family role)"],
+      ["a hug from my sister", "sister — no intimacy word"],
+      ["my mother is proud of me", "mother — no intimacy word"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(false);
+    }
+  });
+  it("wishMentionsMinor and wishSexualisesMinor (strict) are unchanged", () => {
     for (const wish of ["I want to kiss my sister", "my little girlfriend", "romantic time with my son"]) {
       expect(wishSexualisesMinor(wish), wish).toBe(true);
     }
     for (const wish of ["I want to kiss a teen", "romantic relationship with girls", "kiss my student"]) {
       expect(wishSexualisesMinor(wish), wish).toBe(true);
     }
->>>>>>> 4b9c7b1 (feat/relaxed-filter-215: relaxed minor-word filter for allowlisted accounts)
   });
 });

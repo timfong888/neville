@@ -2,7 +2,7 @@
 // Uses wishMentionsMinor (any minor word) rather than wishSexualisesMinor (minor + intimacy),
 // because every depicted person must be stated as an adult regardless of intent.
 
-import { MINOR_CLEAR, wishMentionsMinor, wishSexualisesMinor } from "@/lib/prompt";
+import { MINOR_CLEAR, wishMentionsMinor, wishSexualisesMinor, wishSexualisesFamilyRole } from "@/lib/prompt";
 
 export type GateResult =
   | { allowed: true }
@@ -34,9 +34,10 @@ export const IMAGE_GUIDANCE: Record<"minor" | "real_person" | "reference_photo",
  */
 export function imageGate(wish: string, opts?: { relaxed?: boolean }): GateResult {
   const minorHit = opts?.relaxed
-    ? MINOR_CLEAR.test(wish)
-    // wishMentionsMinor is the broader check: refuse any wish that mentions a minor,
-    // even without an intimacy word, because every depicted person must be an adult.
+    // Relaxed: refuse clear child-safety terms (no intimacy needed) OR any family role
+    // combined with intimate/explicit words (issue 219 block 4, every account).
+    ? MINOR_CLEAR.test(wish) || wishSexualisesFamilyRole(wish)
+    // Strict: refuse any minor word (no intimacy needed — every depicted person must be an adult).
     : (wishMentionsMinor(wish) || wishSexualisesMinor(wish));
   if (minorHit) return { allowed: false, reason: "minor" };
   if (PROPER_NAME.test(wish)) return { allowed: false, reason: "real_person" };

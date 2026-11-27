@@ -398,17 +398,26 @@ describe("writeScript relaxed filter (issue 215)", () => {
 
   // The GOOD mock script mentions "journey" (a banned phrase); wishes must include "journey"
   // so the bannedIn exception applies and cleanLines passes.
-  it("does not withhold sister+intimacy when relaxed", async () => {
-    plan = {};
+  it("withholds family role + intimacy for relaxed (issue 219 block 4)", async () => {
+    // "sister" is a family role; "kiss" is an intimacy word → withheld for relaxed too.
     const s = await write(0, "I want to kiss my sister, journey across Japan", true);
-    expect(s.source).toBe("model");
-    expect(asked).toHaveLength(1);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(asked).toHaveLength(0);
   });
 
-  it("withholds sister+intimacy when not relaxed (non-relaxed unchanged)", async () => {
+  it("withholds family role + intimacy when not relaxed (unchanged)", async () => {
     const s = await write(0, "I want to kiss my sister, journey across Japan");
     expect(s.source).toBe("template");
     expect(asked).toHaveLength(0);
+  });
+
+  it("allows non-sexual family wish for relaxed", async () => {
+    plan = {};
+    // "sister" with no intimacy word: allowed for relaxed.
+    const s = await write(0, "a hug from my sister, journey across Japan", true);
+    expect(s.source).toBe("model");
+    expect(asked).toHaveLength(1);
   });
 
   it("still withholds teen+intimacy even when relaxed", async () => {
@@ -426,16 +435,26 @@ describe("writeScript relaxed filter (issue 215)", () => {
     expect(all).not.toContain('"tier"');
   });
 
-  it("passes little/young/son/junior through for relaxed, holds for non-relaxed", async () => {
+  it("passes little/young/junior through for relaxed (non-family MINOR words), holds for non-relaxed", async () => {
     plan = {};
     for (const wish of [
       "my little girlfriend, journey across Japan",
       "romantic evening with young ladies, journey across Japan",
-      "romantic time with my son, journey across Japan",
       "my junior girlfriend, journey across Japan",
     ]) {
       expect((await write(0, wish, true)).source, `relaxed: ${wish}`).toBe("model");
       expect((await write(0, wish)).source, `non-relaxed: ${wish}`).toBe("template");
+    }
+  });
+
+  it("withholds family role + intimacy for relaxed (son, stepmother)", async () => {
+    for (const wish of [
+      "romantic time with my son, journey across Japan",
+      "sleep with my stepmother",
+    ]) {
+      const s = await write(0, wish, true);
+      expect(s.source, `relaxed withheld: ${wish}`).toBe("template");
+      expect(s.reason, wish).toBe("withheld");
     }
   });
 });
@@ -453,6 +472,13 @@ describe("writeScript withheld term field (issue 215)", () => {
     expect(s.source).toBe("template");
     expect(s.reason).toBe("withheld");
     expect(s.term).toMatch(/teen/i);
+  });
+
+  it("relaxed withheld via family role: term is the matched family word", async () => {
+    const s = await write(0, "I want to kiss my sister", true);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toBe("sister");
   });
 
   it("non-withheld script has no term field", async () => {
