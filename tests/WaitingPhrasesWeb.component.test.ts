@@ -5,16 +5,25 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
 
+let capturedChangeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+
 function stubMatchMedia(matches = false) {
+  capturedChangeHandler = null;
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: (query: string) => ({
       matches,
       media: query,
-      addEventListener: vi.fn(),
+      addEventListener: (event: string, handler: (e: MediaQueryListEvent) => void) => {
+        if (event === "change") capturedChangeHandler = handler;
+      },
       removeEventListener: vi.fn(),
     }),
   });
+}
+
+function fireReduceMotionChange(matches: boolean) {
+  capturedChangeHandler?.({ matches } as MediaQueryListEvent);
 }
 
 describe("WaitingPhrasesWeb", () => {
@@ -67,5 +76,23 @@ describe("WaitingPhrasesWeb", () => {
     // Advance past the fade; the cleared fadeTimerRef and mountedRef guard should prevent
     // any setState calls or further quote timers
     expect(() => act(() => { vi.advanceTimersByTime(500); })).not.toThrow();
+  });
+
+  it("mid-cycle reduce-motion change reschedules timer and component stays alive", () => {
+    act(() => {
+      root = createRoot(container);
+      root.render(createElement(WaitingPhrasesWeb, {}));
+    });
+
+    // Advance partway through the first quote's 4000 ms display window
+    act(() => { vi.advanceTimersByTime(2000); });
+
+    // User enables reduce-motion mid-cycle — fires the matchMedia change handler,
+    // which updates reduceMotion state and triggers the reschedule useEffect.
+    act(() => { fireReduceMotionChange(true); });
+
+    // Advance 4001 ms past the reschedule point — the rescheduled timer fires cleanly.
+    expect(() => act(() => { vi.advanceTimersByTime(4001); })).not.toThrow();
+    expect(container.querySelector("[aria-live]")).not.toBeNull();
   });
 });

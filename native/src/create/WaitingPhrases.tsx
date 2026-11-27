@@ -19,6 +19,7 @@ export function WaitingPhrases() {
   const mountedRef = useRef(true);
   // Conservative default: cap at REDUCED_MOTION_MS until the async isReduceMotionEnabled() resolves.
   const reduceMotionRef = useRef(true);
+  const currentQuoteRef = useRef<Quote | null>(null);
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null);
   const [reduceMotion, setReduceMotion] = useState(true);
 
@@ -47,6 +48,7 @@ export function WaitingPhrases() {
     const show = (q: Quote) => {
       if (!mountedRef.current) return;
       setCurrentQuote(q);
+      currentQuoteRef.current = q;
       if (q.durationMs > 0) {
         // Reduced-motion: fixed 4 s for every quote regardless of length.
         timerRef.current = setTimeout(advance, rm ? REDUCED_MOTION_MS : q.durationMs);
@@ -71,11 +73,20 @@ export function WaitingPhrases() {
     }
   }, [opacity]);
 
+  // When reduce-motion preference changes mid-cycle, reschedule the pending timer.
+  useEffect(() => {
+    const q = currentQuoteRef.current;
+    if (!q || q.durationMs === 0 || timerRef.current === null) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(advance, reduceMotion ? REDUCED_MOTION_MS : q.durationMs);
+  }, [reduceMotion, advance]);
+
   // Pick and show the first quote immediately on mount, then start the cycle.
   useEffect(() => {
     const { quote: q, nextState } = nextQuote(stateRef.current, Math.random);
     stateRef.current = nextState;
     setCurrentQuote(q);
+    currentQuoteRef.current = q;
     timerRef.current = setTimeout(advance, reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [advance]);

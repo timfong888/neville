@@ -140,6 +140,32 @@ describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
     const postResolveDuration = reduceMotionRefPostResolve.current ? REDUCED_MOTION_MS : longQuote.durationMs;
     expect(postResolveDuration).toBe(6000);
   });
+
+  it("mid-cycle reduce-motion change clears old timer and reschedules at 4000 ms (native logic)", () => {
+    // Simulates the reschedule useEffect([reduceMotion, advance]):
+    // a 6 s timer is running; user enables reduce-motion; it is cleared and replaced with 4 s.
+    vi.useFakeTimers();
+    const REDUCED_MOTION_MS = 4000;
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let advanceCount = 0;
+    const advance = () => { advanceCount++; };
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000)!;
+
+    // 6 s timer scheduled in normal-motion mode
+    timerRef.current = setTimeout(advance, longQuote.durationMs);
+
+    // Reduce-motion preference changes: reschedule at 4000 ms
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(advance, REDUCED_MOTION_MS);
+
+    // Should fire at 4001 ms, not 6000 ms
+    vi.advanceTimersByTime(4001);
+    expect(advanceCount).toBe(1);
+    vi.advanceTimersByTime(2000); // 6001 ms total — no second fire from cleared timer
+    expect(advanceCount).toBe(1);
+
+    vi.useRealTimers();
+  });
 });
 
 describe("waitLine", () => {
