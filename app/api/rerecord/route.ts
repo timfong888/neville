@@ -10,6 +10,7 @@ import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceB
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
+import { isAdultTierUser } from "@/lib/adult/tier";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -78,6 +79,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
+  const isAdult = isAdultTierUser(session?.email ?? null);
   const slot = tester ? null : await takeSlot(visitor(req));
   if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
@@ -118,7 +120,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
-  const vet = await vetScript(key, lines);
+  const vet = await vetScript(key, lines, isAdult);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }

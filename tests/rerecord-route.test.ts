@@ -3,6 +3,7 @@
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import limits from "@/config/limits.json";
+import { VET_SYSTEM, VET_SYSTEM_ADULT } from "@/lib/rerecord";
 
 vi.mock("server-only", () => ({}));
 
@@ -70,6 +71,8 @@ beforeEach(() => {
   webhookHits = [];
   speechFails = false;
   delete process.env.SPEECH_ENABLED;
+  delete process.env.ADULT_TIER_ENABLED;
+  delete process.env.ADULT_TIER_EMAILS;
   L.setLedger(new L.MemoryLedger());
   L.resetAlerts();
 });
@@ -193,5 +196,31 @@ describe("POST /api/rerecord", () => {
     const rows = await L.ledger().recent(10);
     expect(rows.map((r) => r.kind)).toEqual(["vet"]);
     expect(rows[0].estUsd).toBe(0.00002);
+  });
+
+  it("sends VET_SYSTEM (not adult) when no session is present", async () => {
+    const res = await POST(req(script));
+    expect(res.status).toBe(200);
+    const vetCall = calls.find((c) => c.path.startsWith("/chat/completions"));
+    const body = vetCall?.body as { messages: Array<{ role: string; content: string }> };
+    expect(body.messages[0].content).toBe(VET_SYSTEM);
+    expect(body.messages[0].content).not.toBe(VET_SYSTEM_ADULT);
+  });
+
+  it("sends VET_SYSTEM (not adult) even when ADULT_TIER_ENABLED but no signed-in email", async () => {
+    process.env.ADULT_TIER_ENABLED = "true";
+    process.env.ADULT_TIER_EMAILS = "adult@example.com";
+    const res = await POST(req(script));
+    expect(res.status).toBe(200);
+    const vetCall = calls.find((c) => c.path.startsWith("/chat/completions"));
+    const body = vetCall?.body as { messages: Array<{ role: string; content: string }> };
+    // No session → isAdultTierUser(null) = false → standard prompt
+    expect(body.messages[0].content).toBe(VET_SYSTEM);
+  });
+
+  it("still returns 422 for a vet rejection on a non-adult account", async () => {
+    vetReply = "NO";
+    const res = await POST(req(script));
+    expect(res.status).toBe(422);
   });
 });
