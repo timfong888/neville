@@ -5,20 +5,23 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import { lineStarts } from "@/lib/audio";
 import { MAX_NAME, MAX_WANT, type Draft } from "@/lib/draftStore";
 import type { Manifestation } from "@/lib/library/model";
-import { VARIANT_COUNT, neutralScript, scriptLines, titleFor } from "@/lib/script";
+import { VARIANT_COUNT, displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
 import { resolveVoice } from "@/lib/voices";
 
 export { MAX_NAME, MAX_WANT };
 
 export const EXAMPLES = [
-  "I want to be calm and confident when I speak",
-  "a healthy, strong body that I enjoy living in",
-  "to run my own business doing work I love",
-  "a loving, easy relationship with my family",
+  "I am calm and confident when I speak",
+  "I am healthy and strong",
+  "I run my own business doing work I love",
+  "I have a loving, easy relationship with my family",
 ];
 
 /** Where the free-creation count is kept on the device. */
 export const FREE_STORAGE_KEY = "nv_free";
+/** Where the script mode choice is kept on the device. */
+export const SCRIPT_MODE_KEY = "nv_script_mode";
+export type ScriptMode = "exact" | "enhance";
 
 /** The count as stored; anything unreadable is zero. */
 export const parseCount = (raw: string | null): number => {
@@ -68,7 +71,7 @@ export function pickOnCreate(p: VoicePick, id: string, current: string, asDefaul
 }
 
 /** The wish as typed, and the choices from Settings. */
-export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
+export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown; speedStep?: unknown; cadenceStep?: unknown; scriptMode?: ScriptMode };
 
 /** The body of `POST /api/manifest`. The server checks every field again. */
 export function wishRequest(w: Wish): WishRequest {
@@ -79,6 +82,9 @@ export function wishRequest(w: Wish): WishRequest {
     variant: w.variant ?? 0,
     pace: w.pace,
     tone: w.tone,
+    speedStep: w.speedStep,
+    cadenceStep: w.cadenceStep,
+    ...(w.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
   };
 }
 
@@ -87,9 +93,11 @@ export type Made = {
   lines: string[];
   /** About the wish only when the server vetted it and recorded it. */
   title: string;
-  /** Why this is not the recording that was asked for; empty when it is. */
+  /** Why this is not the recording that was asked for, or which mode was used. */
   note: string;
   recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
+  /** "exact" when the script uses the person's own sentences unchanged. */
+  scriptMode?: "exact";
 };
 
 /** The server's words, plus when a daily limit lifts: its day is the UTC date (lib/limits.ts). */
@@ -112,10 +120,11 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const r = await api.manifest(wishRequest(w));
     const voice = resolveVoice(r.voiceId);
     return {
-      title: r.source === "template" ? FALLBACK_TITLE : titleFor(w.want),
+      title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
       lines: r.lines,
-      note: r.source === "template" ? noteForReason(r.reason) : "",
+      note: r.source === "template" ? noteForReason(r.reason) : r.scriptMode === "exact" ? "Your exact words." : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
+      ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
     };
   } catch (e) {
     const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
@@ -148,8 +157,18 @@ export function lineForProgress(index: number, at: number, starts: number[]): nu
   return lineAt(starts, at);
 }
 
+/** Label for the "go to playlist" button on the recording screen. */
+export const playlistLabel = (savedId: string): string =>
+  savedId ? "My playlist" : "Save and open playlist";
+
+/** The Library tab route in the native app. */
+export const LIBRARY_TAB_ROUTE = "/(tabs)/library" as const;
+
+/** The Library route on the web. */
+export const LIBRARY_WEB_ROUTE = "/library" as const;
+
 /** The Library item for a result, as the website's Save builds it. */
-export function toManifestation(made: Made, w: Draft, id: string, now = Date.now()): Manifestation {
+export function toManifestation(made: Made, w: Wish, id: string, now = Date.now()): Manifestation {
   return {
     id,
     title: made.title,
@@ -161,5 +180,7 @@ export function toManifestation(made: Made, w: Draft, id: string, now = Date.now
     hasAudio: !!made.recording,
     createdAt: now,
     updatedAt: now,
+    ...(typeof w.speedStep === "string" ? { speedStep: w.speedStep } : {}),
+    ...(typeof w.cadenceStep === "string" ? { cadenceStep: w.cadenceStep } : {}),
   };
 }

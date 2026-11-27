@@ -27,7 +27,7 @@ Answer NO if any part: mentions anyone under 18, teenagers, children, minors, sc
 
 Reply with one word: OK or NO.`;
 
-export type RerecordInput = { lines: string[]; voiceId: string | null };
+export type RerecordInput = { lines: string[]; voiceId: string | null; speedStep: string | null; cadenceStep: string | null };
 
 export type Parsed = { ok: true; value: RerecordInput } | { ok: false; error: string };
 
@@ -36,7 +36,7 @@ const MAX_LINES = 40;
 /** Validates the browser's request. `maxChars` is config/limits.json's maxScriptChars. */
 export function parseRerecord(body: unknown, maxChars: number): Parsed {
   if (!body || typeof body !== "object") return { ok: false, error: "Send JSON." };
-  const b = body as { lines?: unknown; voiceId?: unknown };
+  const b = body as { lines?: unknown; voiceId?: unknown; speedStep?: unknown; cadenceStep?: unknown };
   if (!Array.isArray(b.lines) || !b.lines.every((l) => typeof l === "string")) {
     return { ok: false, error: "Send the script as a list of lines." };
   }
@@ -47,7 +47,15 @@ export function parseRerecord(body: unknown, maxChars: number): Parsed {
   if (chars > maxChars) {
     return { ok: false, error: `This script is ${chars} characters. Recording takes up to ${maxChars}; shorten it a little.` };
   }
-  return { ok: true, value: { lines, voiceId: typeof b.voiceId === "string" ? b.voiceId : null } };
+  return {
+    ok: true,
+    value: {
+      lines,
+      voiceId: typeof b.voiceId === "string" ? b.voiceId : null,
+      speedStep: typeof b.speedStep === "string" ? b.speedStep : null,
+      cadenceStep: typeof b.cadenceStep === "string" ? b.cadenceStep : null,
+    },
+  };
 }
 
 /** The model's verdict. Anything but a clear OK is a no. */

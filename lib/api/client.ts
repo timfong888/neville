@@ -18,6 +18,8 @@ export type ApiErrorData = {
   code?: string;
   balance?: number;
   creditReturned?: boolean;
+  /** Actionable suggestions shown below the error message, when the server sent them. */
+  hint?: string;
 };
 
 export type AccountState = {
@@ -39,6 +41,12 @@ export type Recording = {
   reason?: string;
   /** Line start times as fractions of the clip, when the server sent sound ones. */
   starts?: number[];
+  /** 2–5 word title from the model, via X-Title (base64 UTF-8). Absent for templates. */
+  title?: string;
+  /** Credits balance after charging. "unlimited" for testers, digit string, or absent when not sent. */
+  creditsBalance?: string | null;
+  /** Which writing mode produced this script: "exact" or absent when enhance. */
+  scriptMode?: "exact";
 };
 
 /** Thrown for any non-2xx response. `lines` is the written script when only the voice failed. */
@@ -79,6 +87,10 @@ export type WishRequest = {
   variant?: number;
   pace?: unknown;
   tone?: unknown;
+  speedStep?: unknown;
+  cadenceStep?: unknown;
+  /** "exact" keeps the person's own sentences unchanged; "enhance" (default) uses AI. */
+  scriptMode?: "exact" | "enhance";
 };
 
 /** Line start times from the `X-Line-Starts` header, or undefined unless they are all sound. */
@@ -101,6 +113,18 @@ export function readScript(header: string | null): string[] {
   return lines;
 }
 
+/** The title from the `X-Title` header: base64 of UTF-8 string. Undefined when missing or unreadable. */
+export function readTitle(header: string | null): string | undefined {
+  if (!header) return undefined;
+  try {
+    const bin = atob(header);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createApi(opts: ApiOptions) {
   const base = opts.baseUrl.replace(/\/+$/, "");
   const doFetch = opts.fetch ?? fetch;
@@ -109,13 +133,14 @@ export function createApi(opts: ApiOptions) {
     const extra = (await opts.headers?.()) ?? {};
     const res = await doFetch(`${base}${path}`, { cache: "no-store", ...(opts.credentials ? { credentials: opts.credentials } : {}), ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
     if (res.ok) return res;
-    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown } | null;
+    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown; hint?: unknown } | null;
     const lines = Array.isArray(j?.lines) && j.lines.every((l) => typeof l === "string") ? (j.lines as string[]) : undefined;
     const data = j
       ? {
           ...(typeof j.code === "string" ? { code: j.code } : {}),
           ...(typeof j.balance === "number" ? { balance: j.balance } : {}),
           ...(j.creditReturned === true ? { creditReturned: true } : {}),
+          ...(typeof j.hint === "string" && j.hint ? { hint: j.hint } : {}),
         }
       : undefined;
     throw new ApiError(j?.error ?? `Request failed (${res.status}).`, res.status, j?.code, lines, data);
@@ -131,6 +156,9 @@ export function createApi(opts: ApiOptions) {
   async function recording(res: Response, lines?: string[]): Promise<Recording> {
     const script = lines ?? readScript(res.headers.get("X-Script"));
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
+    const title = readTitle(res.headers.get("X-Title"));
+    const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
+    const scriptModeHeader = res.headers.get("X-Script-Mode");
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -138,7 +166,10 @@ export function createApi(opts: ApiOptions) {
       voiceId: res.headers.get("X-Voice-Id") ?? "",
       source: res.headers.get("X-Script-Source") ?? "",
       ...(reason !== undefined ? { reason } : {}),
+      ...(title !== undefined ? { title } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
+      ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
+      ...(scriptModeHeader === "exact" ? { scriptMode: "exact" as const } : {}),
     };
   }
 
@@ -161,8 +192,8 @@ export function createApi(opts: ApiOptions) {
       return recording(await call("/api/manifest", json(req)));
     },
     /** Records an existing script again, in one voice. */
-    async rerecord(lines: string[], voiceId: string): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId })), lines);
+    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown } = {}): Promise<Recording> {
+      return recording(await call("/api/rerecord", json({ lines, voiceId, ...opts })), lines);
     },
 
     async credits(): Promise<CreditsResponse> {
