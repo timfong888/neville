@@ -60,6 +60,28 @@ describe("api client", () => {
     expect(r.voiceId).toBe("v2");
   });
 
+  it("reads X-Script-Term into Recording.term only when present (#214)", async () => {
+    const withTerm = new Response(new Uint8Array([1]), {
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "X-Script": b64(["One."]),
+        "X-Voice-Id": "v1",
+        "X-Script-Source": "template",
+        "X-Script-Reason": "withheld",
+        "X-Script-Term": "sister",
+      },
+    });
+    const r = await createApi({ baseUrl: "https://x.test", fetch: () => Promise.resolve(withTerm) }).manifest({ want: "calm" });
+    expect(r.reason).toBe("withheld");
+    expect(r.term).toBe("sister");
+
+    const withoutTerm = new Response(new Uint8Array([1]), {
+      headers: { "Content-Type": "audio/mpeg", "X-Script": b64(["One."]), "X-Voice-Id": "v1", "X-Script-Source": "model" },
+    });
+    const r2 = await createApi({ baseUrl: "https://x.test", fetch: () => Promise.resolve(withoutTerm) }).manifest({ want: "calm" });
+    expect(r2.term).toBeUndefined();
+  });
+
   it("builds the upload with FormData.append only (React Native has no set)", async () => {
     const parts: string[] = [];
     const real = globalThis.FormData;

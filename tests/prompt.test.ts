@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorCategory, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -347,6 +347,32 @@ describe("sexual content (#170)", () => {
   });
   it("the prompt names young women and young men as adults in their early twenties", () => {
     expect(SYSTEM).toMatch(/young women.*adults? in their early twenties|young men.*adults? in their early twenties/i);
+  });
+
+  describe("wishSexualisesMinorCategory returns the matched term (#214)", () => {
+    it("returns a term for each minor word that is a plain word", () => {
+      expect(wishSexualisesMinorCategory("I want to kiss my sister")?.term).toBe("sister");
+      expect(wishSexualisesMinorCategory("a romantic evening with a little girl")?.term).toBe("little");
+      expect(wishSexualisesMinorCategory("I want girls to find me attractive")?.term).toBe("girls");
+      expect(wishSexualisesMinorCategory("I want young ladies to kiss me")?.term).toBe("young");
+    });
+    it("returns null for the term when no minor word is present", () => {
+      expect(wishSexualisesMinorCategory("I want a romantic evening with my wife")).toBeNull();
+      expect(wishSexualisesMinorCategory("I want to be calm")).toBeNull();
+    });
+    it("keeps the category string unchanged", () => {
+      expect(wishSexualisesMinorCategory("I want to kiss my sister")?.category).toBe("minor_word+intimacy_word");
+      expect(wishSexualisesMinorCategory("I want to see my sister naked")?.category).toBe("minor_word+explicit_word");
+    });
+    it("term passes the safety filter: only letters, apostrophes, hyphens and spaces, 1–24 chars", () => {
+      const result = wishSexualisesMinorCategory("I want to kiss my 15 year old classmate");
+      expect(result?.category).toBe("minor_word+intimacy_word");
+      // "15" or "15 year old" would fail the regex; a plain word passes
+      const term = result?.term;
+      if (term !== null && term !== undefined) {
+        expect(term).toMatch(/^[a-z][a-z' -]{1,24}$/);
+      }
+    });
   });
   it("the prompt sends romantic wishes about minors to a peace affirmation, not a nearest scene", () => {
     expect(SYSTEM).toMatch(/Never write anything romantic or sexual about anyone under 18[^]*gentle affirmation of peace/);

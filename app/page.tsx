@@ -355,6 +355,7 @@ export default function DemoPage() {
     let noLoop: "" | "voice" | "build" = "";
     let why = "";
     let scriptReason: string | undefined;
+    let scriptTerm: string | undefined;
     // Mix voices on: each new recording takes the next voice in the set.
     const mixing = readMixOn();
     const voice = mixing ? resolveVoice(peekMixVoice()) : studioVoice;
@@ -380,6 +381,7 @@ export default function DemoPage() {
         const audio = await res.blob();
         const scriptSource = res.headers.get("X-Script-Source") ?? "";
         scriptReason = res.headers.get("X-Script-Reason") ?? undefined;
+        scriptTerm = res.headers.get("X-Script-Term") ?? undefined;
         const base = {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
@@ -434,7 +436,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? noteForReason(scriptReason) : "",
+            next.source === "template" ? noteForReason(scriptReason, scriptTerm) : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"

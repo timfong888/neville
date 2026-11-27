@@ -339,6 +339,28 @@ describe("writeScript fallback log (#176)", () => {
     expect(all).toMatch(/"category":"minor_word\+intimacy_word"/);
     expect(all).not.toMatch(/classmate|kiss|15/);
   });
+
+  it("includes the matched term in the withheld log and Script, never other wish text (#214)", async () => {
+    plan = {};
+    const s = await write(0, "I want to kiss my sister");
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toBe("sister");
+    expect(all).toMatch(/"term":"sister"/);
+    expect(all).not.toMatch(/kiss/);
+  });
+
+  it("includes term for a numeric-age wish only when the matched word passes the safety filter (#214)", async () => {
+    plan = {};
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    // "15" does not pass /^[a-z][a-z' -]{1,24}$/ — term is absent or null
+    if (s.term !== undefined) expect(s.term).toMatch(/^[a-z][a-z' -]{1,24}$/);
+    expect(all).not.toMatch(/classmate|kiss|15/);
+  });
 });
 
 describe("writeScript reason header (#176)", () => {
@@ -375,6 +397,22 @@ describe("writeScript reason header (#176)", () => {
     expect(s).toMatchObject({ source: "template", reason: "withheld" });
     const alerts = error.mock.calls.filter((c: unknown[]) => c[0] === "[ALERT]");
     expect(alerts).toHaveLength(0);
+  });
+
+  it("sets script.term only for withheld; non-withheld scripts have no term (#214)", async () => {
+    for (const [planKey, wish] of [
+      [{ [M1]: ["400"] }, "a neutral wish"],
+      [{ [M1]: ["thin"] }, "a neutral wish"],
+    ] as Array<[Record<string, Reply[]>, string]>) {
+      plan = planKey;
+      const s = await write(0, wish);
+      expect(s.term).toBeUndefined();
+      error.mockClear();
+    }
+    // Withheld with a named word: term is set
+    plan = {};
+    const ws = await write(0, "I want to kiss my sister");
+    expect(ws.term).toBe("sister");
   });
 
   it("never puts wish text in the [ALERT] line", async () => {
