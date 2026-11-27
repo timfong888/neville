@@ -99,8 +99,8 @@ const withReset = (e: ApiError): string => (e.code === "visitor_full" || e.code 
 export function noteForReason(reason: string | undefined, term?: string): string {
   if (reason === "withheld") {
     return term
-      ? `That wish was held back because of the word "${term}". Try different wording.`
-      : "That wish was held back, so this is a general script. Try wording it differently.";
+      ? `That wish was held back because of the word "${term}". Try describing adults only, for example "women in their early twenties", and avoid words for children or relatives.`
+      : `That wish was held back. Try describing adults only, for example "women in their early twenties".`;
   }
   return "A personal script could not be written just now, so this is a general one.";
 }

@@ -50,21 +50,21 @@ describe("the Create flow (#120)", () => {
 
   it("shows a withheld-specific note when reason is withheld (no term)", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), wish, true);
-    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.note).toBe(`That wish was held back. Try describing adults only, for example "women in their early twenties".`);
     expect(m.title).toBe("A moment of calm");
   });
 
   it("shows the term in the note when the server sends one (#214)", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld", term: "sister" })), wish, true);
-    expect(m.note).toBe('That wish was held back because of the word "sister". Try different wording.');
+    expect(m.note).toBe(`That wish was held back because of the word "sister". Try describing adults only, for example "women in their early twenties", and avoid words for children or relatives.`);
     expect(m.title).toBe("A moment of calm");
   });
 
-  it("noteForReason: withheld with term uses the word note; without term uses the generic withheld note (#214)", () => {
-    expect(noteForReason("withheld", "little")).toBe('That wish was held back because of the word "little". Try different wording.');
-    expect(noteForReason("withheld", "young")).toBe('That wish was held back because of the word "young". Try different wording.');
-    expect(noteForReason("withheld")).toBe("That wish was held back, so this is a general script. Try wording it differently.");
-    expect(noteForReason("withheld", undefined)).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+  it("noteForReason: withheld with term uses the word note; without term uses the guidance note (#214)", () => {
+    expect(noteForReason("withheld", "little")).toBe(`That wish was held back because of the word "little". Try describing adults only, for example "women in their early twenties", and avoid words for children or relatives.`);
+    expect(noteForReason("withheld", "young")).toBe(`That wish was held back because of the word "young". Try describing adults only, for example "women in their early twenties", and avoid words for children or relatives.`);
+    expect(noteForReason("withheld")).toBe(`That wish was held back. Try describing adults only, for example "women in their early twenties".`);
+    expect(noteForReason("withheld", undefined)).toBe(`That wish was held back. Try describing adults only, for example "women in their early twenties".`);
   });
 
   it("noteForReason: non-withheld reasons unchanged (#214)", () => {
