@@ -42,6 +42,8 @@ export default function Recording() {
   const [editScript, setEditScript] = useState(() => (made?.lines ?? []).join("\n"));
   const [rerecording, setRerecording] = useState(false);
   const [rrError, setRrError] = useState("");
+  // One-step undo: the Made snapshot before the last re-record (D120).
+  const [prevMade, setPrevMade] = useState<typeof made>(null);
 
   // Sync editScript when made changes externally (e.g. after a successful re-record),
   // but only when the edit matches the previous lines (user has not drifted further).
@@ -151,10 +153,12 @@ export default function Recording() {
     stop();
     setRerecording(true);
     setRrError("");
+    const snapshot = made; // capture before updateMade changes c.made
     try {
       const voiceId = made.recording?.voiceId ?? c.voiceId;
       const r = await api.rerecord(lines, voiceId);
       await updateMade(r.audio, r.mime, r.voiceId, lines);
+      setPrevMade(snapshot);
       setToast("New recording ready. Tap Play to hear it.");
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined;
@@ -163,6 +167,16 @@ export default function Recording() {
     } finally {
       setRerecording(false);
     }
+  };
+
+  const undoNativeRerecord = async () => {
+    if (!prevMade?.recording) return;
+    const r = prevMade.recording;
+    await updateMade(r.audio, r.mime, r.voiceId, prevMade.lines);
+    setEditScript(prevMade.lines.join("\n"));
+    setPrevMade(null);
+    setToast("");
+    setRrError("");
   };
 
   if (rerecording) {
@@ -207,6 +221,9 @@ export default function Recording() {
       />
       {scriptDiffers && (
         <Button label="Re-record" onPress={() => void rerecord()} disabled={playing} />
+      )}
+      {prevMade && !scriptDiffers && (
+        <Button small label="Undo re-record" onPress={() => void undoNativeRerecord()} />
       )}
 
       <Text style={s.muted}>

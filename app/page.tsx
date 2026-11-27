@@ -508,9 +508,13 @@ export default function DemoPage() {
         saveUrl: undefined,
         speech: undefined,
       };
+      // Keep the old URL alive so Undo can restore it; revocation happens on undo or on
+      // the next re-record (at which point prevMade is replaced below).
+      if (prevMade) {
+        URL.revokeObjectURL(prevMade.url);
+        if (prevMade.saveUrl) URL.revokeObjectURL(prevMade.saveUrl);
+      }
       setPrevMade(made);
-      URL.revokeObjectURL(made.url);
-      if (made.saveUrl) URL.revokeObjectURL(made.saveUrl);
       setMade(newMade);
       setEditScript(lines.join("\n"));
       if (savedId) {
@@ -532,11 +536,24 @@ export default function DemoPage() {
 
   const undoRerecord = () => {
     if (!prevMade) return;
+    const old = prevMade;
     URL.revokeObjectURL(made?.url ?? "");
-    setMade(prevMade);
-    setEditScript((prevMade.saveLines ?? prevMade.lines).join("\n"));
+    setMade(old);
+    setEditScript((old.saveLines ?? old.lines).join("\n"));
     setPrevMade(null);
     setRrError("");
+    if (savedId) {
+      void (async () => {
+        try {
+          const store = await resolveStore();
+          const audio = await (await fetch(old.url)).blob();
+          await store.saveManifestation(
+            { id: savedId, title: old.source === "template" ? FALLBACK_TITLE : (old.title ?? displayTitle(toYouStatement(want))), want: want.trim(), firstName: name.trim(), lines: old.saveLines ?? old.lines, voiceId: old.voiceId, voiceName: old.voiceName, hasAudio: true, createdAt: Date.now(), updatedAt: Date.now() },
+            audio,
+          );
+        } catch { /* non-fatal */ }
+      })();
+    }
   };
 
   const create = () => {

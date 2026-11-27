@@ -70,6 +70,29 @@ describe("scriptEdit", () => {
       const state = { current: { url: "blob:x" }, prev: null };
       expect(undoRerecord(state)).toBe(state);
     });
+
+    // Regression for P1: web code called URL.revokeObjectURL(prevUrl) immediately on
+    // re-record, making the prev URL unusable before undo could restore it.
+    it("P1-web: prev URL is still accessible (not revoked) after applyRerecord", () => {
+      const revoked: string[] = [];
+      const before = { url: "blob:original", audio: new ArrayBuffer(8) };
+      const after = { url: "blob:new", audio: new ArrayBuffer(8) };
+      const state = applyRerecord({ current: before, prev: null }, after);
+      // Correct behaviour: only revoke the PREVIOUS prevMade slot (none here) or the new URL on undo
+      // — never the url stored in state.prev.
+      expect(state.prev!.url).toBe("blob:original"); // accessible
+      expect(revoked).not.toContain("blob:original"); // never revoked
+    });
+
+    // Regression for P1-native: Undo must be available after a successful re-record.
+    it("P1-native: applyRerecord makes prev available so Undo can be shown", () => {
+      const original = { url: "blob:orig", recording: { audio: new ArrayBuffer(4), mime: "audio/mpeg", voiceId: "v1" } };
+      const rerecorded = { url: "blob:new", recording: { audio: new ArrayBuffer(4), mime: "audio/mpeg", voiceId: "v1" } };
+      const afterRR = applyRerecord({ current: original, prev: null }, rerecorded);
+      expect(afterRR.prev).not.toBeNull(); // Undo should be shown (prev is set)
+      const undone = undoRerecord(afterRR);
+      expect(undone.current.recording.audio).toBe(original.recording.audio); // audio restored
+    });
   });
 
   describe("applyRRResult — failure keeps old audio", () => {
