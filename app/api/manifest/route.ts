@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
-import { writeScript } from "@/lib/server/writer";
+import { type Script, writeScript } from "@/lib/server/writer";
+import { DEFAULT_REFRAIN, exactLines, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { neutralScript } from "@/lib/script";
+import { captureEvent } from "@/lib/server/telemetry";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
@@ -44,7 +47,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
-  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown; repeat?: unknown };
+  let body: { want?: unknown; name?: unknown; voiceId?: unknown; variant?: unknown; pace?: unknown; tone?: unknown; repeat?: unknown; scriptMode?: unknown };
   try {
     body = await req.json();
     if (!body || typeof body !== "object") throw new Error("not an object");
@@ -122,7 +125,20 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
-  const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+  const isExact = body.scriptMode === "exact";
+  let script: Script;
+  if (isExact) {
+    if (wishSexualisesMinor(want)) {
+      captureEvent("script_withheld", { route: "manifest" });
+      const category = wishSexualisesMinorCategory(want);
+      script = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN, ...(category ? {} : {}) };
+    } else {
+      const { lines, refrain } = exactLines(want);
+      script = { lines, source: "exact", refrain };
+    }
+  } else {
+    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+  }
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
   // can be cut apart in the browser.
@@ -134,8 +150,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
   const spoken = recorded.join(" ").length;
-  // A template script after paid tries is recorded too: those tries were billed.
-  if (script.source === "model" || (script.costUsd ?? 0) > 0) {
+  // A template script after paid tries is recorded too: those tries were billed. Exact mode is free (no model).
+  if (script.source === "model" || script.source === "template" && (script.costUsd ?? 0) > 0) {
     // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
     await record({ route: "manifest", kind: "script", source: script.source, model: script.model ?? null, chars: spoken, estUsd: script.costUsd ?? null });
   }
@@ -207,6 +223,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
       ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),
+      ...(script.source === "exact" ? { "X-Script-Mode": "exact" } : {}),
       ...(script.title ? { "X-Title": Buffer.from(script.title, "utf8").toString("base64") } : {}),
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),

@@ -263,6 +263,6 @@ const s = StyleSheet.create({
   on: { backgroundColor: "#2a3142", borderColor: "#8ab4ff" },
   off: { opacity: 0.5 },
   script: { gap: 10, marginTop: 8 },
-  line: { color: "#e6e9ef", fontSize: 18, lineHeight: 26 },
+  line: { color: "#e6e9ef", fontSize: 15, lineHeight: 22 },
   activeLine: { color: colors.accentText, fontWeight: "600" },
 });

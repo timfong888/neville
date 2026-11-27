@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest, readTitle } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, LIBRARY_TAB_ROUTE, LIBRARY_WEB_ROUTE, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, playlistLabel, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
@@ -158,6 +158,29 @@ describe("the Create flow (#120)", () => {
   });
 });
 
+describe("exact mode (#229)", () => {
+  it("sends scriptMode: exact in the request body when mode is exact", () => {
+    const req = wishRequest({ want: "I am calm.", name: "", scriptMode: "exact" });
+    expect(req).toMatchObject({ scriptMode: "exact" });
+  });
+  it("omits scriptMode when mode is enhance (default)", () => {
+    const req = wishRequest({ want: "I am calm.", name: "" });
+    expect(req).not.toHaveProperty("scriptMode");
+    const req2 = wishRequest({ want: "I am calm.", name: "", scriptMode: "enhance" });
+    expect(req2).not.toHaveProperty("scriptMode");
+  });
+  it("shows 'Your exact words.' as the note when source is exact", async () => {
+    const m = await makeManifestation(api(rec({ source: "exact", scriptMode: "exact" })), wish, true);
+    expect(m.note).toBe("Your exact words.");
+    expect(m.scriptMode).toBe("exact");
+  });
+  it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
+    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.scriptMode).toBeUndefined();
+  });
+});
+
 describe("X-Title header round trip (#205)", () => {
   it("decodes a base64 UTF-8 title correctly", () => {
     const title = "Magnetic confidence";
@@ -176,5 +199,20 @@ describe("X-Title header round trip (#205)", () => {
   });
   it("returns undefined for a corrupt value, not an error", () => {
     expect(readTitle("not-valid-base64!!!")).toBeUndefined();
+  });
+});
+
+describe("playlist button (#241)", () => {
+  it("shows 'My playlist' when already saved", () => {
+    expect(playlistLabel("some-saved-id")).toBe("My playlist");
+  });
+  it("shows 'Save and open playlist' when not yet saved", () => {
+    expect(playlistLabel("")).toBe("Save and open playlist");
+  });
+  it("native route targets the library tab", () => {
+    expect(LIBRARY_TAB_ROUTE).toBe("/(tabs)/library");
+  });
+  it("web route targets the library page", () => {
+    expect(LIBRARY_WEB_ROUTE).toBe("/library");
   });
 });
