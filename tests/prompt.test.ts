@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { exactLines, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { exactLines, firstToSecond, addNameToExactLines, speakerFirstPersonIn, thankYouIn, pronounTransform, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -447,5 +447,136 @@ describe("exactLines (#229)", () => {
     const { lines } = exactLines("I am calm. I am strong.");
     expect(lines[0]).toBe("I am calm.");
     expect(lines[1]).toBe("I am strong.");
+  });
+});
+
+describe("firstToSecond (#255)", () => {
+  it("converts I am to you are", () => {
+    expect(firstToSecond("I am effortlessly confident.")).toBe("You are effortlessly confident.");
+  });
+  it("converts I'm to you are", () => {
+    expect(firstToSecond("I'm calm and strong.")).toBe("You are calm and strong.");
+  });
+  it("converts my to your", () => {
+    expect(firstToSecond("My confidence is real.")).toBe("Your confidence is real.");
+  });
+  it("converts me to you", () => {
+    expect(firstToSecond("People see me clearly.")).toBe("People see you clearly.");
+  });
+  it("converts myself to yourself", () => {
+    expect(firstToSecond("I trust myself.")).toBe("You trust yourself.");
+  });
+  it("capitalises the first letter of the result", () => {
+    expect(firstToSecond("I attract success.").charAt(0)).toBe("Y");
+  });
+  it("leaves second-person sentences unchanged", () => {
+    expect(firstToSecond("You are calm and strong.")).toBe("You are calm and strong.");
+  });
+});
+
+describe("addNameToExactLines (#255)", () => {
+  it("prefixes the first nameMin sentences with the name", () => {
+    const lines = ["You are confident.", "You are strong.", "You are calm.", "You are clear.", "You are steady.", "You are present."];
+    const out = addNameToExactLines(lines, "Tim");
+    expect(out.filter((l) => l.startsWith("Tim, ")).length).toBeGreaterThanOrEqual(5);
+  });
+  it("prefixes all sentences when fewer than nameMin are available", () => {
+    const lines = ["You are confident.", "You are calm."];
+    const out = addNameToExactLines(lines, "Tim");
+    expect(out[0]).toBe("Tim, you are confident.");
+    expect(out[1]).toBe("Tim, you are calm.");
+  });
+  it("returns lines unchanged when no name is given", () => {
+    const lines = ["You are confident."];
+    expect(addNameToExactLines(lines, "")).toEqual(lines);
+  });
+  it("lowercases the sentence start after the name prefix", () => {
+    const out = addNameToExactLines(["You are calm."], "Tim");
+    expect(out[0]).toBe("Tim, you are calm.");
+  });
+});
+
+describe("exactLines with name (#255) — regression test", () => {
+  it("transforms first person to second person when name given", () => {
+    const { lines } = exactLines("I am effortlessly confident and seductive.", "Tim");
+    expect(lines[0]).not.toMatch(/\bI\b/);
+    expect(lines[0]).toMatch(/you are/i);
+    expect(lines.join(" ")).toContain("Tim");
+  });
+  it("adds name prefix to reach 5 uses given enough sentences", () => {
+    const wish = "I am confident. I am strong. I am calm. I am clear. I am steady.";
+    const { lines } = exactLines(wish, "Tim");
+    const nameCount = lines.filter((l) => l.startsWith("Tim, ")).length;
+    expect(nameCount).toBeGreaterThanOrEqual(5);
+    expect(lines.join(" ")).not.toMatch(/\bI\b/);
+  });
+  it("backward compatible: no name leaves sentences as-is", () => {
+    const { lines, refrain } = exactLines("I am calm. I am strong.");
+    expect(lines[0]).toBe("I am calm.");
+    expect(refrain).toBe("I am strong."); // longest sentence (12 > 10 chars) wins
+  });
+  it("refrain is the longest transformed sentence without name prefix", () => {
+    const { refrain } = exactLines("I am calm. I am effortlessly confident and seductive.", "Tim");
+    expect(refrain).toBe("You are effortlessly confident and seductive.");
+    expect(refrain).not.toMatch(/\bI\b/);
+  });
+  it("no-name case uses you only and does not invent a name", () => {
+    const { lines } = exactLines("I am effortlessly confident.", undefined);
+    expect(lines[0]).toBe("I am effortlessly confident.");
+    expect(lines.join(" ")).not.toContain("Tim");
+  });
+});
+
+describe("speakerFirstPersonIn and thankYouIn (#255)", () => {
+  it("detects I am in script lines", () => {
+    expect(speakerFirstPersonIn(["You are calm.", "I am here with you."])).toBe("I am");
+  });
+  it("detects I feel in script lines", () => {
+    expect(speakerFirstPersonIn(["You feel strong.", "I feel joy when you succeed."])).toBe("I feel");
+  });
+  it("returns null for clean second-person lines", () => {
+    expect(speakerFirstPersonIn(["You are calm.", "You feel strong.", "It is done."])).toBeNull();
+  });
+  it("detects thank you in script lines", () => {
+    expect(thankYouIn(["Thank you for this moment."])).not.toBeNull();
+    expect(thankYouIn(["You feel the warmth in your chest."])).toBeNull();
+  });
+  it("detects thanks in script lines", () => {
+    expect(thankYouIn(["Thanks, that was real."])).not.toBeNull();
+  });
+  it("does not flag gratitude affirmations — only explicit thank-you phrases", () => {
+    expect(thankYouIn(["You feel grateful for the peace you carry."])).toBeNull();
+    expect(thankYouIn(["Gratitude fills this moment."])).toBeNull();
+  });
+});
+
+describe("pronounTransform (#255)", () => {
+  it("transforms all first-person speaker words to second-person across lines", () => {
+    const lines = ["I am calm.", "I feel the warmth.", "My heart is steady."];
+    const out = pronounTransform(lines);
+    expect(out.join(" ")).not.toMatch(/\bI\b/);
+    expect(out[0]).toBe("You are calm.");
+    expect(out[1]).toBe("You feel the warmth.");
+    expect(out[2]).toBe("Your heart is steady.");
+  });
+  it("leaves second-person lines unchanged", () => {
+    const lines = ["You are calm.", "You feel the warmth.", "It is done."];
+    expect(pronounTransform(lines)).toEqual(lines);
+  });
+});
+
+describe("authority voice — SYSTEM prompt (#255)", () => {
+  it("speaks in the second person, never as I", () => {
+    expect(SYSTEM).toMatch(/second person/);
+    expect(SYSTEM).toMatch(/never as "I"/);
+  });
+  it("includes you already as a voice example", () => {
+    expect(SYSTEM).toMatch(/you already/);
+  });
+  it("explicitly forbids I am and I feel as speaker words", () => {
+    expect(SYSTEM).toMatch(/no "I am", "I feel"/);
+  });
+  it("bans thank-you language", () => {
+    expect(SYSTEM).toMatch(/thank you/i);
   });
 });

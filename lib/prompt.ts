@@ -27,7 +27,7 @@ const METHOD = `The method (Neville Goddard's approach, in plain words):
 - One moment that implies it is done. Include one small act that follows fulfilment: a first morning in the house, a friend's congratulation, a signed paper.
 - Stay inside the scene. The listener is in their own movie. Never step out to address a giver or give thanks.`;
 
-export const SYSTEM = `You write spoken affirmations for a manifestation app, in the manner of Neville Goddard: one scene, lived from the inside, as if the wish has already come true. A calm guide reads it aloud, slowly, in a warm voice, to one person.
+export const SYSTEM = `You write spoken affirmations for a manifestation app, in the manner of Neville Goddard: one scene, lived from the inside, as if the wish has already come true. A calm, authoritative voice speaks it slowly, in the second person, directly to one person — always as "you", never as "I".
 
 The listener gives one wish. Write it as already true, addressed to the listener as "you", in the present tense. This is the practice of living from the wish fulfilled.
 
@@ -42,7 +42,7 @@ Write as an author, not as a coach:
 Rules:
 - 9 to 12 sentences, about 90 to 120 words in total: the recording must fit in about a minute, and a long script cannot be sent. Each sentence at most 12 words: one image or one action per sentence, concrete and complete, easy to speak in a single breath. One sentence per line, each line a sentence of its own. Plain text only: no titles, numbering, quotation marks, brackets, emoji, ellipses or stage directions.
 - Open as the "opening" field asks; it is an instruction to you, never words to write. If a first name is given, use it 5 to 8 times across the script. Mix the placements: some uses at the start of a sentence, some at the end, some mid-sentence for emphasis; no placement type more than twice in a row. Leave at least 10 words between uses. Never two uses in one sentence. Never inside the refrain.
-- Say "you are", "you have", "you see", "you feel". Keep every sentence in the present tense: no "earlier", "yesterday", "stopped", "felt" or "was". Never "you will", "you want", "you can", "you hope", "someday", "try", "maybe" or "I".
+- Say "you are", "you have", "you see", "you feel", "you already". Keep every sentence in the present tense: no "earlier", "yesterday", "stopped", "felt" or "was". Never "you will", "you want", "you can", "you hope", "someday", "try", "maybe" or "I". The voice that speaks is never in the scene: no "I am", "I feel", "I see" or "my" — always "you".
 - Repeat one short, complete sentence that says the wish is true (for example: The house by the sea is yours) in three different lines, like a quiet refrain. It must read naturally each time; never paste a bare noun phrase from the wish into a sentence. Repetition is the point.
 - Warm and unhurried unless the "feel" says otherwise; even then no exclamation marks, no questions, no "imagine", and no big words such as amazing, incredible, powerful or unstoppable. No sales or coaching tone: no "momentum", "journey", "universe" or "hard work".
 - Give the middle of the script (about six lines) to the one moment that implies the wish is done, of the kind the "moment" field asks for: where the listener is, who is there, what is said, held or done. Make it concrete to this wish, never general.
@@ -233,21 +233,102 @@ export function sexualIn(lines: string[], wish = ""): string | null {
 }
 
 /**
- * Splits the wish into the person's own sentences for exact mode (#229). No
- * content is added, removed or reworded. The refrain is the longest sentence;
- * on a tie the last one wins.
+ * Transforms first-person speaker pronouns to second-person in one sentence.
+ * "I am" → "you are", "I'm" → "you are", "my" → "your", "me" → "you", "myself" → "yourself".
+ * Capitalises the first letter of the result.
  */
-export function exactLines(want: string): { lines: string[]; refrain: string } {
+export function firstToSecond(sentence: string): string {
+  let s = sentence;
+  s = s.replace(/\bI'm\b/g, "you are");
+  s = s.replace(/\bI've\b/g, "you have");
+  s = s.replace(/\bI'll\b/g, "you will");
+  s = s.replace(/\bI'd\b/g, "you would");
+  s = s.replace(/\bI am\b/g, "you are");
+  s = s.replace(/\bI\b/g, "you");
+  s = s.replace(/\bmy\b/gi, "your");
+  s = s.replace(/\bme\b/gi, "you");
+  s = s.replace(/\bmyself\b/gi, "yourself");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Prefixes lines with "Name, " to reach nameMin name uses. If the available
+ * sentences are fewer than nameMin, all are prefixed (best effort).
+ * Returns lines unchanged when name is empty.
+ */
+export function addNameToExactLines(lines: string[], name: string, nameMin = 5): string[] {
+  if (!name || lines.length === 0) return lines;
+  const result = [...lines];
+  const toPrefix = Math.min(nameMin, result.length);
+  for (let i = 0; i < toPrefix; i++) {
+    const s = result[i];
+    result[i] = `${name}, ${s.charAt(0).toLowerCase() + s.slice(1)}`;
+  }
+  return result;
+}
+
+/** First-person speaker word found in `lines`, or null. Used as a post-check on model output. */
+export const SPEAKER_FIRST_PERSON =
+  /\b(?:I am|I'm|I've|I'll|I'd|I feel|I see|I hear|I know|I have|I do|I sense)\b/;
+
+export function speakerFirstPersonIn(lines: string[]): string | null {
+  for (const l of lines) {
+    const m = SPEAKER_FIRST_PERSON.exec(l);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+/** Thank-you phrase found in `lines`, or null. Catches explicit "thank you"/"thanks" only. */
+const THANK_YOU = /\b(?:thank\s+you|thank-you|thanks\b)\b/i;
+
+export function thankYouIn(lines: string[]): string | null {
+  for (const l of lines) {
+    const m = THANK_YOU.exec(l);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+/**
+ * Deterministic last-resort transform: applies firstToSecond to every line.
+ * Used when the model writes first-person despite the system prompt, after one
+ * regeneration attempt has already been made.
+ */
+export function pronounTransform(lines: string[]): string[] {
+  return lines.map(firstToSecond);
+}
+
+/**
+ * Splits the wish into the person's own sentences for exact mode (#229). When
+ * a name is given, first-person pronouns are converted to second-person and the
+ * name is added as a prefix to sentences to reach at least 5 uses. The refrain
+ * is the longest transformed sentence (without the name prefix so it loops cleanly).
+ */
+export function exactLines(want: string, name?: string): { lines: string[]; refrain: string } {
   const raw = want.trim();
   const parts = raw
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 1 && /\w/.test(s));
   const sentences = parts.length ? parts : [raw];
-  let refrain = sentences[0] ?? raw;
-  for (const s of sentences) if (s.length >= refrain.length) refrain = s;
+
+  if (!name) {
+    let refrain = sentences[0] ?? raw;
+    for (const s of sentences) if (s.length >= refrain.length) refrain = s;
+    if (!/[.!?]$/.test(refrain)) refrain = `${refrain}.`;
+    return { lines: sentences, refrain };
+  }
+
+  const transformed = sentences.map(firstToSecond);
+  const withName = addNameToExactLines(transformed, name);
+
+  // Refrain uses the transformed sentence without name prefix so it loops cleanly.
+  let refrain = transformed[0] ?? "";
+  for (const s of transformed) if (s.length >= refrain.length) refrain = s;
   if (!/[.!?]$/.test(refrain)) refrain = `${refrain}.`;
-  return { lines: sentences, refrain };
+
+  return { lines: withName, refrain };
 }
 
 /** The refrain line the model writes after the script, for programming mode (#77). */

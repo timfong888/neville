@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, rewriteWant, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 import { scoreVividness, type NameOpts } from "@/lib/script/vividness";
 
 type Catalog = { at: number; ids: Set<string> };
@@ -173,12 +173,25 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
-      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      let lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
       }
       if (lines) {
+        // Post-check: no first-person speaker words, no thank-you phrases (#255).
+        const fpIssue = speakerFirstPersonIn(lines);
+        const tyIssue = thankYouIn(lines);
+        if (fpIssue || tyIssue) {
+          if (i === 0) {
+            // First failure: regenerate once.
+            failure = { reason: "unusable_reply", status: res.status };
+            variant++;
+            continue;
+          }
+          // Second failure: apply deterministic pronoun transform and proceed.
+          lines = pronounTransform(lines);
+        }
         const vr = scoreVividness(lines, opts.name, nameOpts);
         const result: Script = {
           lines,
