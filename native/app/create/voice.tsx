@@ -6,7 +6,10 @@ import { load, pickVoice, useCreate } from "../../src/create/session";
 import { Button } from "../../src/create/ui";
 import { useSample } from "../../src/create/useSample";
 import { useSettings } from "../../src/seams/settings";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { OptionRow, SmallButton } from "../../src/ui/OptionRow";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
 
@@ -15,6 +18,7 @@ import { space, type } from "../../src/theme";
 export default function VoicePicker() {
   const c = useCreate();
   const router = useRouter();
+  const np = useNowPlaying();
   const { settings: saved } = useSettings();
   const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
@@ -33,7 +37,7 @@ export default function VoicePicker() {
   };
 
   return (
-    <Screen title="Choose a voice">
+    <Screen title="Choose a voice" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Stack.Screen options={{ title: "Voice" }} />
       <Text style={type.muted}>For your next recording. Samples are pre-made, so listening is free.</Text>
       {/* Above the long list, so the choice and its buttons need no scrolling. */}
