@@ -8,6 +8,7 @@ import { parseRerecord } from "@/lib/rerecord";
 import { DEFAULT_VOICE_ID, resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
+import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 import { alertFailure } from "@/lib/server/alertFailure";
@@ -70,6 +71,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
   const { lines } = parsed.value;
   let voice = resolveVoice(parsed.value.voiceId);
+  const speedOpt = parsed.value.speedStep !== null ? resolveSpeed(parsed.value.speedStep) : null;
+  const cadenceOpt = parsed.value.cadenceStep !== null ? resolveCadence(parsed.value.cadenceStep) : null;
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
@@ -154,7 +157,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
 
-  const text = lines.join(" ");
+  // A blank line between lines is the pause we can ask of non-PCM voices (e.g. HeyGen);
+  // PCM voices that stitch ignore `text` and use `lines` + `pauseMs` directly.
+  const text = lines.join("\n\n");
   // The deadline passed during the check: do not start the voice, the credit is already refunded.
   if (state.timedOut) return timeoutResponse(true);
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s); with it off the budget is the same 42 s as before.
@@ -167,10 +172,22 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       model: v.model,
       voice: v.voice,
       text,
-      instructions: TAKES_STYLE.test(v.model) ? STYLE : undefined,
       compact: true,
       timeoutMs: ms,
-      ...(v.atomic === true ? { lines, ...DEFAULT_DELIVERY, atomic: true } : {}),
+      ...(v.atomic === true
+        ? {
+            lines,
+            ...DEFAULT_DELIVERY,
+            ...(speedOpt ? { speed: speedOpt.speed } : {}),
+            ...(cadenceOpt ? { pauseMs: cadenceOpt.pauseMs } : {}),
+            atomic: true,
+          }
+        : {
+            lines,
+            instructions: TAKES_STYLE.test(v.model) ? STYLE : undefined,
+            speed: speedOpt ? speedOpt.speed : DEFAULT_DELIVERY.speed,
+            pauseMs: cadenceOpt ? cadenceOpt.pauseMs : DEFAULT_DELIVERY.pauseMs,
+          }),
     });
 
   let speech = await tryVoice(voice, voiceMs);
@@ -186,6 +203,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       if (speech.ok) voice = fallback;
     }
   }
+
 
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests

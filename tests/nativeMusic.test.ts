@@ -16,7 +16,7 @@ const h = vi.hoisted(() => ({
 vi.mock("expo-audio", () => ({
   setAudioModeAsync: vi.fn(async () => undefined),
   createAudioPlayer: (src: unknown) => {
-    const bed = { src, loop: false, volume: 1, play: vi.fn(), pause: vi.fn(), remove: vi.fn() };
+    const bed = { src, loop: false, volume: 1, play: vi.fn(), pause: vi.fn(), remove: vi.fn(), fade: vi.fn() };
     h.beds.push(bed);
     return bed;
   },
@@ -56,8 +56,8 @@ const state = (index: number, over: Partial<PlayState> = {}): Record<string, unk
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const track = (id: "night-tide" | "morning-light" | "rise", volume = 0.3) => ({ id, src: `${id}.mp3`, volume });
-/** Players that exist and are not removed: more than one is the bug (#184). */
-const alive = () => h.beds.filter((b) => b.remove.mock.calls.length === 0);
+/** Players that exist and are not removed or fading out: more than one is the bug (#184). */
+const alive = () => h.beds.filter((b) => b.remove.mock.calls.length === 0 && b.fade.mock.calls.length === 0);
 
 beforeEach(() => {
   // The music player is shared, as in the app: end any session left open and clear its choice.

@@ -4,7 +4,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
 import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
-import { create, clearPaywallError, edit, load, reset, setScriptMode, useCreate } from "../../src/create/session";
+import { create, clearPaywallError, edit, load, pickCadence, pickSpeed, pickVoice, reset, setScriptMode, useCreate } from "../../src/create/session";
+import { VoiceSection } from "../../src/ui/VoiceSection";
 import { PAYWALL_ENABLED } from "../../src/config";
 import { shouldShowPaywall } from "@/lib/paywall";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
@@ -115,12 +116,15 @@ export default function Wish() {
             <Button small label="Enhance with AI" disabled={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />
             <Button small label="Exactly my words" disabled={c.scriptMode === "exact"} onPress={() => setScriptMode("exact")} />
           </View>
-          <View style={s.row}>
-            <Text style={s.muted}>
-              Voice: <Text style={s.p}>{c.voiceName}</Text>
-            </Text>
-            <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
-          </View>
+          <VoiceSection
+            voiceId={c.voiceId}
+            voiceName={c.voiceName}
+            speedStep={c.speedStep}
+            cadenceStep={c.cadenceStep}
+            onPickVoice={(id) => void pickVoice(id)}
+            onPickSpeed={(id) => void pickSpeed(id)}
+            onPickCadence={(id) => void pickCadence(id)}
+          />
           <View style={s.row}>
             {note ? <Text style={s.muted}>{note}</Text> : null}
             {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}

@@ -87,6 +87,8 @@ export type WishRequest = {
   variant?: number;
   pace?: unknown;
   tone?: unknown;
+  speedStep?: unknown;
+  cadenceStep?: unknown;
   /** "exact" keeps the person's own sentences unchanged; "enhance" (default) uses AI. */
   scriptMode?: "exact" | "enhance";
 };
@@ -190,8 +192,8 @@ export function createApi(opts: ApiOptions) {
       return recording(await call("/api/manifest", json(req)));
     },
     /** Records an existing script again, in one voice. */
-    async rerecord(lines: string[], voiceId: string): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId })), lines);
+    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown } = {}): Promise<Recording> {
+      return recording(await call("/api/rerecord", json({ lines, voiceId, ...opts })), lines);
     },
 
     async credits(): Promise<CreditsResponse> {
