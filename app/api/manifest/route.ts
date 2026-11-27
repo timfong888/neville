@@ -9,6 +9,7 @@ import { captureEvent } from "@/lib/server/telemetry";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
+import { segmentLines, segmentsToPausedLines } from "@/lib/speech/pauses";
 import { resolveVoice } from "@/lib/voices";
 import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
@@ -148,12 +149,16 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   // can be cut apart in the browser.
   const repeat = body.repeat === true && /^(?:heygen\/|google\/gemini)/.test(voice.model);
   const recorded = repeat ? [...script.lines, script.refrain] : script.lines;
+  // Split long sentences into natural-pause phrases and assign per-gap pause lengths.
+  const tail = repeat ? 1 : 0;
+  const segments = segmentLines(recorded, tail);
+  const { lines: pausedLines, pauseMsPerGap } = segmentsToPausedLines(segments);
   // A blank line between lines is the pause we can ask of voices whose audio
   // cannot be stitched; the others get real silence between lines.
-  const text = recorded.join("\n\n");
+  const text = pausedLines.join("\n\n");
   // Characters actually spoken, for the ledger: the blank lines between lines
   // are not sent when a voice is recorded line by line.
-  const spoken = recorded.join(" ").length;
+  const spoken = pausedLines.join(" ").length;
   // A template script after paid tries is recorded too: those tries were billed. Exact mode is free (no model).
   if (script.source === "model" || script.source === "template" && (script.costUsd ?? 0) > 0) {
     // The writer returns what OpenRouter billed for the script, tries that gave nothing included (#170).
@@ -175,11 +180,12 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     model: voice.model,
     voice: voice.voice,
     text,
-    lines: recorded,
+    lines: pausedLines,
     // The refrain follows the closing with no pause, and its length does not
     // shorten the pauses between the script's lines.
-    tail: repeat ? 1 : 0,
+    tail,
     pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
+    pauseMsPerGap,
     speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,

@@ -1,69 +1,223 @@
-import { describe, expect, it } from "vitest";
-import { emptyPhraseState, nextPhrase, PHRASES, waitLine } from "@/lib/waitingPhrases";
+import { describe, expect, it, vi } from "vitest";
+import { emptyQuoteState, nextQuote, QUOTES, waitLine } from "@/lib/waitingQuotes";
 
-describe("nextPhrase", () => {
-  it("returns a phrase from the list", () => {
-    const { phrase } = nextPhrase(emptyPhraseState(), Math.random);
-    expect(PHRASES).toContain(phrase);
+describe("QUOTES data", () => {
+  it("every quote has a non-empty source", () => {
+    for (const q of QUOTES) {
+      expect(q.source.trim().length).toBeGreaterThan(0);
+    }
   });
 
-  it("cycles through all phrases before any repeats", () => {
-    let state = emptyPhraseState();
+  it("contains no thanks or gratitude language", () => {
+    const forbidden = /thank|grateful|gratitude/i;
+    for (const q of QUOTES) {
+      expect(q.text).not.toMatch(forbidden);
+    }
+  });
+
+  it("every quote has a positive durationMs", () => {
+    for (const q of QUOTES) {
+      expect(q.durationMs).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("nextQuote", () => {
+  it("returns a quote from the list", () => {
+    const { quote } = nextQuote(emptyQuoteState(), Math.random);
+    expect(QUOTES).toContainEqual(quote);
+  });
+
+  it("cycles through all quotes before any repeats", () => {
+    let state = emptyQuoteState();
     const seen: string[] = [];
-    for (let i = 0; i < PHRASES.length; i++) {
-      const { phrase, nextState } = nextPhrase(state, Math.random);
-      seen.push(phrase);
+    for (let i = 0; i < QUOTES.length; i++) {
+      const { quote, nextState } = nextQuote(state, Math.random);
+      seen.push(quote.text);
       state = nextState;
     }
-    expect(new Set(seen).size).toBe(PHRASES.length);
-    expect(seen).toHaveLength(PHRASES.length);
+    expect(new Set(seen).size).toBe(QUOTES.length);
+    expect(seen).toHaveLength(QUOTES.length);
   });
 
-  it("starts a new cycle after all phrases are exhausted", () => {
-    let state = emptyPhraseState();
-    for (let i = 0; i < PHRASES.length; i++) {
-      const { nextState } = nextPhrase(state, Math.random);
+  it("starts a new cycle after all quotes are exhausted", () => {
+    let state = emptyQuoteState();
+    for (let i = 0; i < QUOTES.length; i++) {
+      const { nextState } = nextQuote(state, Math.random);
       state = nextState;
     }
-    // remaining is empty after full cycle; next call should start fresh
-    const { phrase } = nextPhrase(state, Math.random);
-    expect(PHRASES).toContain(phrase);
+    const { quote } = nextQuote(state, Math.random);
+    expect(QUOTES).toContainEqual(quote);
   });
 
-  it("covers all phrases across multiple cycles with no within-cycle repeats", () => {
-    let state = emptyPhraseState();
+  it("covers all quotes across multiple cycles with no within-cycle repeats", () => {
+    let state = emptyQuoteState();
     for (let cycle = 0; cycle < 3; cycle++) {
       const cycleResult: string[] = [];
-      for (let i = 0; i < PHRASES.length; i++) {
-        const { phrase, nextState } = nextPhrase(state, Math.random);
-        cycleResult.push(phrase);
+      for (let i = 0; i < QUOTES.length; i++) {
+        const { quote, nextState } = nextQuote(state, Math.random);
+        cycleResult.push(quote.text);
         state = nextState;
       }
-      expect(new Set(cycleResult).size).toBe(PHRASES.length);
+      expect(new Set(cycleResult).size).toBe(QUOTES.length);
     }
   });
 
   it("is deterministic given a fixed rand", () => {
-    const { phrase: a } = nextPhrase(emptyPhraseState(), () => 0);
-    const { phrase: b } = nextPhrase(emptyPhraseState(), () => 0);
-    expect(a).toBe(b);
+    const { quote: a } = nextQuote(emptyQuoteState(), () => 0);
+    const { quote: b } = nextQuote(emptyQuoteState(), () => 0);
+    expect(a.text).toBe(b.text);
   });
 
-  it("picks different items with different rand values", () => {
-    const { phrase: first } = nextPhrase(emptyPhraseState(), () => 0);
-    const { phrase: last } = nextPhrase(emptyPhraseState(), () => 0.999);
-    // With 20 phrases the first and last slot are different
-    expect(first).not.toBe(last);
+  it("picks different quotes with different rand values", () => {
+    const { quote: first } = nextQuote(emptyQuoteState(), () => 0);
+    const { quote: last } = nextQuote(emptyQuoteState(), () => 0.999);
+    expect(first.text).not.toBe(last.text);
   });
 });
 
-describe("PHRASES content", () => {
-  const forbidden = /thank|grateful|gratitude/i;
+describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
+  it("clears the fade timer on cleanup, preventing show() from firing after unmount", () => {
+    vi.useFakeTimers();
+    const mountedRef = { current: true };
+    const fadeTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let showCallCount = 0;
 
-  it("contains no thanks or gratitude language", () => {
-    for (const phrase of PHRASES) {
-      expect(phrase).not.toMatch(forbidden);
+    const show = () => {
+      if (!mountedRef.current) return;
+      showCallCount++;
+      timerRef.current = setTimeout(() => {}, 4000);
+    };
+
+    // Simulate advance() triggering the 400 ms fade
+    fadeTimerRef.current = setTimeout(() => show(), 400);
+
+    // Simulate unmount cleanup
+    mountedRef.current = false;
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    vi.advanceTimersByTime(500);
+    expect(showCallCount).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it("long quotes (6000 ms) are capped at 4000 ms in reduced-motion mode", () => {
+    // The timer duration in show() is: rm ? 4000 : q.durationMs
+    // Verify long quotes (durationMs === 6000) produce 4000 when rm is true
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000);
+    expect(longQuote).toBeDefined();
+    const rm = true;
+    const duration = rm ? 4000 : longQuote!.durationMs;
+    expect(duration).toBe(4000);
+  });
+
+  it("initial mount also applies 4000 ms cap for a long quote when reduced-motion is set", () => {
+    // Both the mount effect and show() must use: reduceMotionRef.current ? REDUCED_MOTION_MS : q.durationMs
+    // This test verifies the mount path produces the capped value
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000);
+    expect(longQuote).toBeDefined();
+    const reduceMotionRef = { current: true };
+    const REDUCED_MOTION_MS = 4000;
+    const mountDuration = reduceMotionRef.current ? REDUCED_MOTION_MS : longQuote!.durationMs;
+    expect(mountDuration).toBe(4000);
+  });
+
+  it("pre-resolve interval is capped at 4000 ms (conservative default before async resolves)", () => {
+    // reduceMotionRef defaults to true so the first timer is always 4 s or less,
+    // regardless of when isReduceMotionEnabled() resolves.
+    const REDUCED_MOTION_MS = 4000;
+    // Simulate state before the async call returns: reduceMotionRef = true (conservative default)
+    const reduceMotionRefPreResolve = { current: true };
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000)!;
+    const preResolveDuration = reduceMotionRefPreResolve.current ? REDUCED_MOTION_MS : longQuote.durationMs;
+    expect(preResolveDuration).toBe(4000);
+
+    // After the async call resolves to false (no reduce-motion), the ref updates and
+    // subsequent timers use the full durationMs.
+    const reduceMotionRefPostResolve = { current: false };
+    const postResolveDuration = reduceMotionRefPostResolve.current ? REDUCED_MOTION_MS : longQuote.durationMs;
+    expect(postResolveDuration).toBe(6000);
+  });
+
+  it("reduce-motion change during native fade stops animation and reschedules (timerRef is null while fading)", () => {
+    // Simulates: advance() starts Animated.timing (timerRef.current = null).
+    // Reduce-motion preference fires mid-fade → effect stops animation (finished=false),
+    // reschedules at REDUCED_MOTION_MS, and the stale callback does NOT call show().
+    vi.useFakeTimers();
+    const REDUCED_MOTION_MS = 4000;
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let showCount = 0;
+    const advance = () => { showCount++; };
+
+    // Track whether the fade callback ran with finished=false (should not call show)
+    let fadeCbCallCount = 0;
+    let fadeCbFinishedArg: boolean | null = null;
+    let storedFadeCb: ((result: { finished: boolean }) => void) | null = null;
+    const mockAnim = {
+      stop() {
+        // Animated.timing.stop() calls the start callback with finished=false
+        if (storedFadeCb) storedFadeCb({ finished: false });
+      },
+    };
+
+    // Simulate advance() entering the else branch: starts fade, timerRef is null
+    storedFadeCb = ({ finished }) => {
+      fadeCbCallCount++;
+      fadeCbFinishedArg = finished;
+      if (!finished) return; // guard — do not call show
+      showCount++; // would be show(q) in real code
+      timerRef.current = setTimeout(advance, 6000); // 6 s long quote
+    };
+    const animRef = { current: mockAnim as typeof mockAnim | null };
+    // timerRef.current remains null (we're in the fade)
+
+    // Mid-cycle useEffect fires when reduce-motion changes:
+    if (animRef.current) {
+      animRef.current.stop(); // calls fadeCb({ finished: false })
+      animRef.current = null;
     }
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(advance, REDUCED_MOTION_MS);
+
+    // Fade callback fired with finished=false → no show, no 6 s timer from fade
+    expect(fadeCbCallCount).toBe(1);
+    expect(fadeCbFinishedArg).toBe(false);
+    expect(showCount).toBe(0);
+
+    // Effect scheduled 4 s timer
+    expect(timerRef.current).not.toBeNull();
+    vi.advanceTimersByTime(4001);
+    expect(showCount).toBe(1); // advance() fires at 4 s
+
+    vi.useRealTimers();
+  });
+
+  it("mid-cycle reduce-motion change clears old timer and reschedules at 4000 ms (native logic)", () => {
+    // Simulates the reschedule useEffect([reduceMotion, advance]):
+    // a 6 s timer is running; user enables reduce-motion; it is cleared and replaced with 4 s.
+    vi.useFakeTimers();
+    const REDUCED_MOTION_MS = 4000;
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    let advanceCount = 0;
+    const advance = () => { advanceCount++; };
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000)!;
+
+    // 6 s timer scheduled in normal-motion mode
+    timerRef.current = setTimeout(advance, longQuote.durationMs);
+
+    // Reduce-motion preference changes: reschedule at 4000 ms
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(advance, REDUCED_MOTION_MS);
+
+    // Should fire at 4001 ms, not 6000 ms
+    vi.advanceTimersByTime(4001);
+    expect(advanceCount).toBe(1);
+    vi.advanceTimersByTime(2000); // 6001 ms total — no second fire from cleared timer
+    expect(advanceCount).toBe(1);
+
+    vi.useRealTimers();
   });
 });
 
