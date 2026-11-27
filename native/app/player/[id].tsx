@@ -142,7 +142,7 @@ export default function Player() {
   const at = roundAt(mine ? np.index : 0);
   const plays = np.total;
 
-  const loopsLeft = active && plan?.loops != null ? Math.max(0, plan.loops - at.round + (at.inGap ? 1 : 0)) : null;
+  const loopsLeft = active && plan?.loops != null ? Math.max(0, plan.loops - at.round + (at.inGap ? 0 : 1)) : null;
 
   return (
     <Screen>

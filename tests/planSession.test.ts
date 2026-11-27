@@ -79,6 +79,24 @@ describe("planSession — time mode", () => {
   });
 });
 
+describe("loopsLeft countdown — never increases", () => {
+  it("counts down monotonically across play and gap queue positions", () => {
+    // Formula from [id].tsx: plan.loops - at.round + (at.inGap ? 0 : 1)
+    // Queue indices for 3 loops: 0=play1, 1=gap1, 2=play2, 3=gap2, 4=play3
+    const loops = 3;
+    const loopsLeft = (index: number) => {
+      const round = Math.floor(index / 2) + 1;
+      const inGap = index % 2 === 1;
+      return Math.max(0, loops - round + (inGap ? 0 : 1));
+    };
+    const counts = [0, 1, 2, 3, 4].map(loopsLeft);
+    expect(counts).toEqual([3, 2, 2, 1, 1]);
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
+    }
+  });
+});
+
 describe("planSession — single-item finite session gap consistency", () => {
   it("consistent LOOP_GAP_MS gap: two loops stay within 10-min target", () => {
     // 299 s voice, 1.8 s gap → loopDur = 300.8 s
