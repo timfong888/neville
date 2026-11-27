@@ -16,7 +16,7 @@ export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): v
 /** Loops the track. May finish late, or fail. */
 export type MusicEngine = { load(src: string | number, volume: number): Promise<MusicHandle> };
 /** A session's hold on the music. Calls from a session that has been replaced do nothing. */
-export type Follower = { voice(playing: boolean): void; close(): void; fade(seconds: number): void };
+export type Follower = { voice(playing: boolean): void; close(): void };
 /** What is really there: the track that is loading or loaded ("none" if none), and whether a session holds the music. */
 export type MusicView = { choice: MusicChoice; active: boolean };
 
@@ -144,23 +144,6 @@ export function makeMusicPlayer(engine: MusicEngine) {
           voice = false;
           release();
           publish();
-        },
-        fade(seconds: number) {
-          if (session !== mine || !loaded) { this.close(); return; }
-          const h = loaded.h;
-          const startVol = loaded.track.volume;
-          const steps = Math.max(1, Math.ceil(seconds * 10));
-          let step = 0;
-          const id = setInterval(() => {
-            step++;
-            if (session !== mine) { clearInterval(id); return; }
-            if (step >= steps || !loaded) {
-              clearInterval(id);
-              this.close();
-              return;
-            }
-            try { h.setVolume(Math.max(0, startVol * (1 - step / steps))); } catch {}
-          }, 100);
         },
       };
     },

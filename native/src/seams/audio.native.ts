@@ -61,8 +61,6 @@ export const audio: AudioSeam = {
     const bed = o.music ? musicPlayer.attach() : null;
     // Whether the voice is playing, as last seen, so the music follows it when the lock screen, a call or a bar pauses it.
     let voice: boolean | null = null;
-    // Set when the clips end naturally; prevents stop() from interrupting the music fade.
-    let endedNaturally = false;
     // Now Playing is only taken up once the audio session is running, which is after Play. Say it again then.
     let announced = false;
     // The playlist status has no error field. A clip that cannot be loaded or decoded
@@ -79,15 +77,13 @@ export const audio: AudioSeam = {
         } catch {}
       }
       const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
-      // Skip bed.voice(false) on natural end: the bed is still audible and
-      // the fade below handles the transition. Pausing it first makes the fade silent.
-      if (bed && s.playing !== voice && !ended) {
+      if (bed && s.playing !== voice) {
         voice = s.playing;
         bed.voice(s.playing);
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
-      // Natural end: fade the music over 5 s rather than cutting it off.
-      if (ended) { endedNaturally = true; bed?.fade(5); }
+      // The recording is over: the music goes with it, whether or not the caller stops the session.
+      if (ended) bed?.close();
       o.onState({ playing: s.playing, index: s.currentIndex, ended, progress });
     });
     const guard = () => {
@@ -127,7 +123,7 @@ export const audio: AudioSeam = {
           list.clearLockScreenControls();
           list.destroy();
         } catch {}
-        if (!endedNaturally) bed?.close();
+        bed?.close();
       },
     };
     const end = () => {
