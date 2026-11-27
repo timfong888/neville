@@ -1,4 +1,5 @@
 import "server-only";
+import { captureEvent } from "@/lib/server/telemetry";
 
 export type AlertKind = "script_failed" | "voice_failed" | "manifest_timeout";
 
@@ -13,4 +14,5 @@ type SafeFields = {
 
 export function alertFailure(kind: AlertKind, fields: SafeFields): void {
   console.error("[ALERT]", kind, JSON.stringify(fields));
+  captureEvent(kind, fields);
 }

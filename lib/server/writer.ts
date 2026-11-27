@@ -6,8 +6,10 @@ import "server-only";
 import limits from "@/config/limits.json";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
+import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, sexualIn, splitRefrain, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, rewriteWant, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { scoreVividness, type NameOpts } from "@/lib/script/vividness";
 
 type Catalog = { at: number; ids: Set<string> };
 let catalog: Catalog | null = null;
@@ -49,7 +51,7 @@ function safeRefrain(refrain: string | null, wish: string): string {
 
 export type Script = {
   lines: string[];
-  source: "model" | "template";
+  source: "model" | "template" | "exact";
   model?: string;
   /** What OpenRouter charged for the reply, when it said. */
   costUsd?: number | null;
@@ -57,6 +59,8 @@ export type Script = {
   refrain: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** 2–5 word noun phrase from the model; absent when missing or invalid, absent for templates. */
+  title?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -84,6 +88,8 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
     if (failure.reason !== "withheld") {
       alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started });
+    } else {
+      captureEvent("script_withheld", { route: "manifest" });
     }
     return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
@@ -93,6 +99,16 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     const category = wishSexualisesMinorCategory(opts.want);
     return template(category ? { category } : {});
   }
+  // Rewrite want-language to present tense before the LLM sees the wish.
+  // Safety checks always use the original opts.want.
+  const rewrittenWant = rewriteWant(opts.want);
+  const nameOpts: NameOpts | undefined = opts.name
+    ? { nameMin: limits.nameMin, nameMax: limits.nameMax, minGapWords: limits.minGapWords }
+    : undefined;
+  // Vividness retry state: first passing-content script that failed vividness.
+  let vividCandidate: Script | null = null;
+  let vividReasons: string[] = [];
+  let vividNote: string | undefined;
   try {
     const models = await scriptModels();
     // Up to two tries within the time box (config/limits.json scriptTimeoutMs). A model that is rate-limited or down
@@ -124,7 +140,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
               { role: "system", content: SYSTEM },
               {
                 role: "user",
-                content: wishMessage(opts.want, opts.name, variant, opts.toneNote),
+                content: wishMessage(rewrittenWant, opts.name, variant, vividNote ?? opts.toneNote),
               },
             ],
           }),
@@ -156,15 +172,41 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       }
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
-      const lines = parts ? cleanLines(parts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
+      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
       }
-      if (lines) return { lines, source: "model", model, costUsd: priced ? cost : null, refrain: safeRefrain(parts?.refrain ?? null, opts.want) };
+      if (lines) {
+        const vr = scoreVividness(lines, opts.name, nameOpts);
+        const result: Script = {
+          lines,
+          source: "model",
+          model,
+          costUsd: priced ? cost : null,
+          refrain: safeRefrain(parts?.refrain ?? null, opts.want),
+          ...(titleParts?.title ? { title: titleParts.title } : {}),
+        };
+        if (vr.pass) return result;
+        if (!vividCandidate) {
+          // First content-valid script failed vividness; retry once with reasons.
+          vividCandidate = result;
+          vividReasons = vr.reasons;
+          vividNote = vr.reasons.join(",");
+          console.log("[vividness_retry]", JSON.stringify({ reasons: vr.reasons }));
+          failure = { reason: "unusable_reply", status: res.status };
+          variant++;
+          continue;
+        }
+        // Second attempt also failed; return the script with fewer issues.
+        console.log("[vividness_second_fail]", JSON.stringify({ reasons: vr.reasons }));
+        return vr.reasons.length <= vividReasons.length ? result : vividCandidate;
+      }
       failure = { reason: "unusable_reply", status: res.status };
       variant++;
     }
+    if (vividCandidate) return vividCandidate;
     return template();
   } catch (e) {
     // The abort signal stays live while the body is read, so a timeout can surface here too.

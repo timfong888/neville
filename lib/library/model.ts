@@ -16,6 +16,10 @@ export type Manifestation = {
   hasAudio: boolean;
   createdAt: number;
   updatedAt: number;
+  /** Speed step chosen when this recording was made. Re-record reuses it. */
+  speedStep?: string;
+  /** Cadence step chosen when this recording was made. Re-record reuses it. */
+  cadenceStep?: string;
 };
 
 /** A named, ordered set of manifestations. */
