@@ -260,4 +260,25 @@ describe("POST /api/rerecord", () => {
     // tts.ts retries internally (up to 3 per chunk); the route should not add more.
     expect(speechCalls.length).toBeLessThanOrEqual(3);
   }, 15_000);
+
+  it("sets a request-wide deadline even when paywall is off — P1 regression fix (fails on main)", async () => {
+    // On main: runPaid returns early when paywallEnabled() is false so state.deadlineAt is never set.
+    // voiceBudget(state, 20_000) then returns the full 20_000 for the fallback, allowing 42+20=62 s
+    // to exceed this route's 60-second maxDuration.
+    // After this fix: handle() sets state.deadlineAt before any voice call regardless of paywall,
+    // so voiceBudget caps both attempts to the remaining wall-clock budget.
+    const paywall = await import("@/lib/server/paywall");
+    const spy = vi.spyOn(paywall, "voiceBudget");
+
+    await POST(req({ ...script, voiceId: "gemini-charon" }));
+
+    const states = spy.mock.calls.map(([s]) => s);
+    spy.mockRestore();
+
+    // Every voiceBudget call received a state with deadlineAt set.
+    expect(states.length).toBeGreaterThan(0);
+    for (const s of states) {
+      expect(s.deadlineAt).toBeDefined();
+    }
+  }, 15_000);
 });

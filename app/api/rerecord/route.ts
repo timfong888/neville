@@ -53,6 +53,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const key = apiKey();
   if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
 
+  // With the paywall off, runPaid does not set deadlineAt. Set one now so
+  // voiceBudget caps both voice attempts to remaining time, keeping the total
+  // under maxDuration even when the first attempt runs close to its budget.
+  if (state.deadlineAt === undefined) {
+    state.deadlineAt = Date.now() + (maxDuration * 1_000 - 5_000);
+  }
+
   let body: unknown;
   try {
     body = await req.json();
