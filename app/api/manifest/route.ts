@@ -124,18 +124,19 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
-  // Adult-tier path: check allowlist, run hard-block gate, use adult model.
-  // The gate runs for every account; the adult model only for allowlisted users.
+  // Hard-block gate: runs for every account, no off switch.
+  const gate = adultGate(want);
+  if (!gate.allowed) {
+    await charged.refund();
+    await slot?.release();
+    // Log reason only — never log the wish text.
+    console.info("[adult_gate_block]", JSON.stringify({ reason: gate.reason, route: "manifest" }));
+    return NextResponse.json({ code: "content_policy", error: gate.guidance }, { status: 422 });
+  }
+
+  // Adult-tier path: allowlisted users get the uncensored model.
   const isAdult = isAdultTierUser(session?.email ?? null);
   if (isAdult) {
-    const gate = adultGate(want);
-    if (!gate.allowed) {
-      await charged.refund();
-      await slot?.release();
-      // Log reason only — never log the wish text.
-      console.info("[adult_gate_block]", JSON.stringify({ reason: gate.reason, route: "manifest" }));
-      return NextResponse.json({ code: "content_policy", error: gate.guidance }, { status: 422 });
-    }
     const adultResult = await writeAdultScript({ key, want, name, variant });
     if (!adultResult.ok) {
       await charged.refund();

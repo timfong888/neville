@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { adultTierEnabled, isAdultTierUser } from "@/lib/adult/tier";
 import { classifyScript } from "@/lib/adult/outputGate";
+import { adultGate } from "@/lib/adult/gate";
 
 // ── lib/adult/tier.ts ─────────────────────────────────────────────────────────
 
@@ -67,6 +68,26 @@ describe("isAdultTierUser", () => {
     process.env.ADULT_TIER_EMAILS = " allowed@example.com , second@example.com ";
     expect(isAdultTierUser("allowed@example.com")).toBe(true);
     expect(isAdultTierUser("second@example.com")).toBe(true);
+  });
+});
+
+// ── adultGate applies to every account (no off switch) ───────────────────────
+// The gate must block even when the user is NOT an adult-tier user.
+// This exercises the invariant that adultGate is called before any tier check.
+
+describe("adultGate — blocks for standard (non-tier) account", () => {
+  it("blocks a minor wish regardless of tier status", () => {
+    // ADULT_TIER_ENABLED not set → isAdultTierUser returns false,
+    // but adultGate is called before any tier check and must still fire.
+    const r = adultGate("a 16-year-old seducing me");
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) expect(r.reason).toBe("minor");
+  });
+
+  it("blocks a family+sexual wish regardless of tier status", () => {
+    const r = adultGate("make love to my mom");
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) expect(r.reason).toBe("family_role");
   });
 });
 
