@@ -17,19 +17,20 @@ const asked: Array<{ model: string; user: Record<string, unknown> }> = [];
 
 const GOOD = [
   "Take a slow breath in, and let it go.",
+  "Zorbulon, you stand on the platform in Kyoto.",
+  "The evening light is gold and the air is warm.",
   "Your journey across Japan is complete.",
-  "You stand on the platform in Kyoto, and the evening light is the colour of weak tea.",
-  "The train doors open with a soft chime, and warm air carries the smell of rain on stone.",
-  "A woman in a grey coat steps down, her black hair pinned back, her eyes crinkled with a smile.",
-  "She is the friend who waited for you, and she takes your bag without a word.",
-  "You hear her laugh, low and easy, and your shoulders drop.",
-  "Your journey across Japan is yours.",
-  "The paper lanterns above the stairs begin to glow, one after another.",
-  "You feel the cool metal of the rail under your hand and the steady beat in your chest.",
-  "Someone calls your name from the far end of the platform, and you turn toward the sound.",
-  "Your journey across Japan is done, and the road behind you is quiet.",
-  "You are someone who goes where you choose, and you are here.",
-  "Thank you, thank you, thank you.",
+  "The train doors open and a chime rings out.",
+  "A woman in a grey coat steps onto the platform.",
+  "Her dark hair is pinned back, her eyes crinkled with a smile.",
+  "Zorbulon, she is the friend who waited for you.",
+  "She takes your bag and her voice is warm and low.",
+  "You hear her laugh and your shoulders drop.",
+  "The paper lanterns above the stairs begin to glow.",
+  "Zorbulon, you feel the cool metal of the rail.",
+  "Your chest is calm and steady, Zorbulon.",
+  "The glow through the stone arch is gold and clear.",
+  "Zorbulon, you are someone who goes where you choose.",
   "It is done.",
 ].join("\n");
 
@@ -161,7 +162,7 @@ describe("writeScript", () => {
     plan = { [M1]: ["badrefrain"] };
     const s = await write(0, "my journey across Japan");
     expect(s.source).toBe("model");
-    expect(s.refrain).toBe("Thank you, thank you, it is done.");
+    expect(s.refrain).toBe("It is done. It is so. It is here.");
   });
 
   it("refuses a slogan that does not parse, then asks again", async () => {

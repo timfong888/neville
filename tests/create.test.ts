@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest, readTitle } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, LIBRARY_TAB_ROUTE, LIBRARY_WEB_ROUTE, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, playlistLabel, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
@@ -111,6 +111,20 @@ describe("the Create flow (#120)", () => {
       id: "id-1", title: made.title, want: "to be calm", firstName: "Tim", lines: LINES,
       voiceId: made.recording?.voiceId, voiceName: made.recording?.voiceName, hasAudio: true, createdAt: 5, updatedAt: 5,
     });
+  });
+  it("persists speedStep and cadenceStep so Library re-record can reuse them", async () => {
+    const w = { want: "to be calm", name: "", speedStep: "faster", cadenceStep: "long" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-sp", 5);
+    expect(m.speedStep).toBe("faster");
+    expect(m.cadenceStep).toBe("long");
+  });
+  it("omits speedStep/cadenceStep when not provided (backward-compat)", async () => {
+    const w = { want: "to be calm", name: "" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-no-sp", 5);
+    expect(m).not.toHaveProperty("speedStep");
+    expect(m).not.toHaveProperty("cadenceStep");
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
   });
@@ -163,6 +177,29 @@ describe("the Create flow (#120)", () => {
   });
 });
 
+describe("exact mode (#229)", () => {
+  it("sends scriptMode: exact in the request body when mode is exact", () => {
+    const req = wishRequest({ want: "I am calm.", name: "", scriptMode: "exact" });
+    expect(req).toMatchObject({ scriptMode: "exact" });
+  });
+  it("omits scriptMode when mode is enhance (default)", () => {
+    const req = wishRequest({ want: "I am calm.", name: "" });
+    expect(req).not.toHaveProperty("scriptMode");
+    const req2 = wishRequest({ want: "I am calm.", name: "", scriptMode: "enhance" });
+    expect(req2).not.toHaveProperty("scriptMode");
+  });
+  it("shows 'Your exact words.' as the note when source is exact", async () => {
+    const m = await makeManifestation(api(rec({ source: "exact", scriptMode: "exact" })), wish, true);
+    expect(m.note).toBe("Your exact words.");
+    expect(m.scriptMode).toBe("exact");
+  });
+  it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
+    expect(m.scriptMode).toBeUndefined();
+  });
+});
+
 describe("X-Title header round trip (#205)", () => {
   it("decodes a base64 UTF-8 title correctly", () => {
     const title = "Magnetic confidence";
@@ -181,5 +218,20 @@ describe("X-Title header round trip (#205)", () => {
   });
   it("returns undefined for a corrupt value, not an error", () => {
     expect(readTitle("not-valid-base64!!!")).toBeUndefined();
+  });
+});
+
+describe("playlist button (#241)", () => {
+  it("shows 'My playlist' when already saved", () => {
+    expect(playlistLabel("some-saved-id")).toBe("My playlist");
+  });
+  it("shows 'Save and open playlist' when not yet saved", () => {
+    expect(playlistLabel("")).toBe("Save and open playlist");
+  });
+  it("native route targets the library tab", () => {
+    expect(LIBRARY_TAB_ROUTE).toBe("/(tabs)/library");
+  });
+  it("web route targets the library page", () => {
+    expect(LIBRARY_WEB_ROUTE).toBe("/library");
   });
 });

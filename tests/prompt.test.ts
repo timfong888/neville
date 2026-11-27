@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { exactLines, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -89,8 +89,8 @@ describe("system prompt", () => {
 
 describe("Neville's method (#78)", () => {
   it("carries the Lesson 1 techniques, paraphrased", () => {
-    expect(METHOD_VERSION).toBe("lesson1-v2");
-    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Who you are now/, /Thanks as the refrain/, /No fighting/]) {
+    expect(METHOD_VERSION).toBe("vivid-v1");
+    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Show evidence/, /Use the senses/, /Body feeling/, /Stay inside the scene/]) {
       expect(SYSTEM).toMatch(idea);
     }
   });
@@ -194,7 +194,8 @@ describe("refrain (#77)", () => {
     // Not addressed to the listener: the "you" of "thank you" does not count.
     expect(splitRefrain("x\nRefrain: The house is finished, thank you.").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
-    expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
+    // Default refrain must be free of thanks language.
+    expect(DEFAULT_REFRAIN).not.toMatch(/thank you/i);
   });
 });
 
@@ -462,5 +463,37 @@ describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
     for (const wish of ["I want to kiss a teen", "romantic relationship with girls", "kiss my student"]) {
       expect(wishSexualisesMinor(wish), wish).toBe(true);
     }
+  });
+});
+
+describe("exactLines (#229)", () => {
+  const WISH = "I am attracting beautiful women. I am effortlessly confident. The women desire me.";
+  it("keeps every sentence in order and unchanged", () => {
+    const { lines } = exactLines(WISH);
+    expect(lines).toEqual([
+      "I am attracting beautiful women.",
+      "I am effortlessly confident.",
+      "The women desire me.",
+    ]);
+  });
+  it("adds nothing to the sentences", () => {
+    const { lines } = exactLines(WISH);
+    const all = lines.join(" ");
+    expect(all).not.toContain("It is done");
+    expect(all.split(/\s+/).length).toBeLessThanOrEqual(WISH.split(/\s+/).length + 2);
+  });
+  it("picks the longest sentence as the refrain", () => {
+    const { refrain } = exactLines(WISH);
+    expect(refrain).toBe("I am attracting beautiful women.");
+  });
+  it("handles a single sentence with no terminal punctuation", () => {
+    const { lines, refrain } = exactLines("I am calm");
+    expect(lines).toEqual(["I am calm"]);
+    expect(refrain).toBe("I am calm.");
+  });
+  it("preserves terminal punctuation on sentences that have it", () => {
+    const { lines } = exactLines("I am calm. I am strong.");
+    expect(lines[0]).toBe("I am calm.");
+    expect(lines[1]).toBe("I am strong.");
   });
 });

@@ -5,11 +5,13 @@ import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIA
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
+import { useRouter as useNextRouter } from "next/navigation";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
-import { readVoiceChoice } from "@/lib/voiceStore";
+import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
-import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
+import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice, writeSpeedStepChoice, writeCadenceStepChoice } from "@/lib/deliveryStore";
+import { CURATED_VOICES, SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -19,17 +21,19 @@ import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
+import { LIBRARY_WEB_ROUTE, playlistLabel } from "@/lib/create";
 import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
+import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
 
 type Stage = "form" | "making" | "player";
 
 const EXAMPLES = [
-  "I want to be calm and confident when I speak",
-  "a healthy, strong body that I enjoy living in",
-  "to run my own business doing work I love",
-  "a loving, easy relationship with my family",
+  "I am calm and confident when I speak",
+  "I am healthy and strong",
+  "I run my own business doing work I love",
+  "I have a loving, easy relationship with my family",
 ];
 
 type Made = {
@@ -75,8 +79,18 @@ function writeCount(n: number) {
 }
 
 export default function DemoPage() {
+  const nextRouter = useNextRouter();
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
+  const [scriptMode, setScriptModeState] = useState<"enhance" | "exact">("enhance");
+  const setScriptMode = (mode: "enhance" | "exact") => {
+    setScriptModeState(mode);
+    try { window.localStorage.setItem("nv_script_mode", mode); } catch { /* private mode */ }
+  };
+  const [speedStep, setSpeedStepState] = useState<SpeedStep>(() => readSpeedStepChoice());
+  const setSpeedStep = (id: SpeedStep) => { setSpeedStepState(id); writeSpeedStepChoice(id); };
+  const [cadenceStep, setCadenceStepState] = useState<CadenceStep>(() => readCadenceStepChoice());
+  const setCadenceStep = (id: CadenceStep) => { setCadenceStepState(id); writeCadenceStepChoice(id); };
   // Programming mode (#77): minutes of repetition after the script, and the bell between them.
   const [repeatMin, setRepeatMin] = useState(0);
   const [bellOn, setBellOn] = useState(true);
@@ -137,6 +151,24 @@ export default function DemoPage() {
   const [playing, setPlaying] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const sampleAudio = useRef<HTMLAudioElement | null>(null);
+
+  const toggleSample = (id: string, sample: string) => {
+    if (playingVoice === id) {
+      sampleAudio.current?.pause();
+      sampleAudio.current = null;
+      setPlayingVoice(null);
+      return;
+    }
+    sampleAudio.current?.pause();
+    const a = new Audio(sample);
+    sampleAudio.current = a;
+    setPlayingVoice(id);
+    a.onended = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    a.onerror = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    void a.play();
+  };
 
   const token = useRef(0);
   const bed = useRef<MusicBed | null>(null);
@@ -157,6 +189,10 @@ export default function DemoPage() {
   // Voices, free counter, and shared links.
   useEffect(() => {
     setUsed(readCount());
+    try {
+      const m = window.localStorage.getItem("nv_script_mode");
+      if (m === "exact" || m === "enhance") setScriptModeState(m);
+    } catch { /* private mode */ }
     // A shared link only fills in the form; nothing plays until Create.
     // Otherwise restore what the listener typed before visiting Settings (#100).
     const d = startingDraft(window.location.search);
@@ -372,7 +408,10 @@ export default function DemoPage() {
           variant: v,
           pace: readPaceChoice(),
           tone: readToneChoice(),
+          speedStep: readSpeedStepChoice(),
+          cadenceStep: readCadenceStepChoice(),
           repeat: repeatMin > 0,
+          ...(scriptMode === "exact" ? { scriptMode: "exact" } : {}),
         }),
       });
       if (res.ok) {
@@ -439,7 +478,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? noteForReason(scriptReason) : "",
+            next.source === "template" ? noteForReason(scriptReason) : next.source === "exact" ? "Your exact words." : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"
@@ -514,6 +553,8 @@ export default function DemoPage() {
           lines: made?.saveLines ?? lines,
           voiceId: made?.voiceId ?? "",
           voiceName: made?.voiceName ?? "Device voice",
+          speedStep,
+          cadenceStep,
           hasAudio: !!audio,
           createdAt: now,
           updatedAt: now,
@@ -527,6 +568,11 @@ export default function DemoPage() {
     }
     setSaving(false);
     setTimeout(() => setToast(""), 2500);
+  };
+
+  const goToPlaylist = async () => {
+    if (!savedId) await save();
+    nextRouter.push(LIBRARY_WEB_ROUTE);
   };
 
   const reset = () => {
@@ -555,12 +601,15 @@ export default function DemoPage() {
           No sign-up. One tap. A short affirmation written and recorded for you.
         </p>
         <div className="card">
-          <label htmlFor="want">What do you want?</label>
+          <label htmlFor="want">What is already yours?</label>
+          <p className="small muted" style={{ fontStyle: "italic", margin: "2px 0 6px" }}>
+            To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret.
+          </p>
           <textarea
             id="want"
             value={want}
             maxLength={280}
-            placeholder="I want to be calm and confident when I speak"
+            placeholder="I am calm and confident when I speak"
             onChange={(e) => editWant(e.target.value)}
           />
           <div className="chips" aria-label="Examples">
@@ -600,14 +649,33 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
-          <Link className="voicesummary" href="/settings#voice">
+          <div className="row" role="radiogroup" aria-label="Voice">
             <span className="small muted">Voice</span>
-            <span>
-              <b>{nextVoice.name}</b>
-              <span className="small muted"> {mixOn ? "· next in your voice mix" : voiceBlurb(nextVoice) && `· ${voiceBlurb(nextVoice)}`}</span>
-            </span>
-            <span className="change">Change</span>
-          </Link>
+            {CURATED_VOICES.map((v) => (
+              <span key={v.id} style={{ display: "inline-flex", gap: "2px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`chip${studioVoice.id === v.id ? " active" : ""}`}
+                  aria-pressed={studioVoice.id === v.id}
+                  onClick={() => { writeVoiceChoice(v.id); refreshNextVoice(); }}
+                >
+                  {v.name}
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  aria-label={`${playingVoice === v.id ? "Stop" : "Play"} ${v.name} sample`}
+                  onClick={() => toggleSample(v.id, v.sample)}
+                  style={{ minWidth: "2em" }}
+                >
+                  {playingVoice === v.id ? "■" : "▶"}
+                </button>
+              </span>
+            ))}
+            <Link className="chip" href="/settings#voice" title="Mix voices or choose from the full list">
+              More
+            </Link>
+          </div>
           <div className="row">
             <div>
               <label htmlFor="repeat">Repetition after the script</label>
@@ -648,6 +716,53 @@ export default function DemoPage() {
               new idea settle in, especially at first.
             </p>
           )}
+          <div className="row">
+            <span className="small muted">Script</span>
+            <button
+              type="button"
+              className={`chip${scriptMode === "enhance" ? " active" : ""}`}
+              aria-pressed={scriptMode === "enhance"}
+              onClick={() => setScriptMode("enhance")}
+            >
+              Enhance with AI
+            </button>
+            <button
+              type="button"
+              className={`chip${scriptMode === "exact" ? " active" : ""}`}
+              aria-pressed={scriptMode === "exact"}
+              onClick={() => setScriptMode("exact")}
+            >
+              Exactly my words
+            </button>
+          </div>
+          <div className="row">
+            <span className="small muted">Speed</span>
+            {SPEED_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${speedStep === o.id ? " active" : ""}`}
+                aria-pressed={speedStep === o.id}
+                onClick={() => setSpeedStep(o.id as SpeedStep)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <span className="small muted">Cadence</span>
+            {CADENCE_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${cadenceStep === o.id ? " active" : ""}`}
+                aria-pressed={cadenceStep === o.id}
+                onClick={() => setCadenceStep(o.id as CadenceStep)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>
@@ -672,6 +787,7 @@ export default function DemoPage() {
       <>
         <h1>Making it yours…</h1>
         <p className="lede">This takes up to half a minute. Keep this page open.</p>
+        <WaitingPhrasesWeb />
       </>
     );
   }
@@ -727,6 +843,9 @@ export default function DemoPage() {
             {saving ? "Saving…" : "Save"}
           </button>
         )}
+        <button className="btn sm" onClick={goToPlaylist} disabled={saving}>
+          {playlistLabel(savedId)}
+        </button>
         <button
           className="btn sm ghost"
           aria-pressed={music}

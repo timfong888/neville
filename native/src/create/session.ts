@@ -1,7 +1,8 @@
 // The Create flow's state, shared by its three screens: the wish being typed, the
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
-import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, makeManifestation, nextVariant, noteForReason, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
+import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, type ScriptMode, SCRIPT_MODE_KEY, makeManifestation, nextVariant, noteForReason, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
+import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
 import { newId } from "@/lib/library/model";
@@ -31,14 +32,18 @@ export type CreateState = {
   /** The voice the next recording uses: the pick, else the Settings choice. */
   voiceId: string;
   voiceName: string;
+  speedStep: SpeedStep;
+  cadenceStep: CadenceStep;
   made: Made | null;
   /** The Library id of `made` once saved; empty until then. */
   savedId: string;
   /** Set when a paywall signal is received (402, 401, or 504 with paywall on). */
   paywallError: PaywallError | null;
+  /** Whether to use the person's exact words or enhance with AI. */
+  scriptMode: ScriptMode;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, made: null, savedId: "", paywallError: null };
+let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
 const subs = new Set<() => void>();
 const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
@@ -68,11 +73,31 @@ function voiceNow(settingsVoiceId: string) {
 }
 
 let typed = false;
-/** Reads what the device keeps: the draft, the count and the chosen voice. Run when the wish step shows. */
+/** Reads what the device keeps: the draft, the count, the chosen voice/speed/cadence, and the script mode. Run when the wish step shows. */
 export async function load(): Promise<void> {
-  const [draft, used, chosen] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read()]);
+  const [draft, used, chosen, modeRaw] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read(), read(SCRIPT_MODE_KEY)]);
+  const scriptMode: ScriptMode = modeRaw === "exact" ? "exact" : "enhance";
   // Typing that began before storage answered wins over the stored draft.
-  set({ ...(typed ? {} : parseDraft(draft)), used: parseCount(used), ...voiceNow(chosen.voiceId) });
+  set({
+    ...(typed ? {} : parseDraft(draft)),
+    used: parseCount(used),
+    ...voiceNow(chosen.voiceId),
+    speedStep: resolveSpeed(chosen.speedStep).id,
+    cadenceStep: resolveCadence(chosen.cadenceStep).id,
+    scriptMode,
+  });
+}
+
+/** Picks the speed step for the next recording and remembers it. */
+export async function pickSpeed(id: SpeedStep): Promise<boolean> {
+  set({ speedStep: resolveSpeed(id).id });
+  return settings.write({ speedStep: id });
+}
+
+/** Picks the cadence step for the next recording and remembers it. */
+export async function pickCadence(id: CadenceStep): Promise<boolean> {
+  set({ cadenceStep: resolveCadence(id).id });
+  return settings.write({ cadenceStep: id });
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
@@ -95,28 +120,42 @@ export function clearPaywallError(): void {
   set({ paywallError: null });
 }
 
+/** Switches between exact and enhance writing modes and persists the choice. */
+export function setScriptMode(mode: ScriptMode): void {
+  set({ scriptMode: mode });
+  write(SCRIPT_MODE_KEY, mode);
+}
+
+/** Exposes the current state snapshot for tests; not for use in component code. */
+export const getCreateState = () => state;
+
 let run = 0;
 /** The wish the current `made` was asked for. The form can change afterwards. */
-let asked = { want: "", name: "" };
+let asked: { want: string; name: string; speedStep?: string; cadenceStep?: string } = { want: "", name: "" };
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
+  // Capture speed/cadence from state before the async settings.read(): pickSpeed/pickCadence
+  // update state synchronously but write to storage async, so storage may be stale.
+  const { speedStep, cadenceStep } = state;
   set({ making: true, made: null, savedId: "", variant, paywallError: null });
   const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
   const { voiceId } = set(voiceNow(chosen.voiceId));
+  const scriptMode = state.scriptMode;
 
   if (PAYWALL_ENABLED) {
     // Paywall path: call api.manifest directly so we can intercept 401/402/504.
     try {
-      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId }));
+      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }));
       if (run !== mine) return;
-      asked = wish;
+      asked = { ...wish, speedStep, cadenceStep };
       const voice = resolveVoice(r.voiceId);
       const made: Made = {
         title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(wish.want))),
         lines: r.lines,
-        note: r.source === "template" ? noteForReason(r.reason, r.term) : "",
+        note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your exact words." : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
+        ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
       };
       set({ making: false, made });
     } catch (e) {
@@ -140,17 +179,17 @@ async function generate(variant: number): Promise<void> {
         note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
         recording: null,
       };
-      asked = wish;
+      asked = { ...wish, speedStep, cadenceStep };
       set({ making: false, made });
     }
     return;
   }
 
   // Original non-paywall path.
-  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId }, canSpeak());
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;
-  asked = wish;
+  asked = { ...wish, speedStep, cadenceStep };
   set({ making: false, made });
 }
 

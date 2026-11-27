@@ -22,7 +22,7 @@ export type NowPlayingState = {
 };
 const IDLE: NowPlayingState = { status: "idle", id: "", title: "", route: "", index: 0, position: 0, total: 0, loop: false, note: "", progress: 0 };
 
-export type Prepared = { clips: string[]; loop: boolean; /** Put the music player under this session. */ music?: boolean; at(index: number): { title: string; position: number; total: number } };
+export type Prepared = { clips: string[]; loop: boolean; /** Put the music player under this session. */ music?: boolean; /** Total seconds for one full pass of the playlist. Used by time mode to compute loop count. */ durationSec?: number; at(index: number): { title: string; position: number; total: number } };
 /** What to play. `title` is the lock screen's; `at` gives the title and place shown for a position. */
 export type PlayJob = { id: string; title: string; route: string; empty: string; prepare(): Promise<Prepared | null> };
 

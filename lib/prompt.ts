@@ -11,20 +11,21 @@ export const CLOSING = "It is done.";
 const LEGACY_CLOSINGS = ["and so it is."];
 
 /** Bump when the method section changes, so eval snapshots say which prompt wrote them. */
-export const METHOD_VERSION = "lesson1-v2";
+export const METHOD_VERSION = "vivid-v1";
 
 // The method, paraphrased from Neville Goddard, "Five Lessons", Lesson 1
 // ("Consciousness Is the Only Reality", 1948). Ideas only: no sentence is
 // quoted, so the quote-rights question in #43 does not apply. Quotes and
 // page numbers: docs/specs/lessons/lesson-01.md. Tim's approval: #78.
 const METHOD = `The method (Neville Goddard's approach, in plain words):
-- Assume the end. The wish is already done. Use the present tense or completed forms: "you own", "you and your sister laugh together". Never describe it as on the way: no "is becoming", "is reaching", "is healing", "building", "getting closer".
-- Here and now. Set the scene close around the listener, today, not far away or one day.
-- Feel it from inside. The listener is in the scene, seeing it through their own eyes and feeling it in the body, not watching themselves as if on a screen.
-- One moment that implies it is done. Include one small, specific moment that could only happen after the wish came true: holding the keys, a friend's congratulation, an easy phone call. Stay with that one moment.
-- Who you are now. One line about who the listener is now, not only what they have.
-- Thanks as the refrain. Near the end, a short phrase of thanks, repeated gently, like a lullaby.
-- No fighting. At most one line may notice a doubt; let it pass and return to the end state. Never argue with it or deny the present.`;
+- Assume the end. The wish is already done. Use the present tense: "you own", "you and your sister laugh together". Never say it is on the way: no "is becoming", "is reaching", "is healing", "getting closer".
+- Show evidence, not the claim. Turn each wish into one concrete scene that could only happen if it were true. Not "the bitcoin is yours" but "you open the account, the number has climbed again since morning".
+- Use the senses. Each scene has at least two of: sight, sound, touch, temperature, weight, smell, taste. Small, specific objects: a warm mug, a key turning, a phone buzzing.
+- Body feeling. Name what the listener feels in the body — ease, warmth, a slow breath, steadiness — never a big emotion word like joy or bliss.
+- Here and now. Set the scene close around the listener today, not far away or one day.
+- Feel it from inside. The listener is in the scene seeing it through their own eyes, not watching themselves as if on a screen.
+- One moment that implies it is done. Include one small act that follows fulfilment: a first morning in the house, a friend's congratulation, a signed paper.
+- Stay inside the scene. The listener is in their own movie. Never step out to address a giver or give thanks.`;
 
 export const SYSTEM = `You write spoken affirmations for a manifestation app, in the manner of Neville Goddard: one scene, lived from the inside, as if the wish has already come true. A calm guide reads it aloud, slowly, in a warm voice, to one person.
 
@@ -39,16 +40,26 @@ Write as an author, not as a coach:
 - Every sentence is complete, with a subject and a verb, and means something when spoken aloud. Prefer plain, concrete images to abstract nouns. Never stack abstract nouns or write slogans such as "you are a magnet for pure attraction" or "abundance flows through your being". Say what happens instead. Before you answer, reread every sentence and rewrite any that a listener would not understand.
 
 Rules:
-- 9 to 12 sentences, about 90 to 120 words in total: the recording must fit in about a minute, and a long script cannot be sent. Sentences may be long and full of detail; the scene is what matters, not the count. One sentence per line, each line a sentence of its own, of any natural length. Plain text only: no titles, numbering, quotation marks, brackets, emoji, ellipses or stage directions.
-- Open as the "opening" field asks; it is an instruction to you, never words to write. If a first name is given, use it once, in the first line only.
-- Say "you are", "you have", "you see", "you feel". Keep every sentence in the present tense: no "earlier", "yesterday", "stopped", "felt" or "was". Never "you will", "you want", "you can" or "I".
+- 9 to 12 sentences, about 90 to 120 words in total: the recording must fit in about a minute, and a long script cannot be sent. Each sentence at most 12 words: one image or one action per sentence, concrete and complete, easy to speak in a single breath. One sentence per line, each line a sentence of its own. Plain text only: no titles, numbering, quotation marks, brackets, emoji, ellipses or stage directions.
+- Open as the "opening" field asks; it is an instruction to you, never words to write. If a first name is given, use it 5 to 8 times across the script. Mix the placements: some uses at the start of a sentence, some at the end, some mid-sentence for emphasis; no placement type more than twice in a row. Leave at least 10 words between uses. Never two uses in one sentence. Never inside the refrain.
+- Say "you are", "you have", "you see", "you feel". Keep every sentence in the present tense: no "earlier", "yesterday", "stopped", "felt" or "was". Never "you will", "you want", "you can", "you hope", "someday", "try", "maybe" or "I".
 - Repeat one short, complete sentence that says the wish is true (for example: The house by the sea is yours) in three different lines, like a quiet refrain. It must read naturally each time; never paste a bare noun phrase from the wish into a sentence. Repetition is the point.
 - Warm and unhurried unless the "feel" says otherwise; even then no exclamation marks, no questions, no "imagine", and no big words such as amazing, incredible, powerful or unstoppable. No sales or coaching tone: no "momentum", "journey", "universe" or "hard work".
 - Give the middle of the script (about six lines) to the one moment that implies the wish is done, of the kind the "moment" field asks for: where the listener is, who is there, what is said, held or done. Make it concrete to this wish, never general.
-- Use the listener's own words for the wish. Include one line of gratitude.
+- Use the listener's own words for the wish. Never use thanks language in the script: no thank you, thanks, grateful, gratitude, appreciate, blessed. Stay inside the scene like watching your own movie — present tense, the listener's own thoughts and senses and power.
 - End with exactly: ${CLOSING}
+
+Worked examples (each under 60 words, 12-word sentence max):
+
+Money: You open the app and the number glows steady. It has climbed again since morning. A quiet ease settles in your chest. The balance confirms what you already know. You set the phone face-down without checking again. It is done.
+
+Home: The key turns and the door swings open to your place. You step inside and smell the warm wood. The light is gold through the windows. You set your bag down on the floor. This is simply yours now. It is done.
+
+Relationship: She is across the table and her eyes find yours. The talk moves without effort. You hear your own laugh rise easily. Her hand rests near yours on the table. The warmth between you is ordinary now. It is done.
+
+Health: You take the stairs and your legs carry you easily. No tightness, no thought of stopping. You breathe full and slow at the top. The strength is ordinary now, expected. It is done.
 - Then, on the next line, write "Title: " followed by 2 to 5 words: a short noun phrase about the content of this script. No quotes, no ellipsis. Do not start with "You are" or "You have". Never include the listener's first name. Example: "Title: Magnetic confidence" or "Title: Calm and clear speech".
-- Then, on one last line, write "Refrain: " followed by one short phrase of 4 to 10 words, addressed to the listener as "you" like the script, in their own words for the wish, saying it is done (for example: Refrain: The house by the sea is yours. Thank you). It is the phrase to repeat, not part of the script.
+- Then, on one last line, write "Refrain: " followed by one short phrase of 4 to 10 words, addressed to the listener as "you" like the script, in their own words for the wish, saying it is done (for example: Refrain: The house by the sea is yours). It is the phrase to repeat, not part of the script.
 
 Content rules:
 - Never turn a script toward sex or attraction on your own. A wish about money, health, work, family, calm, sleep, travel or anything else gets no sensual or physical description of other people beyond ordinary looks and warmth.
@@ -284,6 +295,24 @@ export function sexualIn(lines: string[], wish = ""): string | null {
   return null;
 }
 
+/**
+ * Splits the wish into the person's own sentences for exact mode (#229). No
+ * content is added, removed or reworded. The refrain is the longest sentence;
+ * on a tie the last one wins.
+ */
+export function exactLines(want: string): { lines: string[]; refrain: string } {
+  const raw = want.trim();
+  const parts = raw
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1 && /\w/.test(s));
+  const sentences = parts.length ? parts : [raw];
+  let refrain = sentences[0] ?? raw;
+  for (const s of sentences) if (s.length >= refrain.length) refrain = s;
+  if (!/[.!?]$/.test(refrain)) refrain = `${refrain}.`;
+  return { lines: sentences, refrain };
+}
+
 /** The refrain line the model writes after the script, for programming mode (#77). */
 /** A line that starts with the refrain label, and what follows the label on it. */
 // Text after the label needs a separator, so a spoken line such as "The
@@ -297,7 +326,7 @@ const REFRAIN_LABEL =
 const EDGE_DECORATION = /^[\s"“”'‘’`*_]+|[\s"“”'‘’`*_]+$/g;
 
 /** A refrain spoken on a loop when the model gives none, or gives an unusable one. */
-export const DEFAULT_REFRAIN = "Thank you, thank you, it is done.";
+export const DEFAULT_REFRAIN = "It is done. It is so. It is here.";
 
 /**
  * Splits the model's reply into the script text and its refrain. The refrain
@@ -437,4 +466,39 @@ export function cleanLines(
   if (grammarIssue(out)) return null;
   if (sexualIn(out, wish)) return null;
   return [...out, closing];
+}
+
+/**
+ * Rewrites want-language in a wish into present-tense reality language before
+ * sending it to the script writer. "I want a house" → "I have a house".
+ * "To feel I will be is to confess I am not." — Neville Goddard
+ * Safety checks always use the original wish; only the LLM receives this.
+ */
+export function rewriteWant(wish: string): string {
+  let s = wish.trim();
+  // Most-specific patterns first to avoid partial matches.
+  s = s.replace(/^I want to be\b/i, "I am");
+  s = s.replace(/^I want to have\b/i, "I have");
+  s = s.replace(/^I want to\b/i, "I");
+  s = s.replace(/^I want\b/i, "I have");
+  s = s.replace(/^I'?d like to be\b/i, "I am");
+  s = s.replace(/^I'?d like to\b/i, "I");
+  s = s.replace(/^I'?d like\b/i, "I have");
+  s = s.replace(/^I wish I (?:were|was)\b/i, "I am");
+  s = s.replace(/^I wish I had\b/i, "I have");
+  s = s.replace(/^I wish I could\b/i, "I");
+  s = s.replace(/^I wish I\b/i, "I");
+  s = s.replace(/^I hope to\b/i, "I");
+  s = s.replace(/^someday I will be\b/i, "I am");
+  s = s.replace(/^someday I will\b/i, "I");
+  s = s.replace(/^someday I'?ll be\b/i, "I am");
+  s = s.replace(/^someday I'?ll\b/i, "I");
+  s = s.replace(/^I will be\b/i, "I am");
+  s = s.replace(/^I'?ll be\b/i, "I am");
+  s = s.replace(/^I will\b/i, "I");
+  s = s.replace(/^I'?ll\b/i, "I");
+  s = s.replace(/^I am trying to\b/i, "I");
+  s = s.replace(/^I'?m trying to\b/i, "I");
+  s = s.replace(/^I try to\b/i, "I");
+  return s;
 }
