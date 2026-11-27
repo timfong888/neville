@@ -47,5 +47,5 @@ export function nextPhrase(
  * Returns null while the normal phrase cycle should continue.
  */
 export function waitLine(elapsedMs: number): string | null {
-  return elapsedMs >= 45_000 ? "Still working. Thanks for waiting." : null;
+  return elapsedMs >= 45_000 ? "Still working. Almost there." : null;
 }

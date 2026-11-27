@@ -57,6 +57,16 @@ describe("nextPhrase", () => {
   });
 });
 
+describe("PHRASES content", () => {
+  const forbidden = /thank|grateful|gratitude/i;
+
+  it("contains no thanks or gratitude language", () => {
+    for (const phrase of PHRASES) {
+      expect(phrase).not.toMatch(forbidden);
+    }
+  });
+});
+
 describe("waitLine", () => {
   it("returns null before 45 seconds", () => {
     expect(waitLine(0)).toBeNull();
@@ -65,11 +75,11 @@ describe("waitLine", () => {
   });
 
   it("returns the patience message at exactly 45 seconds", () => {
-    expect(waitLine(45_000)).toBe("Still working. Thanks for waiting.");
+    expect(waitLine(45_000)).toBe("Still working. Almost there.");
   });
 
   it("returns the patience message after 45 seconds", () => {
-    expect(waitLine(60_000)).toBe("Still working. Thanks for waiting.");
-    expect(waitLine(120_000)).toBe("Still working. Thanks for waiting.");
+    expect(waitLine(60_000)).toBe("Still working. Almost there.");
+    expect(waitLine(120_000)).toBe("Still working. Almost there.");
   });
 });
