@@ -76,14 +76,15 @@ export const audio: AudioSeam = {
           list.setActiveForLockScreen(true, meta, opts);
         } catch {}
       }
-      if (bed && s.playing !== voice) {
+      const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
+      // Skip the voice-state update when ended so the bed is not paused right before the fade.
+      if (bed && !ended && s.playing !== voice) {
         voice = s.playing;
         bed.voice(s.playing);
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
-      const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
-      // The recording is over: the music goes with it, whether or not the caller stops the session.
-      if (ended) bed?.close();
+      // The recording is over: fade the music over 5 s instead of cutting it off immediately.
+      if (ended) bed?.fade(5);
       o.onState({ playing: s.playing, index: s.currentIndex, ended, progress });
     });
     const guard = () => {
