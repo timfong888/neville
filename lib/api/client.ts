@@ -43,6 +43,8 @@ export type Recording = {
   title?: string;
   /** Credits balance after charging. "unlimited" for testers, digit string, or absent when not sent. */
   creditsBalance?: string | null;
+  /** Which writing mode produced this script: "exact" or absent when enhance. */
+  scriptMode?: "exact";
 };
 
 /** Thrown for any non-2xx response. `lines` is the written script when only the voice failed. */
@@ -83,6 +85,8 @@ export type WishRequest = {
   variant?: number;
   pace?: unknown;
   tone?: unknown;
+  /** "exact" keeps the person's own sentences unchanged; "enhance" (default) uses AI. */
+  scriptMode?: "exact" | "enhance";
 };
 
 /** Line start times from the `X-Line-Starts` header, or undefined unless they are all sound. */
@@ -149,6 +153,7 @@ export function createApi(opts: ApiOptions) {
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
     const title = readTitle(res.headers.get("X-Title"));
     const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
+    const scriptModeHeader = res.headers.get("X-Script-Mode");
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -159,6 +164,7 @@ export function createApi(opts: ApiOptions) {
       ...(title !== undefined ? { title } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
       ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
+      ...(scriptModeHeader === "exact" ? { scriptMode: "exact" as const } : {}),
     };
   }
 

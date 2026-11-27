@@ -77,6 +77,11 @@ function writeCount(n: number) {
 export default function DemoPage() {
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
+  const [scriptMode, setScriptModeState] = useState<"enhance" | "exact">("enhance");
+  const setScriptMode = (mode: "enhance" | "exact") => {
+    setScriptModeState(mode);
+    try { window.localStorage.setItem("nv_script_mode", mode); } catch { /* private mode */ }
+  };
   // Programming mode (#77): minutes of repetition after the script, and the bell between them.
   const [repeatMin, setRepeatMin] = useState(0);
   const [bellOn, setBellOn] = useState(true);
@@ -157,6 +162,10 @@ export default function DemoPage() {
   // Voices, free counter, and shared links.
   useEffect(() => {
     setUsed(readCount());
+    try {
+      const m = window.localStorage.getItem("nv_script_mode");
+      if (m === "exact" || m === "enhance") setScriptModeState(m);
+    } catch { /* private mode */ }
     // A shared link only fills in the form; nothing plays until Create.
     // Otherwise restore what the listener typed before visiting Settings (#100).
     const d = startingDraft(window.location.search);
@@ -373,6 +382,7 @@ export default function DemoPage() {
           pace: readPaceChoice(),
           tone: readToneChoice(),
           repeat: repeatMin > 0,
+          ...(scriptMode === "exact" ? { scriptMode: "exact" } : {}),
         }),
       });
       if (res.ok) {
@@ -439,7 +449,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? noteForReason(scriptReason) : "",
+            next.source === "template" ? noteForReason(scriptReason) : next.source === "exact" ? "Your exact words." : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"
@@ -648,6 +658,25 @@ export default function DemoPage() {
               new idea settle in, especially at first.
             </p>
           )}
+          <div className="row">
+            <span className="small muted">Script</span>
+            <button
+              type="button"
+              className={`chip${scriptMode === "enhance" ? " active" : ""}`}
+              aria-pressed={scriptMode === "enhance"}
+              onClick={() => setScriptMode("enhance")}
+            >
+              Enhance with AI
+            </button>
+            <button
+              type="button"
+              className={`chip${scriptMode === "exact" ? " active" : ""}`}
+              aria-pressed={scriptMode === "exact"}
+              onClick={() => setScriptMode("exact")}
+            >
+              Exactly my words
+            </button>
+          </div>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>

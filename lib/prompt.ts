@@ -221,6 +221,24 @@ export function sexualIn(lines: string[], wish = ""): string | null {
   return null;
 }
 
+/**
+ * Splits the wish into the person's own sentences for exact mode (#229). No
+ * content is added, removed or reworded. The refrain is the longest sentence;
+ * on a tie the last one wins.
+ */
+export function exactLines(want: string): { lines: string[]; refrain: string } {
+  const raw = want.trim();
+  const parts = raw
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1 && /\w/.test(s));
+  const sentences = parts.length ? parts : [raw];
+  let refrain = sentences[0] ?? raw;
+  for (const s of sentences) if (s.length >= refrain.length) refrain = s;
+  if (!/[.!?]$/.test(refrain)) refrain = `${refrain}.`;
+  return { lines: sentences, refrain };
+}
+
 /** The refrain line the model writes after the script, for programming mode (#77). */
 /** A line that starts with the refrain label, and what follows the label on it. */
 // Text after the label needs a separator, so a spoken line such as "The
