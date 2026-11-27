@@ -5,7 +5,7 @@ import type { AudioSeam } from "../seams/types";
 import { LOOP_GAP_MS, type LoopItem, loopQueue, playlistGapName } from "./loop";
 import type { PlayJob, Prepared } from "./nowPlaying";
 
-export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boolean): Promise<LoopItem<string>[]>; /** Whether the gap carries the bell. Read at each build. */ bell(): Promise<boolean> }) {
+export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boolean): Promise<LoopItem<string>[]>; /** Whether the gap carries the bell. Read at each build. */ bell(): Promise<boolean>; /** Measure the duration of a clip in seconds. When provided, the prepared result includes `durationSec`. */ duration?: (src: string) => Promise<number> }) {
   let ready: Promise<Prepared | null> | null = null;
   // Bumped by `reset`, so a build the Library has outdated stops copying and cannot replace the new build's names.
   let gen = 0;
@@ -30,7 +30,14 @@ export function makePlayAll(d: { save: AudioSeam["save"]; load(gone: () => boole
       const n = Math.min(q.items.length, roundAt(i).round);
       return { title: q.items[n - 1].title, position: n, total: q.items.length };
     };
-    return { clips: q.clips, loop: true, at };
+    let durationSec: number | undefined;
+    if (d.duration && items.length > 0) {
+      const durs = await Promise.all(items.map((it) => d.duration!(it.src).catch(() => 0)));
+      const gapSec = LOOP_GAP_MS / 1000;
+      // Each item is followed by a gap (including the last, before looping back).
+      durationSec = durs.reduce((s, v) => s + v, 0) + items.length * gapSec;
+    }
+    return { clips: q.clips, loop: true, at, durationSec };
   };
   // Made ahead, so Play does not wait (a browser needs Play inside the tap). A failed build is forgotten.
   const prepare = () => {

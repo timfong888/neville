@@ -118,7 +118,9 @@ export async function startRecording(m: Manifestation): Promise<void> {
         ? e.message
         : "The recording could not be made just now.";
     const creditReturned = e instanceof ApiError && e.data?.creditReturned === true;
-    dispatch(id, { type: "server_failed", reason, creditReturned });
+    const code = e instanceof ApiError ? e.code : undefined;
+    const hint = e instanceof ApiError ? e.data?.hint : undefined;
+    dispatch(id, { type: "server_failed", reason, creditReturned, code, hint });
   }
 }
 

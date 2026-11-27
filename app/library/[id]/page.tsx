@@ -84,6 +84,7 @@ export default function ManifestationPage() {
           error?: string;
           code?: string;
           creditReturned?: boolean;
+          hint?: string;
         } | null;
         if (res.status === 402) {
           dispatch({ type: "server_402" });
@@ -91,7 +92,7 @@ export default function ManifestationPage() {
         }
         const reason = j?.error ?? "The recording could not be made just now.";
         const creditReturned = j?.creditReturned === true;
-        dispatch({ type: "server_failed", reason, creditReturned });
+        dispatch({ type: "server_failed", reason, creditReturned, code: j?.code, hint: j?.hint });
         return;
       }
       const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
@@ -177,9 +178,10 @@ export default function ManifestationPage() {
         ? "Unlimited recordings."
         : rrState.balance !== null ? `1 credit used. ${rrState.balance} left.` : "1 credit used.";
       case "done": return "Recording done.";
-      case "failed": return rrState.failReason
-        ? (rrState.creditReturned ? `${rrState.failReason} Your credit was returned.` : rrState.failReason)
-        : "";
+      case "failed": {
+        const msg = rrState.failReason ?? "";
+        return msg && rrState.creditReturned ? `${msg} Your credit was returned.` : msg;
+      }
       case "no_credits": return "You have no recordings left. Get more to keep going.";
       default: return "";
     }
@@ -202,6 +204,11 @@ export default function ManifestationPage() {
       {rrMsg && (
         <p className="small muted" role="status">
           {rrMsg}
+        </p>
+      )}
+      {rrState.status === "failed" && rrState.failHint && (
+        <p className="small muted" role="note">
+          {rrState.failHint}
         </p>
       )}
 
@@ -273,6 +280,12 @@ export default function ManifestationPage() {
           {(rrState.status === "saved_not_recorded" || rrState.status === "idle" || rrState.status === "failed" || rrState.status === "no_credits") && (
             <button className="btn sm primary" onClick={() => void rerecord(m)} disabled={isRecording}>
               Re-record
+            </button>
+          )}
+          {/* Edit script: shown when recording was refused for content (issue 252's editor will replace setEditing when it ships). */}
+          {rrState.status === "failed" && rrState.failCode === "not_recordable" && (
+            <button className="btn sm" onClick={() => setEditing(true)}>
+              Edit script
             </button>
           )}
           <select aria-label="Add to playlist" value={target} onChange={(e) => setTarget(e.target.value)}>

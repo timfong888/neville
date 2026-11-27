@@ -7,11 +7,17 @@ import { displayTitle } from "@/lib/script";
 import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
+import { DEFAULT_SESSION_MODE, DEFAULT_TIME, makeSessionStore, type SessionMode } from "../../src/player/sessionStore";
+import { LOOP_GAP_MS } from "../../src/player/loop";
+import { planSession } from "@/lib/session/planSession";
+import { kv } from "../../src/seams/kv";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
+
+const sessionStore = makeSessionStore(kv);
 
 const itemMeta = (m: Manifestation) => `${m.lines.length} lines · ${m.hasAudio ? m.voiceName : "no recording"} · ${new Date(m.createdAt).toLocaleDateString()}`;
 
@@ -53,6 +59,18 @@ export default function LibraryScreen() {
   const items = newestFirst(lib.manifestations);
   const np = useNowPlaying();
   const bell = useBell();
+  const [sessionMode, setSessionMode] = useState<SessionMode>(DEFAULT_SESSION_MODE);
+  const [sessionLoops, setSessionLoops] = useState(3);
+  const [sessionTarget, setSessionTarget] = useState(DEFAULT_TIME);
+  useEffect(() => {
+    void sessionStore.readMode().then((m) => {
+      setSessionMode(m);
+      void sessionStore.readTarget(m).then((t) => {
+        if (m === "loops") setSessionLoops(t);
+        else if (m === "time") setSessionTarget(t);
+      });
+    });
+  }, []);
   // The controller plays one thing at a time; this card shows it only when it is the Library loop.
   const now = np.id === "all" ? np : { ...np, status: "idle" as const, note: "" };
   const recordings = items.filter((m) => m.hasAudio);
@@ -115,7 +133,37 @@ export default function LibraryScreen() {
             </>
           ) : (
             <>
-              <Button kind="primary" label={copied ? "Play all on loop" : "Preparing playlist…"} disabled={!copied} onPress={() => void nowPlaying.play({ ...playAll.job, prepare: async () => { const p = await playAll.job.prepare(); return p && { ...p, music: MUSIC_ENABLED }; } })} />
+              <Button
+                kind="primary"
+                label={copied ? (sessionMode === "until-stopped" ? "Play all on loop" : sessionMode === "loops" ? `Play all · ${sessionLoops} loops` : `Play all · ${sessionTarget} min`) : "Preparing playlist…"}
+                disabled={!copied}
+                onPress={() => void nowPlaying.play({
+                  ...playAll.job,
+                  prepare: async () => {
+                    const p = await playAll.job.prepare();
+                    if (!p) return null;
+                    if (sessionMode === "until-stopped") return { ...p, music: MUSIC_ENABLED };
+                    if (sessionMode === "loops") {
+                      const allClips = Array.from({ length: sessionLoops }, () => p.clips).flat();
+                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+                    }
+                    // time mode: use playlist duration to compute how many full passes fit
+                    if (p.durationSec && p.durationSec > 0) {
+                      const gapSec = LOOP_GAP_MS / 1000;
+                      const plan = planSession([p.durationSec], "time", sessionTarget, undefined, gapSec);
+                      const loops = plan.loops ?? 1;
+                      // loopQueue puts a gap after every pass including the last; strip it so
+                      // the finite queue doesn't run past the chosen target.
+                      const allClips = Array.from({ length: loops }, () => p.clips).flat();
+                      const clips = allClips.length > 0 ? allClips.slice(0, -1) : allClips;
+                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+                    }
+                    // duration unknown: fall back to until-stopped
+                    return { ...p, loop: true, music: MUSIC_ENABLED };
+                  },
+                })}
+              />
               {now.note ? <Text style={type.muted}>{now.note}</Text> : <Text style={type.muted}>Plays every recording, newest first, and starts again after the last.</Text>}
               <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={np.status !== "idle"} />
             </>
