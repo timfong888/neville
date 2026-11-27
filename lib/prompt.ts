@@ -299,11 +299,16 @@ export const RELAXED_SYSTEM_ADDENDUM =
 // EXPLICIT without sex/sexy/sexual* — for the relaxed-tier output check.
 const EXPLICIT_RELAXED = /\b(?:nude|naked|nudity|topless|breasts|nipples?|genitals?|penis|vagina|erections?|orgasms?|intercourse|erotic\w*|arous(?:al|ed)|horny|lust(?:ful)?|strip(?:per|pers|tease)|undress\w*|bare[- ]chested)\b/i;
 
-/** Like sexualIn but allows sex/sexy/sexual* and all SENSUAL words. Used for relaxed-tier output. */
+// Body-part subset of SENSUAL — still forbidden on the relaxed tier ("no body parts").
+const SENSUAL_BODY_PARTS = /\b(?:cleavage|thighs?)\b/i;
+
+/** Like sexualIn but allows sex/sexy/sexual* and non-body-part SENSUAL words. Used for relaxed-tier output. */
 export function sexInRelaxed(lines: string[], _wish?: string): string | null {
   for (const l of lines) {
     const e = EXPLICIT_RELAXED.exec(l);
     if (e) return e[0];
+    const b = SENSUAL_BODY_PARTS.exec(l);
+    if (b) return b[0];
   }
   return null;
 }

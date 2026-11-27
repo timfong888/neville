@@ -524,9 +524,13 @@ describe("relaxed adult tier (issue 218)", () => {
         expect(sexInRelaxed([line]), line).toBeNull();
       }
     });
-    it("accepts lines with SENSUAL words (thighs, seductive)", () => {
-      expect(sexInRelaxed(["Her thighs are bare and her eyes are warm."])).toBeNull();
+    it("accepts non-body-part SENSUAL words (seductive, sensual)", () => {
       expect(sexInRelaxed(["She moves toward you in a seductive way."])).toBeNull();
+      expect(sexInRelaxed(["The moment feels deeply sensual and warm."])).toBeNull();
+    });
+    it("rejects body-part SENSUAL words (thighs, cleavage)", () => {
+      expect(sexInRelaxed(["Her thighs are bare and her eyes are warm."])).not.toBeNull();
+      expect(sexInRelaxed(["Her cleavage catches the light."])).not.toBeNull();
     });
     it("rejects lines with the remaining EXPLICIT words", () => {
       for (const [line, word] of [
