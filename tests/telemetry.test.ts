@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@vercel/functions", () => ({ waitUntil: vi.fn() }));
 
 async function freshModule() {
   vi.resetModules();
@@ -33,7 +34,6 @@ describe("captureEvent", () => {
     process.env.POSTHOG_KEY = "phc_testkey";
     const { captureEvent } = await freshModule();
     captureEvent("script_failed", { route: "manifest", reason: "timeout", elapsedMs: 1234 });
-    // Flush microtasks + macrotasks for the fetch call
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -56,11 +56,9 @@ describe("captureEvent", () => {
     await new Promise((r) => setTimeout(r, 20));
     const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string) as Record<string, unknown>;
     const props = body.properties as Record<string, unknown>;
-    // These fields must never appear
     for (const forbidden of ["wish", "name", "script", "email", "key", "want", "text"]) {
       expect(props).not.toHaveProperty(forbidden);
     }
-    // api_key must only be in the top-level body, not in properties
     expect(props).not.toHaveProperty("api_key");
   });
 
@@ -69,7 +67,6 @@ describe("captureEvent", () => {
     fetchMock.mockRejectedValue(new Error("network failure"));
     const { captureEvent } = await freshModule();
     expect(() => captureEvent("manifest_timeout", { route: "manifest", elapsedMs: 60000 })).not.toThrow();
-    // Allow the rejection to propagate and confirm no unhandled rejection surfaces
     await new Promise((r) => setTimeout(r, 20));
   });
 

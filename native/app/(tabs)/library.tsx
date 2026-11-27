@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useRouter } from "expo-router";
-import { Pressable, type PressableInstance, type ScrollViewInstance, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Platform, Pressable, type PressableInstance, type ScrollViewInstance, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
 import { playingItemId } from "@/lib/playingItemId";
 import { displayTitle } from "@/lib/script";
@@ -14,6 +14,37 @@ import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
 
 const itemMeta = (m: Manifestation) => `${m.lines.length} lines · ${m.hasAudio ? m.voiceName : "no recording"} · ${new Date(m.createdAt).toLocaleDateString()}`;
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced);
+    return () => sub.remove();
+  }, []);
+  return reduced;
+}
+
+/** 10 px blue dot in the left gutter of the playing row. Pulses unless reduced motion is on; dims while paused. */
+function PlayingDot({ paused }: { paused: boolean }) {
+  const reducedMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (paused || reducedMotion) {
+      Animated.timing(opacity, { toValue: paused ? 0.4 : 1, duration: 150, useNativeDriver: Platform.OS !== "web" }).start();
+      return;
+    }
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.35, duration: 900, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(opacity, { toValue: 1, duration: 900, useNativeDriver: Platform.OS !== "web" }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [paused, reducedMotion, opacity]);
+  return <Animated.View accessible={false} style={[s.dot, !paused && !reducedMotion && s.dotGlow, { opacity }]} />;
+}
 
 // Everything saved on this device, newest first. Playlists and account sync come in Phase 2.
 export default function LibraryScreen() {
@@ -106,17 +137,25 @@ export default function LibraryScreen() {
         <View accessibilityRole="list" style={s.list}>
           {items.map((m) => {
             const isPlaying = playingId === m.id;
+            const isPaused = isPlaying && np.status === "paused";
             return (
               <Link key={m.id} href={`/library/${m.id}`} asChild>
                 <Pressable
                   ref={(r) => { rowRefs.current.set(m.id, r); }}
                   accessibilityRole="link"
-                  accessibilityLabel={isPlaying ? `${displayTitle(m.title)}, Now playing` : displayTitle(m.title)}
+                  accessibilityLabel={isPlaying ? `${displayTitle(m.title)}, Playing` : displayTitle(m.title)}
                   accessibilityState={{ selected: isPlaying }}
                   style={[s.row, isPlaying && s.rowPlaying]}
                 >
-                  <Text style={type.body}>{displayTitle(m.title)}</Text>
-                  <Text style={type.muted}>{itemMeta(m)}</Text>
+                  <View style={s.rowInner}>
+                    <View style={s.dotSlot}>
+                      {isPlaying && <PlayingDot paused={isPaused} />}
+                    </View>
+                    <View style={s.rowText}>
+                      <Text style={type.body}>{displayTitle(m.title)}</Text>
+                      <Text style={type.muted}>{itemMeta(m)}</Text>
+                    </View>
+                  </View>
                 </Pressable>
               </Link>
             );
@@ -130,7 +169,12 @@ export default function LibraryScreen() {
 const s = StyleSheet.create({
   list: { gap: space.sm },
   card: { gap: space.md, padding: space.lg, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
-  row: { gap: 2, padding: space.md, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
+  row: { padding: space.md, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.card },
   // Accent outline + low-alpha tint; white text contrast on this bg is well above 4.5:1 (#204).
   rowPlaying: { borderColor: colors.accent, backgroundColor: "rgba(16, 93, 251, 0.12)" },
+  rowInner: { flexDirection: "row", alignItems: "flex-start" },
+  dotSlot: { width: 20, paddingTop: 7, alignItems: "center" },
+  rowText: { flex: 1, gap: 2 },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
+  dotGlow: { shadowColor: colors.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 6, elevation: 4 },
 });
