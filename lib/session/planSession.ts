@@ -25,19 +25,23 @@ export type SessionPlan = {
 /**
  * Returns a plan for a playback session.
  *
- * @param durations - Seconds per loop, including any gap after the voice.
+ * @param durations      - Seconds per loop, including any inter-loop gap.
  *   For a single item: `[voiceSeconds + gapSeconds]`.
  *   For Play all: `[totalSecondsForOneFullPlaylistPass]`.
- * @param mode     - "until-stopped" | "loops" | "time"
- * @param target   - Integer loop count (loops mode) or minutes (time mode).
- *                   Ignored for until-stopped.
- * @param now      - Seed for endsAt; defaults to new Date().
+ * @param mode           - "until-stopped" | "loops" | "time"
+ * @param target         - Integer loop count (loops mode) or minutes (time mode).
+ *                         Ignored for until-stopped.
+ * @param now            - Seed for endsAt; defaults to new Date().
+ * @param trailingGapSec - The gap appended after each loop that is NOT played
+ *   after the final loop. Pass `gapSeconds` so that time mode does not count
+ *   a trailing gap the last loop never actually plays.
  */
 export function planSession(
   durations: number[],
   mode: SessionMode,
   target: number,
   now = new Date(),
+  trailingGapSec = 0,
 ): SessionPlan {
   if (mode === "until-stopped" || durations.length === 0) {
     return { loops: null, totalSeconds: null, endsAt: null };
@@ -56,8 +60,10 @@ export function planSession(
   const targetSecs = target * 60;
   const loopDur = dur(0); // single-item path: all loops same length
   if (loopDur <= 0) return { loops: 1, totalSeconds: 0, endsAt: now };
-  // floor → rounds down. max(1, …) → if one loop is longer than the target, play it once.
-  const loops = Math.max(1, Math.floor(targetSecs / loopDur));
+  // Add trailingGapSec so the final loop is not penalised for a gap it never plays.
+  // N loops take N*loopDur - trailingGapSec seconds total; solving for N gives:
+  // N <= (targetSecs + trailingGapSec) / loopDur
+  const loops = Math.max(1, Math.floor((targetSecs + trailingGapSec) / loopDur));
   let totalSeconds = 0;
   for (let i = 0; i < loops; i++) totalSeconds += dur(i);
   return { loops, totalSeconds, endsAt: new Date(now.getTime() + totalSeconds * 1000) };

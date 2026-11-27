@@ -67,4 +67,14 @@ describe("planSession — time mode", () => {
     const p = planSession([], "time", 10, NOW);
     expect(p.loops).toBeNull();
   });
+
+  it("boundary: recording that fits exactly N loops without trailing gap", () => {
+    // 299 s voice + 1.8 s gap = 300.8 s loopDur
+    // 2 actual loops = 2×299 + 1×1.8 = 599.8 s ≤ 600 s (10 min) → should give 2 loops
+    // Without trailingGapSec: floor(600 / 300.8) = 1 (off by one bug)
+    // With trailingGapSec=1.8: floor(601.8 / 300.8) = 2 ✓
+    const p = planSession([300.8], "time", 10, NOW, 1.8);
+    expect(p.loops).toBe(2);
+    expect(p.totalSeconds).toBe(601.6);
+  });
 });

@@ -92,8 +92,9 @@ export default function Player() {
   const plan = (() => {
     const v = voice.current;
     if (!v || sessionMode === "until-stopped") return null;
-    const loopDur = v.seconds + LOOP_GAP_MS / 1000;
-    return planSession([loopDur], sessionMode, sessionTarget);
+    const gapSec = LOOP_GAP_MS / 1000;
+    const loopDur = v.seconds + gapSec;
+    return planSession([loopDur], sessionMode, sessionTarget, undefined, gapSec);
   })();
 
   const play = () => {

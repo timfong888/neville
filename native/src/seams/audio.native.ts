@@ -78,12 +78,14 @@ export const audio: AudioSeam = {
           list.setActiveForLockScreen(true, meta, opts);
         } catch {}
       }
-      if (bed && s.playing !== voice) {
+      const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
+      // Skip bed.voice(false) on natural end: the bed is still audible and
+      // the fade below handles the transition. Pausing it first makes the fade silent.
+      if (bed && s.playing !== voice && !ended) {
         voice = s.playing;
         bed.voice(s.playing);
       }
       const progress = s.duration > 0 && Number.isFinite(s.currentTime) ? Math.min(1, s.currentTime / s.duration) : undefined;
-      const ended = !o.loop && s.didJustFinish && s.currentIndex >= s.trackCount - 1;
       // Natural end: fade the music over 5 s rather than cutting it off.
       if (ended) { endedNaturally = true; bed?.fade(5); }
       o.onState({ playing: s.playing, index: s.currentIndex, ended, progress });
