@@ -1,0 +1,70 @@
+import { describe, expect, it } from "vitest";
+import { planSession } from "@/lib/session/planSession";
+
+const NOW = new Date("2026-01-01T10:00:00Z");
+
+describe("planSession — until-stopped", () => {
+  it("returns nulls", () => {
+    const p = planSession([200], "until-stopped", 0, NOW);
+    expect(p).toEqual({ loops: null, totalSeconds: null, endsAt: null });
+  });
+
+  it("returns nulls even with a target", () => {
+    const p = planSession([200], "until-stopped", 10, NOW);
+    expect(p.loops).toBeNull();
+  });
+});
+
+describe("planSession — loops mode", () => {
+  it("plays the exact number of loops", () => {
+    const p = planSession([200], "loops", 5, NOW);
+    expect(p.loops).toBe(5);
+    expect(p.totalSeconds).toBe(1000);
+  });
+
+  it("clamps to 1 at the low end", () => {
+    expect(planSession([200], "loops", 0, NOW).loops).toBe(1);
+  });
+
+  it("clamps to MAX_LOOPS at the high end", () => {
+    expect(planSession([200], "loops", 99, NOW).loops).toBe(20);
+  });
+
+  it("sets endsAt from now", () => {
+    const p = planSession([200], "loops", 1, NOW);
+    expect(p.endsAt?.getTime()).toBe(NOW.getTime() + 200_000);
+  });
+});
+
+describe("planSession — time mode", () => {
+  it("10 min target, 3:20 item → 3 loops (10:00)", () => {
+    // 200 s × 3 = 600 s = 10:00
+    const p = planSession([200], "time", 10, NOW);
+    expect(p.loops).toBe(3);
+    expect(p.totalSeconds).toBe(600);
+  });
+
+  it("9 min target, 3:20 item → 2 loops (6:40)", () => {
+    // floor(540 / 200) = 2
+    const p = planSession([200], "time", 9, NOW);
+    expect(p.loops).toBe(2);
+    expect(p.totalSeconds).toBe(400);
+  });
+
+  it("item longer than target → plays once", () => {
+    // 7 min item, 5 min target: floor(300 / 420) = 0 → clamp to 1
+    const p = planSession([420], "time", 5, NOW);
+    expect(p.loops).toBe(1);
+    expect(p.totalSeconds).toBe(420);
+  });
+
+  it("sets endsAt proportionally", () => {
+    const p = planSession([200], "time", 10, NOW);
+    expect(p.endsAt?.getTime()).toBe(NOW.getTime() + 600_000);
+  });
+
+  it("empty durations array returns until-stopped plan", () => {
+    const p = planSession([], "time", 10, NOW);
+    expect(p.loops).toBeNull();
+  });
+});
