@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
-import { writeScript } from "@/lib/server/writer";
+import { writeScript, writeAdultScript } from "@/lib/server/writer";
+import { adultGate } from "@/lib/adult/gate";
+import { isAdultTierUser } from "@/lib/adult/tier";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
@@ -120,6 +122,71 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await charged.refund();
     alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", elapsedMs: Date.now() - started });
     return timeoutResponse(true);
+  }
+
+  // Adult-tier path: check allowlist, run hard-block gate, use adult model.
+  // The gate runs for every account; the adult model only for allowlisted users.
+  const isAdult = isAdultTierUser(session?.email ?? null);
+  if (isAdult) {
+    const gate = adultGate(want);
+    if (!gate.allowed) {
+      await charged.refund();
+      await slot?.release();
+      // Log reason only — never log the wish text.
+      console.info("[adult_gate_block]", JSON.stringify({ reason: gate.reason, route: "manifest" }));
+      return NextResponse.json({ code: "content_policy", error: gate.guidance }, { status: 422 });
+    }
+    const adultResult = await writeAdultScript({ key, want, name, variant });
+    if (!adultResult.ok) {
+      await charged.refund();
+      await slot?.release();
+      console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest" }));
+      const msg = adultResult.reason === "output_gate"
+        ? "The script did not pass the content check. Please try again."
+        : "Adult-tier script model unavailable.";
+      return NextResponse.json({ code: "content_policy", error: msg }, { status: 422 });
+    }
+    // No share link and no gallery for adult-tier items.
+    // The X-Adult header tells the native app to suppress share/gallery controls.
+    const adultScript = adultResult.script;
+    const repeat = body.repeat === true && /^(?:heygen\/|google\/gemini)/.test(voice.model);
+    const recorded = repeat ? [...adultScript.lines, adultScript.refrain] : adultScript.lines;
+    const text = recorded.join("\n\n");
+    const spoken = recorded.join(" ").length;
+    if (adultScript.source === "model" || (adultScript.costUsd ?? 0) > 0) {
+      await record({ route: "manifest", kind: "script", source: adultScript.source, model: adultScript.model ?? null, chars: spoken, estUsd: adultScript.costUsd ?? null });
+    }
+    if (state.timedOut) {
+      alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: adultScript.model ?? null, elapsedMs: Date.now() - started });
+      return timeoutResponse(true);
+    }
+    const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
+    if (voiceMs === null) {
+      alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: adultScript.model ?? null, elapsedMs: Date.now() - started });
+      return timeoutAnswer(state);
+    }
+    const speech = await synthesize({ key, model: voice.model, voice: voice.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: voiceMs, atomic: voice.atomic === true });
+    if (!speech.ok) {
+      await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
+      await charged.refund();
+      return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now.", ...(adultScript.source === "model" ? { lines: adultScript.lines } : {}) }, { status: 502 });
+    }
+    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars, estUsd: await estimateSpeech(voice.model, speech.sentChars) });
+    if (!state.timedOut) await charged.fulfil();
+    return new NextResponse(speech.audio, {
+      headers: {
+        "Content-Type": speech.mime, "Cache-Control": "no-store",
+        "X-Script": Buffer.from(JSON.stringify(adultScript.lines), "utf8").toString("base64"),
+        "X-Script-Source": adultScript.source,
+        "X-Adult": "1",
+        ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(adultScript.refrain, "utf8").toString("base64") } : {}),
+        ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
+        "X-Voice-Id": voice.id, "X-Chars": String(text.length), "X-Pace": pace.id, "X-Tone": tone.id,
+        "X-Speed-Applied": speech.speedApplied ? "1" : "0",
+        ...(speech.pauseMs ? { "X-Pause-Ms": String(speech.pauseMs) } : {}),
+        ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
+      },
+    });
   }
 
   const script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });

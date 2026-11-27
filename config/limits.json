@@ -15,6 +15,9 @@
   "scriptMaxTokens": 3000,
   "scriptTimeoutMs": 36000,
   "scriptTryTimeoutMs": 24000,
+  "adultScriptModels": [
+    "nothingiisreal/mn-celeste-12b"
+  ],
   "vetModels": [
     "google/gemini-2.5-flash-lite",
     "openai/gpt-4.1-nano",
