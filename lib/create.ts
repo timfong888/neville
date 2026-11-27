@@ -19,6 +19,9 @@ export const EXAMPLES = [
 
 /** Where the free-creation count is kept on the device. */
 export const FREE_STORAGE_KEY = "nv_free";
+/** Where the script mode choice is kept on the device. */
+export const SCRIPT_MODE_KEY = "nv_script_mode";
+export type ScriptMode = "exact" | "enhance";
 
 /** The count as stored; anything unreadable is zero. */
 export const parseCount = (raw: string | null): number => {
@@ -68,7 +71,7 @@ export function pickOnCreate(p: VoicePick, id: string, current: string, asDefaul
 }
 
 /** The wish as typed, and the choices from Settings. */
-export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
+export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown; scriptMode?: ScriptMode };
 
 /** The body of `POST /api/manifest`. The server checks every field again. */
 export function wishRequest(w: Wish): WishRequest {
@@ -79,6 +82,7 @@ export function wishRequest(w: Wish): WishRequest {
     variant: w.variant ?? 0,
     pace: w.pace,
     tone: w.tone,
+    ...(w.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
   };
 }
 
@@ -87,9 +91,11 @@ export type Made = {
   lines: string[];
   /** About the wish only when the server vetted it and recorded it. */
   title: string;
-  /** Why this is not the recording that was asked for; empty when it is. */
+  /** Why this is not the recording that was asked for, or which mode was used. */
   note: string;
   recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
+  /** "exact" when the script uses the person's own sentences unchanged. */
+  scriptMode?: "exact";
 };
 
 /** The server's words, plus when a daily limit lifts: its day is the UTC date (lib/limits.ts). */
@@ -114,8 +120,9 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     return {
       title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
       lines: r.lines,
-      note: r.source === "template" ? noteForReason(r.reason) : "",
+      note: r.source === "template" ? noteForReason(r.reason) : r.scriptMode === "exact" ? "Your exact words." : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
+      ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
     };
   } catch (e) {
     const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
