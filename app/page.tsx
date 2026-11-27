@@ -8,10 +8,10 @@ import Link from "next/link";
 import { useRouter as useNextRouter } from "next/navigation";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
-import { readVoiceChoice } from "@/lib/voiceStore";
+import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice, writeSpeedStepChoice, writeCadenceStepChoice } from "@/lib/deliveryStore";
-import { SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
+import { CURATED_VOICES, SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -151,6 +151,24 @@ export default function DemoPage() {
   const [playing, setPlaying] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const sampleAudio = useRef<HTMLAudioElement | null>(null);
+
+  const toggleSample = (id: string, sample: string) => {
+    if (playingVoice === id) {
+      sampleAudio.current?.pause();
+      sampleAudio.current = null;
+      setPlayingVoice(null);
+      return;
+    }
+    sampleAudio.current?.pause();
+    const a = new Audio(sample);
+    sampleAudio.current = a;
+    setPlayingVoice(id);
+    a.onended = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    a.onerror = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    void a.play();
+  };
 
   const token = useRef(0);
   const bed = useRef<MusicBed | null>(null);
@@ -535,6 +553,8 @@ export default function DemoPage() {
           lines: made?.saveLines ?? lines,
           voiceId: made?.voiceId ?? "",
           voiceName: made?.voiceName ?? "Device voice",
+          speedStep,
+          cadenceStep,
           hasAudio: !!audio,
           createdAt: now,
           updatedAt: now,
@@ -629,14 +649,33 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
-          <Link className="voicesummary" href="/settings#voice">
+          <div className="row" role="radiogroup" aria-label="Voice">
             <span className="small muted">Voice</span>
-            <span>
-              <b>{nextVoice.name}</b>
-              <span className="small muted"> {mixOn ? "· next in your voice mix" : voiceBlurb(nextVoice) && `· ${voiceBlurb(nextVoice)}`}</span>
-            </span>
-            <span className="change">Change</span>
-          </Link>
+            {CURATED_VOICES.map((v) => (
+              <span key={v.id} style={{ display: "inline-flex", gap: "2px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`chip${studioVoice.id === v.id ? " active" : ""}`}
+                  aria-pressed={studioVoice.id === v.id}
+                  onClick={() => { writeVoiceChoice(v.id); refreshNextVoice(); }}
+                >
+                  {v.name}
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  aria-label={`${playingVoice === v.id ? "Stop" : "Play"} ${v.name} sample`}
+                  onClick={() => toggleSample(v.id, v.sample)}
+                  style={{ minWidth: "2em" }}
+                >
+                  {playingVoice === v.id ? "■" : "▶"}
+                </button>
+              </span>
+            ))}
+            <Link className="chip" href="/settings#voice" title="Mix voices or choose from the full list">
+              More
+            </Link>
+          </div>
           <div className="row">
             <div>
               <label htmlFor="repeat">Repetition after the script</label>
