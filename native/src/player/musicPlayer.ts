@@ -22,7 +22,13 @@ export type MusicView = { choice: MusicChoice; active: boolean };
 
 export function makeMusicPlayer(engine: MusicEngine) {
   let target: Track | undefined;
+  // `session` is a monotonically increasing counter used for follower identity comparisons.
+  // It is never reset to 0, so each attach() yields a unique `mine` value and stale followers
+  // from a previous close+reattach cycle cannot pass the `session !== mine` guard (#208).
   let session = 0;
+  // True while a follower is live. Separate from `session` so the active-session check
+  // (`session !== 0` in the original code) still works after the counter was never reset.
+  let hasSession = false;
   let voice = false;
   /** Bumped by every change; a load keeps its result only if no change came after it started. */
   let token = 0;
@@ -33,7 +39,7 @@ export function makeMusicPlayer(engine: MusicEngine) {
 
   const publish = () => {
     const choice: MusicChoice = loaded?.track.id ?? loading?.id ?? "none";
-    const active = session !== 0;
+    const active = hasSession;
     if (choice === snap.choice && active === snap.active) return;
     snap = { choice, active };
     subs.forEach((f) => f());
@@ -60,7 +66,7 @@ export function makeMusicPlayer(engine: MusicEngine) {
     } catch {}
   };
   const sync = () => {
-    const want = session !== 0 ? target : undefined;
+    const want = hasSession ? target : undefined;
     const have = loaded?.track ?? loading;
     if (want && have && have.id === want.id && have.src === want.src) {
       // The same track: only its level changes.
@@ -120,8 +126,10 @@ export function makeMusicPlayer(engine: MusicEngine) {
     },
     /** A voice session takes the music. The one before it, if any, is let go first. */
     attach(): Follower {
+      if (loaded || loading) console.warn("[music_double_attach]", { loaded: !!loaded, loading: !!loading });
       release();
       const mine = ++session;
+      hasSession = true;
       voice = false;
       sync();
       return {
@@ -132,7 +140,7 @@ export function makeMusicPlayer(engine: MusicEngine) {
         },
         close() {
           if (session !== mine) return;
-          session = 0;
+          hasSession = false;
           voice = false;
           release();
           publish();
