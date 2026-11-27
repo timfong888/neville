@@ -2,7 +2,7 @@
 // Called before any model for EVERY account: these blocks have no off switch.
 // Never echo a blocked term into logs or error messages; return reason codes only.
 
-import { wishMentionsMinor } from "@/lib/prompt";
+import { wishSexualisesMinor } from "@/lib/prompt";
 
 export type BlockReason =
   | "minor"
@@ -33,19 +33,41 @@ const VIOLENCE =
 const NON_CONSENT =
   /\b(?:forc(?:e|ed|ing|es)(?:\s+(?:her|him|them|me|you|into|to)|\s+by\s+(?:me|him|her|them|you))?|coerce(?:d|s|ing)?|coercion|blackmail(?:ed|ing|s)?|non[\s-]?(?:consent\b|consensual)|without (?:her|his|their) consent|against (?:her|his|their) will|rape(?:d|s|r|ing)?|molest(?:ed|ing|s)?|kidnap(?:ped|ping|s)?|drugg(?:ed|ing) (?:her|him|them))\b/i;
 
-// Family or relative roles in a sexual context
-// (all roles are included; a future variant could use proximity to sexual terms,
-// but fail-closed is safer for MVP)
+// Family or relative role words. Blocking on these alone would refuse innocent wishes
+// ("reconnect with my mother"). They are only blocked when a sexual-context signal is
+// also present in the wish (see SEXUAL_CONTEXT below and the check in adultGate).
 const FAMILY_ROLE =
   /\b(?:mom|mother|dad|father|sister|brother|aunt|uncle|grandm(?:a|other)|grandf(?:a|ather)|granddad|grandpa|grandma|grandnan|stepmom|stepdad|stepdaughter|stepson|stepsister|stepbrother|stepmother|stepfather|in[\s-]?law|relative|family member)\b/i;
+
+// Sexual-context signal. Broad enough to catch intent; combined with FAMILY_ROLE for the block.
+// A family-word wish that has no sexual-context word passes (non-sexual family is encouraged).
+const SEXUAL_CONTEXT =
+  /\b(?:sex\w*|erotic\w*|explicit\b|intima\w*|naked|nude|nudity|nudist|seduc\w+|lust\w*|horny|aroused|arouses?|passionate (?:night|evening|kiss|love|sex)|romantic (?:scene|night|evening|encounter)|kissing|making love|affair|sensual\w*|desire(?:s|d|ing)?|attracted to|in love with|flirt\w*|pornograph\w*|adult content)\b/i;
 
 // Prohibited acts: bestiality, genital mutilation, gender-change framing in explicit context
 const PROHIBITED_ACT =
   /\b(?:bestialit(?:y|ies)|animal sex|zoophil\w+|mutilat(?:e|ed|ion|ing)|amputat(?:e|ed|ion|ing)|genital mutilat\w+|gender (?:swap|change|transformation|reassignment) (?:sex|explicit|porn|nude|naked))\b/i;
 
-// Minor-coded phrases not caught by wishMentionsMinor
-const MINOR_CODED =
-  /\b(?:barely legal|just turned 18|look(?:s|ing)? (?:young|like a (?:kid|child|teen|minor|student))|underage|age[\s-]play|loli\w*|shota\w*|petite school(?:girl|boy)?|school[\s-]?girl|school[\s-]?boy)\b/i;
+// Absolute minor indicators: always blocked regardless of sexual context.
+// Covers direct age statements under 18, explicit coded terms (loli, shota, etc.),
+// and school-framing phrases. Words like "sister", "daughter", "teen" that are also
+// used in innocent non-sexual family wishes are NOT here — they go through
+// wishSexualisesMinor (which requires a sexual-intent co-signal) instead.
+const AGE_WORDS_EN =
+  "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen";
+const ABSOLUTE_MINOR = new RegExp(
+  "(?<!\\w)(?:" +
+    "(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yrs?\\.?|y\\.? ?o\\.?|y/o|years? of age)" +
+    "|(?:" + AGE_WORDS_EN + ")[- ]?(?:years?[- ]old|years?|yrs?\\.?|y\\.? ?o\\.?)" +
+    "|aged? (?:[1-9]|1[0-7])|aged? (?:" + AGE_WORDS_EN + ")" +
+    "|barely legal|just turned 18|underage|minor\\b|child(?:ren)?\\b|kids?\\b" +
+    "|teen\\w*|preteen|youth(?:ful)?\\b" +
+    "|age[\\s-]play|loli\\w*|shota\\w*" +
+    "|petite[\\s-]?school(?:girl|boy)?|school[\\s-]?girl\\b|school[\\s-]?boy\\b" +
+    "|look(?:s|ing)? like a (?:kid|child|teen|minor|student)" +
+  ")(?!\\w)",
+  "i",
+);
 
 const GUIDANCE: Record<BlockReason, string> = {
   minor:
@@ -70,7 +92,12 @@ const GUIDANCE: Record<BlockReason, string> = {
  * Never logs or echoes the blocked term; callers must not log `wish` on refusal.
  */
 export function adultGate(wish: string): AdultGateResult {
-  if (wishMentionsMinor(wish) || MINOR_CODED.test(wish)) {
+  // Two-tier minor check:
+  // 1. Absolute terms (direct ages under 18, loli, schoolgirl framing, etc.) always block.
+  // 2. Ambiguous minor-associated words (teen, sister, girl, etc.) only block when a
+  //    sexual-intent signal is also present (wishSexualisesMinor).
+  //    Non-sexual wishes that happen to mention a sibling or niece pass through.
+  if (ABSOLUTE_MINOR.test(wish) || wishSexualisesMinor(wish)) {
     return { allowed: false, reason: "minor", guidance: GUIDANCE.minor };
   }
   if (PROPER_NAME.test(wish) || LIKENESS.test(wish)) {
@@ -85,7 +112,7 @@ export function adultGate(wish: string): AdultGateResult {
   if (NON_CONSENT.test(wish)) {
     return { allowed: false, reason: "non_consent", guidance: GUIDANCE.non_consent };
   }
-  if (FAMILY_ROLE.test(wish)) {
+  if (FAMILY_ROLE.test(wish) && SEXUAL_CONTEXT.test(wish)) {
     return { allowed: false, reason: "family_role", guidance: GUIDANCE.family_role };
   }
   return { allowed: true };

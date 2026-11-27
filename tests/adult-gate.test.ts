@@ -102,26 +102,52 @@ describe("adultGate — non-consent blocks", () => {
 
 // ── Family-role blocks ────────────────────────────────────────────────────────
 
-describe("adultGate — family-role blocks", () => {
-  // Note: words that also appear in the MINOR regex (sister, brother, son, daughter) are
-  // blocked as "minor" first — that is correct. Family-role tests use words that do not
-  // also appear in MINOR: stepmom, stepfather, aunt, uncle, stepmother, in-law.
+describe("adultGate — family-role blocks (family word + sexual context)", () => {
+  // Only blocked when a sexual-context signal is also present.
+  // Words that also appear in the MINOR regex (sister, brother, son, daughter)
+  // are blocked as "minor" first — that is correct and expected.
   const cases: string[] = [
     "my stepmom in a romantic scene",
     "seducing my aunt",
-    "my stepfather and I",
-    "my stepmother who wants me",
+    "my stepfather naked",
+    "my stepmother who is attracted to me",
     "my uncle is attracted to me",
     "my in-law seducing me",
-    "a family member who is in love with me",
-    "my stepdad and I",
-    "my grandma in an intimate scene",
-    "my granddad who desires me",
+    "a family member in an intimate encounter",
+    "my stepdad and I in a sensual moment",
+    "my grandma in an explicit scene",
+    "my granddad who desires me sexually",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {
       const r = refused(wish);
       expect(r.reason).toBe("family_role");
+    });
+  }
+});
+
+describe("adultGate — family words in non-sexual wishes pass (D110, Tim 2026-11-27)", () => {
+  // "Family for non sexual is fine and is encouraged."
+  const cases: string[] = [
+    "I want to reconnect with my mother",
+    "my father is proud of me",
+    "my sister and I are going on a trip together",
+    "my aunt and I are having lunch",
+    "my grandma smiles at me",
+    "my uncle congratulates me on the new job",
+    "my stepmom hugs me at the airport",
+    "my family supports me",
+    "a warm holiday dinner with my in-laws",
+    "my grandpa tells me he loves me",
+    "my stepfather walks me down the aisle",
+    "my mom calls me on my birthday",
+    "my dad and I go fishing",
+    "a family reunion full of laughter",
+    "my relative travels to visit me",
+  ];
+  for (const wish of cases) {
+    it(`allows: "${wish}"`, () => {
+      expect(adultGate(wish).allowed, wish).toBe(true);
     });
   }
 });
@@ -207,7 +233,7 @@ describe("adultGate — guidance never echoes the blocked term", () => {
   });
 
   it("guidance on family_role block does not echo the role word", () => {
-    const r = refused("my aunt in a romantic scene");
+    const r = refused("seducing my aunt");
     expect(r.guidance).not.toMatch(/aunt/i);
   });
 
@@ -217,7 +243,7 @@ describe("adultGate — guidance never echoes the blocked term", () => {
       ["Taylor Swift", "real_person"],
       ["brutal assault", "violence"],
       ["without her consent", "non_consent"],
-      ["my aunt who loves me", "family_role"],
+      ["seducing my aunt", "family_role"],
       ["bestiality scene", "prohibited_act"],
     ];
     for (const [wish] of reasons) {
