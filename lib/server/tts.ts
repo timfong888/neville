@@ -182,13 +182,15 @@ export async function synthesize(opts: {
   timeoutMs?: number;
   /**
    * How many of the last `lines` are extras the app cuts off (the refrain,
-   * #77): joined with no pause before them, and left out when the pauses
-   * between the script's lines are fitted to the size limit.
+   * #77): joined after the body→tail gap from `pauseMsPerGap` when present,
+   * and left out when the pauses between the script's lines are fitted to the
+   * size limit.
    */
   tail?: number;
   /**
    * Per-gap pause values (ms) for stitched PCM voices. When provided and long
-   * enough, replaces the uniform `pauseMs` between body lines.
+   * enough, replaces the uniform `pauseMs` between body lines. When `tail > 0`,
+   * the entry at index `bodyGaps` (the last body line to refrain gap) is also used.
    */
   pauseMsPerGap?: number[];
   /** Record `lines` in one request with inline pauses (#76). For voices flagged `atomic`. */
@@ -221,7 +223,7 @@ export async function synthesize(opts: {
   const { key, model, voice, text, instructions } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
   const stitch = Boolean(
-    opts.lines && opts.lines.length > 1 && (opts.pauseMs ?? 0) > 0 && PCM_ONLY.test(model),
+    opts.lines && opts.lines.length > 1 && ((opts.pauseMs ?? 0) > 0 || opts.pauseMsPerGap) && PCM_ONLY.test(model),
   );
   // Some models cap the text per request. Longer scripts go sentence by
   // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
@@ -337,17 +339,23 @@ export async function synthesize(opts: {
 
   // Per-gap pauses when the caller provided one value per body gap; uniform otherwise.
   let gapBytes: number | number[];
+  let tailGapBytes = 0;
   let pauseMs: number;
   if (opts.pauseMsPerGap && opts.pauseMsPerGap.length >= bodyGaps) {
-    const fitted = fitPauses({ pauseMsArr: opts.pauseMsPerGap.slice(0, bodyGaps), speechBytes, rate, maxBytes });
-    gapBytes = fitted.map((ms) => silenceBytes(ms, rate));
+    // Include the body→tail gap at index bodyGaps when present and there is a tail.
+    const sliceLen = tail > 0 && opts.pauseMsPerGap.length > bodyGaps ? bodyGaps + 1 : bodyGaps;
+    const fitted = fitPauses({ pauseMsArr: opts.pauseMsPerGap.slice(0, sliceLen), speechBytes, rate, maxBytes });
+    gapBytes = fitted.slice(0, bodyGaps).map((ms) => silenceBytes(ms, rate));
+    tailGapBytes = tail > 0 ? silenceBytes(fitted[bodyGaps] ?? 0, rate) : 0;
     pauseMs = fitted.reduce((mx, ms) => Math.max(mx, ms), 0);
   } else {
     pauseMs = fitPause({ pauseMs: opts.pauseMs!, gaps: bodyGaps, speechBytes, rate, maxBytes });
     gapBytes = silenceBytes(pauseMs, rate);
   }
 
-  const joined = tail ? join([stitchPcm(body, gapBytes), ...chunks.slice(body.length)]) : stitchPcm(chunks, gapBytes);
+  const joined = tail
+    ? join([stitchPcm(body, gapBytes), ...(tailGapBytes > 0 ? [new ArrayBuffer(tailGapBytes)] : []), ...chunks.slice(body.length)])
+    : stitchPcm(chunks, gapBytes);
   const audio = wav(normalizePcm16(joined, rate), rate);
   // Too big for a response even with no pauses: say so, rather than send a file Vercel will refuse.
   if (audio.byteLength > MAX_AUDIO_BYTES) {
@@ -361,22 +369,22 @@ export async function synthesize(opts: {
     sentChars,
     ids,
     speedApplied,
-    starts: tail ? tailStarts(sizes, body.length, gapBytes) : startShares(sizes, gapBytes),
+    starts: tail ? tailStarts(sizes, body.length, gapBytes, tailGapBytes) : startShares(sizes, gapBytes),
     pauseMs,
   };
 }
 
-/** Line starts when the first `bodyCount` pieces have `gap` bytes between them and the rest follow directly. */
-function tailStarts(sizes: number[], bodyCount: number, gap: number | number[]): number[] {
+/** Line starts when the first `bodyCount` pieces have `gap` bytes between them, then `tailGap` before the rest. */
+function tailStarts(sizes: number[], bodyCount: number, gap: number | number[], tailGap = 0): number[] {
   const pFor = (i: number) => (typeof gap === "number" ? gap : (gap[i] ?? 0));
   const totalGap = typeof gap === "number"
     ? Math.max(0, bodyCount - 1) * gap
     : (gap as number[]).slice(0, bodyCount - 1).reduce((n, b) => n + b, 0);
-  const total = sizes.reduce((n, b) => n + b, 0) + totalGap;
+  const total = sizes.reduce((n, b) => n + b, 0) + totalGap + tailGap;
   let at = 0;
   return sizes.map((b, i) => {
     const start = Math.round((at / total) * 10000) / 10000;
-    at += b + (i < bodyCount - 1 ? pFor(i) : 0);
+    at += b + (i < bodyCount - 1 ? pFor(i) : i === bodyCount - 1 ? tailGap : 0);
     return start;
   });
 }
