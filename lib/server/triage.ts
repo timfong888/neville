@@ -1,5 +1,6 @@
 import "server-only";
 import type { DaySummary } from "@/lib/server/failureStore";
+import { redisEnv } from "@/lib/server/redis";
 
 const REPO = "timfong888/neville";
 const LABEL = "auto-triage";
@@ -72,6 +73,33 @@ async function createIssue(
   return { url: created.html_url, number: created.number };
 }
 
+/**
+ * Acquire a per-day/reason lock in Redis using SET NX to prevent two concurrent
+ * triage calls from both passing the existingIssues() check and each creating a
+ * duplicate GitHub issue for the same reason.
+ *
+ * Returns true when the lock is acquired or when Redis is not configured
+ * (best-effort degradation). Returns false when another instance holds the lock.
+ */
+async function claimTriageLock(day: string, reason: string): Promise<boolean> {
+  const env = redisEnv();
+  if (!env) return true;
+  try {
+    const key = `neville:triage:lock:${day}:${reason}`;
+    const res = await fetch(`${env.url}/pipeline`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify([["SET", key, "1", "NX", "EX", "3600"]]),
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return true; // Redis error: proceed optimistically
+    const replies = (await res.json()) as Array<{ result: string | null }>;
+    return replies[0]?.result === "OK";
+  } catch {
+    return true; // On error, proceed optimistically rather than blocking triage
+  }
+}
+
 export async function runTriage(summary: DaySummary, day: string): Promise<TriageResult> {
   const token = process.env.GITHUB_TOKEN?.trim();
   if (!token) throw new Error("GITHUB_TOKEN not set");
@@ -85,6 +113,10 @@ export async function runTriage(summary: DaySummary, day: string): Promise<Triag
       result.skipped.push({ reason, existingUrl: ex.url });
       continue;
     }
+    // Guard against two concurrent requests both passing the existingIssues check
+    // eslint-disable-next-line no-await-in-loop
+    const claimed = await claimTriageLock(day, reason);
+    if (!claimed) continue; // Another concurrent request is creating this issue
     const issue = await createIssue(token, reason, entry, day);
     result.created.push({ reason, issueUrl: issue.url, issueNumber: issue.number });
   }

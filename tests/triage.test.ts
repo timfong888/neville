@@ -15,6 +15,8 @@ describe("runTriage", () => {
     vi.unstubAllGlobals();
     vi.resetModules();
     delete process.env.GITHUB_TOKEN;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
   });
 
   function listIssuesResponse(issues: Array<{ title: string; html_url: string; number: number }>) {
@@ -139,6 +141,35 @@ describe("runTriage", () => {
     for (const forbidden of ["wish", "want", "script text", "name", "email"]) {
       expect(issueBody.toLowerCase()).not.toContain(forbidden);
     }
+  });
+
+  // Regression test for P1 race condition: when two concurrent requests both pass the
+  // existingIssues() check for the same reason, only the one that acquires the Redis
+  // SET NX lock should create the GitHub issue; the other must skip it.
+  it("does not create a duplicate when triage lock is already held (concurrent call protection)", async () => {
+    process.env.UPSTASH_REDIS_REST_URL = "https://fake-redis.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "fake-token";
+
+    // GitHub: no existing issues
+    fetchMock.mockResolvedValueOnce(listIssuesResponse([]));
+    // Redis: SET NX returns null (lock already claimed by another concurrent instance)
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ result: null }]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { runTriage } = await import("@/lib/server/triage");
+    const summary = { "script_failed:timeout": { count: 2, sampleIds: ["req_1"] } };
+    const result = await runTriage(summary, "2026-11-27");
+
+    // Lock not acquired → no issue created by this request
+    expect(result.created).toHaveLength(0);
+    // Not in `skipped` either (the other request is handling it)
+    expect(result.skipped).toHaveLength(0);
+    // 2 fetches: 1 GitHub list issues + 1 Redis SET NX; NO GitHub create-issue call
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   // Regression test for P1 pagination: a reason on page 2 must not cause a duplicate issue.
