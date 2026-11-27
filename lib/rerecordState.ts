@@ -17,6 +17,10 @@ export type RerecordState = {
   failReason: string | null;
   /** True when the failure refunded the credit (shown as "Your credit was returned."). */
   creditReturned: boolean;
+  /** API error code when known: "not_recordable" or "voice_failed". */
+  failCode?: string;
+  /** Actionable suggestions from the server, shown below the error message. */
+  failHint?: string;
 };
 
 export type RerecordEvent =
@@ -24,7 +28,7 @@ export type RerecordEvent =
   | { type: "record_tap" }
   | { type: "server_charged"; balance: string | null }
   | { type: "server_done" }
-  | { type: "server_failed"; reason: string; creditReturned: boolean }
+  | { type: "server_failed"; reason: string; creditReturned: boolean; code?: string; hint?: string }
   | { type: "server_402" };
 
 export const INITIAL_STATE: RerecordState = {
@@ -46,7 +50,7 @@ export function transition(state: RerecordState, event: RerecordEvent): Rerecord
 
     case "record_tap":
       if (state.status === "recording") return state; // double-tap guard
-      if (state.status !== "saved_not_recorded") return state;
+      if (state.status !== "saved_not_recorded" && state.status !== "idle") return state;
       return { status: "recording", balance: null, failReason: null, creditReturned: false };
 
     case "server_charged":
@@ -59,7 +63,7 @@ export function transition(state: RerecordState, event: RerecordEvent): Rerecord
 
     case "server_failed":
       if (state.status !== "recording" && state.status !== "charged") return state;
-      return { status: "failed", balance: null, failReason: event.reason, creditReturned: event.creditReturned };
+      return { status: "failed", balance: null, failReason: event.reason, creditReturned: event.creditReturned, ...(event.code ? { failCode: event.code } : {}), ...(event.hint ? { failHint: event.hint } : {}) };
 
     case "server_402":
       if (state.status !== "recording") return state;

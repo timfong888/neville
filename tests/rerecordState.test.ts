@@ -50,9 +50,9 @@ describe("rerecordState", () => {
       expect(next).toBe(recording); // identity: same object
     });
 
-    it("does nothing from idle", () => {
+    it("transitions from idle to recording (re-record an already-recorded item)", () => {
       const next = transition(idle, { type: "record_tap" });
-      expect(next).toBe(idle);
+      expect(next.status).toBe("recording");
     });
 
     it("does nothing from done", () => {
@@ -120,6 +120,37 @@ describe("rerecordState", () => {
       expect(next.status).toBe("failed");
       expect(next.failReason).toBe("Voice error.");
       expect(next.creditReturned).toBe(false);
+    });
+
+    it("stores failCode when server sends not_recordable", () => {
+      const next = transition(recording, { type: "server_failed", reason: "Content blocked.", creditReturned: false, code: "not_recordable" });
+      expect(next.status).toBe("failed");
+      expect(next.failCode).toBe("not_recordable");
+    });
+
+    it("stores failCode when server sends voice_failed", () => {
+      const next = transition(recording, { type: "server_failed", reason: "Provider error.", creditReturned: true, code: "voice_failed" });
+      expect(next.failCode).toBe("voice_failed");
+    });
+
+    it("leaves failCode undefined when no code is given", () => {
+      const next = transition(recording, { type: "server_failed", reason: "oops", creditReturned: false });
+      expect(next.failCode).toBeUndefined();
+    });
+
+    it("stores hint for not_recordable", () => {
+      const next = transition(recording, { type: "server_failed", reason: "Content blocked.", creditReturned: false, code: "not_recordable", hint: "Try softer phrasing." });
+      expect(next.failHint).toBe("Try softer phrasing.");
+    });
+
+    it("stores hint for voice_failed", () => {
+      const next = transition(recording, { type: "server_failed", reason: "Provider error.", creditReturned: true, code: "voice_failed", hint: "Try again later." });
+      expect(next.failHint).toBe("Try again later.");
+    });
+
+    it("leaves failHint undefined when no hint is given", () => {
+      const next = transition(recording, { type: "server_failed", reason: "oops", creditReturned: false });
+      expect(next.failHint).toBeUndefined();
     });
 
     it("sets creditReturned when server says so", () => {

@@ -59,7 +59,7 @@ export async function startRecording(m: Manifestation): Promise<void> {
   const voiceId = resolveVoice(m.voiceId).id;
 
   try {
-    const r = await api.rerecord(m.lines, voiceId);
+    const r = await api.rerecord(m.lines, voiceId, { speedStep: m.speedStep, cadenceStep: m.cadenceStep });
 
     // May have navigated away while in flight; still update state.
     if (session.id !== id) return;
@@ -80,6 +80,8 @@ export async function startRecording(m: Manifestation): Promise<void> {
       voiceName: usedVoice.name,
       hasAudio: true,
       updatedAt: Date.now(),
+      ...(m.speedStep !== undefined ? { speedStep: m.speedStep } : {}),
+      ...(m.cadenceStep !== undefined ? { cadenceStep: m.cadenceStep } : {}),
     };
     await library.save(updated, { bytes: new Uint8Array(r.audio), mime: r.mime });
 
@@ -116,7 +118,9 @@ export async function startRecording(m: Manifestation): Promise<void> {
         ? e.message
         : "The recording could not be made just now.";
     const creditReturned = e instanceof ApiError && e.data?.creditReturned === true;
-    dispatch(id, { type: "server_failed", reason, creditReturned });
+    const code = e instanceof ApiError ? e.code : undefined;
+    const hint = e instanceof ApiError ? e.data?.hint : undefined;
+    dispatch(id, { type: "server_failed", reason, creditReturned, code, hint });
   }
 }
 

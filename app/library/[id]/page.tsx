@@ -12,6 +12,7 @@ import { type Manifestation } from "@/lib/library/model";
 import { resolveVoice } from "@/lib/voices";
 import { INITIAL_STATE, savedNotRecorded, transition } from "@/lib/rerecordState";
 import { ApiError } from "@/lib/api/client";
+import { CURATED_VOICE_IDS, SPEED_OPTIONS, CADENCE_OPTIONS, resolveSpeed, resolveCadence, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
 
 export default function ManifestationPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +26,9 @@ export default function ManifestationPage() {
   const [msg, setMsg] = useState("");
   const [target, setTarget] = useState("");
   const [rrState, dispatch] = useReducer(transition, m?.hasAudio === false ? savedNotRecorded() : INITIAL_STATE);
+  const [rrVoiceId, setRrVoiceId] = useState("");
+  const [rrSpeed, setRrSpeed] = useState<SpeedStep>(resolveSpeed(undefined).id);
+  const [rrCadence, setRrCadence] = useState<CadenceStep>(resolveCadence(undefined).id);
 
   useEffect(() => {
     if (m && !editing) {
@@ -32,6 +36,14 @@ export default function ManifestationPage() {
       setText(m.lines.join("\n"));
     }
   }, [m, editing]);
+
+  useEffect(() => {
+    if (m) {
+      setRrVoiceId(m.voiceId || "");
+      setRrSpeed(resolveSpeed(m.speedStep).id);
+      setRrCadence(resolveCadence(m.cadenceStep).id);
+    }
+  }, [m?.id]);
 
   if (!ready) return null;
   if (error) return <LibraryError error={error} retry={reload} />;
@@ -51,7 +63,7 @@ export default function ManifestationPage() {
   // if that voice is no longer offered.
   const voice = resolveVoice(m.voiceId);
 
-  /** Records `base`'s script in `voice` and stores it with the manifestation. */
+  /** Records `base`'s script with the selected voice/speed/cadence and stores it. */
   const rerecord = async (base: Manifestation) => {
     dispatch({ type: "record_tap" });
     // If guard rejected, do nothing (double-tap).
@@ -60,17 +72,19 @@ export default function ManifestationPage() {
     const after = transition(rrState, { type: "record_tap" });
     if (after.status !== "recording") return;
 
+    const selectedVoiceId = rrVoiceId || voice.id;
     try {
       const res = await fetch("/api/rerecord", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines: base.lines, voiceId: voice.id }),
+        body: JSON.stringify({ lines: base.lines, voiceId: selectedVoiceId, speedStep: rrSpeed, cadenceStep: rrCadence }),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as {
           error?: string;
           code?: string;
           creditReturned?: boolean;
+          hint?: string;
         } | null;
         if (res.status === 402) {
           dispatch({ type: "server_402" });
@@ -78,7 +92,7 @@ export default function ManifestationPage() {
         }
         const reason = j?.error ?? "The recording could not be made just now.";
         const creditReturned = j?.creditReturned === true;
-        dispatch({ type: "server_failed", reason, creditReturned });
+        dispatch({ type: "server_failed", reason, creditReturned, code: j?.code, hint: j?.hint });
         return;
       }
       const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
@@ -88,7 +102,7 @@ export default function ManifestationPage() {
       const blob = await res.blob();
       try {
         await store.updateManifestation(
-          { ...base, voiceId: used.id, voiceName: used.name, updatedAt: Date.now() },
+          { ...base, voiceId: used.id, voiceName: used.name, speedStep: rrSpeed, cadenceStep: rrCadence, updatedAt: Date.now() },
           blob,
         );
       } catch {
@@ -164,9 +178,10 @@ export default function ManifestationPage() {
         ? "Unlimited recordings."
         : rrState.balance !== null ? `1 credit used. ${rrState.balance} left.` : "1 credit used.";
       case "done": return "Recording done.";
-      case "failed": return rrState.failReason
-        ? (rrState.creditReturned ? `${rrState.failReason} Your credit was returned.` : rrState.failReason)
-        : "";
+      case "failed": {
+        const msg = rrState.failReason ?? "";
+        return msg && rrState.creditReturned ? `${msg} Your credit was returned.` : msg;
+      }
       case "no_credits": return "You have no recordings left. Get more to keep going.";
       default: return "";
     }
@@ -190,6 +205,37 @@ export default function ManifestationPage() {
         <p className="small muted" role="status">
           {rrMsg}
         </p>
+      )}
+      {rrState.status === "failed" && rrState.failHint && (
+        <p className="small muted" role="note">
+          {rrState.failHint}
+        </p>
+      )}
+
+      {!editing && (
+        <div className="card">
+          <div className="field">
+            <label htmlFor="rr-voice">Voice</label>
+            <select id="rr-voice" value={rrVoiceId} onChange={(e) => setRrVoiceId(e.target.value)}>
+              {CURATED_VOICE_IDS.map((vid) => {
+                const v = resolveVoice(vid);
+                return <option key={vid} value={vid}>{v.name}</option>;
+              })}
+            </select>
+          </div>
+          <div className="row">
+            <span className="small muted">Speed</span>
+            {SPEED_OPTIONS.map((o) => (
+              <button key={o.id} type="button" className={`chip${rrSpeed === o.id ? " active" : ""}`} aria-pressed={rrSpeed === o.id} onClick={() => setRrSpeed(o.id as SpeedStep)}>{o.label}</button>
+            ))}
+          </div>
+          <div className="row">
+            <span className="small muted">Cadence</span>
+            {CADENCE_OPTIONS.map((o) => (
+              <button key={o.id} type="button" className={`chip${rrCadence === o.id ? " active" : ""}`} aria-pressed={rrCadence === o.id} onClick={() => setRrCadence(o.id as CadenceStep)}>{o.label}</button>
+            ))}
+          </div>
+        </div>
       )}
 
       {editing ? (
@@ -231,9 +277,15 @@ export default function ManifestationPage() {
           <button className="btn sm" onClick={() => setEditing(true)} disabled={isRecording}>
             Edit title and script
           </button>
-          {(rrState.status === "saved_not_recorded" || rrState.status === "failed" || rrState.status === "no_credits") && (
+          {(rrState.status === "saved_not_recorded" || rrState.status === "idle" || rrState.status === "failed" || rrState.status === "no_credits") && (
             <button className="btn sm primary" onClick={() => void rerecord(m)} disabled={isRecording}>
-              {`Re-record in ${voice.name}`}
+              Re-record
+            </button>
+          )}
+          {/* Edit script: shown when recording was refused for content (issue 252's editor will replace setEditing when it ships). */}
+          {rrState.status === "failed" && rrState.failCode === "not_recordable" && (
+            <button className="btn sm" onClick={() => setEditing(true)}>
+              Edit script
             </button>
           )}
           <select aria-label="Add to playlist" value={target} onChange={(e) => setTarget(e.target.value)}>

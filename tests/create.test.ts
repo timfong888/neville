@@ -111,6 +111,20 @@ describe("the Create flow (#120)", () => {
       id: "id-1", title: made.title, want: "to be calm", firstName: "Tim", lines: LINES,
       voiceId: made.recording?.voiceId, voiceName: made.recording?.voiceName, hasAudio: true, createdAt: 5, updatedAt: 5,
     });
+  });
+  it("persists speedStep and cadenceStep so Library re-record can reuse them", async () => {
+    const w = { want: "to be calm", name: "", speedStep: "faster", cadenceStep: "long" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-sp", 5);
+    expect(m.speedStep).toBe("faster");
+    expect(m.cadenceStep).toBe("long");
+  });
+  it("omits speedStep/cadenceStep when not provided (backward-compat)", async () => {
+    const w = { want: "to be calm", name: "" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-no-sp", 5);
+    expect(m).not.toHaveProperty("speedStep");
+    expect(m).not.toHaveProperty("cadenceStep");
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
   });
@@ -181,7 +195,7 @@ describe("exact mode (#229)", () => {
   });
   it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
-    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
     expect(m.scriptMode).toBeUndefined();
   });
 });

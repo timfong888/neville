@@ -4,7 +4,7 @@ import { parseRerecord, verdict } from "@/lib/rerecord";
 describe("re-record request", () => {
   it("accepts a tidy script and keeps the voice id", () => {
     const r = parseRerecord({ lines: ["  You are calm.  ", "", "You are  here."], voiceId: "x" }, 700);
-    expect(r).toEqual({ ok: true, value: { lines: ["You are calm.", "You are here."], voiceId: "x" } });
+    expect(r).toEqual({ ok: true, value: { lines: ["You are calm.", "You are here."], voiceId: "x", speedStep: null, cadenceStep: null } });
   });
 
   it("refuses empty, malformed and over-long scripts", () => {
