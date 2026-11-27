@@ -18,6 +18,8 @@ export type ApiErrorData = {
   code?: string;
   balance?: number;
   creditReturned?: boolean;
+  /** Actionable suggestions shown below the error message, when the server sent them. */
+  hint?: string;
 };
 
 export type AccountState = {
@@ -129,13 +131,14 @@ export function createApi(opts: ApiOptions) {
     const extra = (await opts.headers?.()) ?? {};
     const res = await doFetch(`${base}${path}`, { cache: "no-store", ...(opts.credentials ? { credentials: opts.credentials } : {}), ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
     if (res.ok) return res;
-    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown } | null;
+    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown; hint?: unknown } | null;
     const lines = Array.isArray(j?.lines) && j.lines.every((l) => typeof l === "string") ? (j.lines as string[]) : undefined;
     const data = j
       ? {
           ...(typeof j.code === "string" ? { code: j.code } : {}),
           ...(typeof j.balance === "number" ? { balance: j.balance } : {}),
           ...(j.creditReturned === true ? { creditReturned: true } : {}),
+          ...(typeof j.hint === "string" && j.hint ? { hint: j.hint } : {}),
         }
       : undefined;
     throw new ApiError(j?.error ?? `Request failed (${res.status}).`, res.status, j?.code, lines, data);
