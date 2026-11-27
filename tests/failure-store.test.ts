@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@vercel/functions", () => ({ waitUntil: vi.fn() }));
+const mockWaitUntil = vi.fn();
+vi.mock("@vercel/functions", () => ({ waitUntil: mockWaitUntil }));
 
 // Always start with no Redis so tests use the in-memory path
 vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
@@ -65,6 +66,16 @@ describe("failureStore", () => {
     const mem = failureSummaryMemory();
     expect(mem[today]?.["manifest_timeout:timeout"]?.sampleIds).toHaveLength(0);
     expect(mem[today]?.["manifest_timeout:timeout"]?.count).toBe(1);
+  });
+
+  it("calls waitUntil to keep the Redis write alive in serverless context", async () => {
+    mockWaitUntil.mockClear();
+    const { recordFailure, resetFailureStore } = await fresh();
+    resetFailureStore();
+    recordFailure("voice_failed:http_status", "req_wait");
+    expect(mockWaitUntil).toHaveBeenCalledOnce();
+    const arg = mockWaitUntil.mock.calls[0][0];
+    expect(arg).toBeInstanceOf(Promise);
   });
 });
 
@@ -131,6 +142,21 @@ describe("alertFailure enrichment (regression)", () => {
     const entry = mem[today]?.["voice_failed:unknown"];
     expect(entry?.count).toBe(1);
     expect(entry?.sampleIds).toContain("req_42");
+  });
+
+  it("generates a correlation ID so sampleIds is never empty even without requestId", async () => {
+    process.env.POSTHOG_KEY = "phc_testkey";
+    vi.resetModules();
+    const { alertFailure } = await import("@/lib/server/alertFailure");
+    const { resetFailureStore, failureSummaryMemory } = await import("@/lib/server/failureStore");
+    resetFailureStore();
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout" });
+    const today = new Date().toISOString().slice(0, 10);
+    const mem = failureSummaryMemory();
+    const entry = mem[today]?.["manifest_timeout:timeout"];
+    expect(entry?.count).toBe(1);
+    expect(entry?.sampleIds).toHaveLength(1);
+    expect(entry?.sampleIds[0]).toBeTruthy();
   });
 
   it("never includes forbidden fields (wish, name, script text)", async () => {

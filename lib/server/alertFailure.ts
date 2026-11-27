@@ -33,5 +33,6 @@ export function alertFailure(kind: AlertKind, fields: SafeFields): void {
   };
   console.error("[ALERT]", kind, JSON.stringify(enriched));
   captureEvent(kind, enriched);
-  recordFailure(`${kind}:${fields.reason ?? "unknown"}`, fields.requestId);
+  const requestId = fields.requestId ?? crypto.randomUUID().slice(0, 8);
+  recordFailure(`${kind}:${fields.reason ?? "unknown"}`, requestId);
 }
