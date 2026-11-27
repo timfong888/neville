@@ -200,6 +200,34 @@ describe("a refrain recorded after the script (#77)", () => {
     const total = 4 * 22050 + 2 * 44100;
     expect(out.starts![3]).toBeCloseTo((3 * 22050 + 2 * 44100) / total, 3);
   });
+
+  it("inserts the body→tail gap from pauseMsPerGap before the refrain", async () => {
+    const synthesize = await load();
+    const withRefrain = [...lines, "The house is yours."];
+    const out = await synthesize({
+      key: "k", model: "heygen/heygen-voice-1-turbo", voice: "nadine",
+      text: "", lines: withRefrain,
+      pauseMsPerGap: [500, 1000, 1800],
+      pauseMs: 0,
+      tail: 1,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // speech: 4 × 44100 bytes (0.5 s each at 44100 Hz, raw mock output)
+    // body gaps: silenceBytes(500, 44100) + silenceBytes(1000, 44100)
+    // tail gap:  silenceBytes(1800, 44100)
+    const rate = 44100;
+    const speech = 4 * 44100;
+    const bodyGap0 = Math.round(rate * 500 / 1000) * 2;   // 44100
+    const bodyGap1 = Math.round(rate * 1000 / 1000) * 2;  // 88200
+    const tailGap  = Math.round(rate * 1800 / 1000) * 2;  // 158760
+    expect(out.audio.byteLength).toBe(44 + speech + bodyGap0 + bodyGap1 + tailGap);
+    expect(out.starts).toHaveLength(4);
+    const total = speech + bodyGap0 + bodyGap1 + tailGap;
+    // The refrain starts after the 3 body chunks + 2 body gaps + tail gap.
+    const refrainAt = 3 * 44100 + bodyGap0 + bodyGap1 + tailGap;
+    expect(out.starts![3]).toBeCloseTo(refrainAt / total, 3);
+  });
 });
 
 describe("atomic voices (#76)", () => {
