@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { lineForProgress } from "@/lib/create";
 import { lineStarts } from "@/lib/audio";
@@ -203,20 +203,40 @@ export default function Player() {
       </View>
 
       {sessionMode === "time" && !active ? (
-        <View style={s.row}>
-          {TIME_OPTIONS.map((m) => (
-            <Pressable
-              key={m}
-              style={[s.chip, sessionTarget === m && s.on]}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: sessionTarget === m }}
-              accessibilityLabel={`${m} minutes`}
-              onPress={() => pickTarget(m)}
-            >
-              <Text style={s.btnText}>{m} min</Text>
+        <>
+          <View style={s.row}>
+            {TIME_OPTIONS.map((m) => (
+              <Pressable
+                key={m}
+                style={[s.chip, sessionTarget === m && s.on]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sessionTarget === m }}
+                accessibilityLabel={`${m} minutes`}
+                onPress={() => pickTarget(m)}
+              >
+                <Text style={s.btnText}>{m} min</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={[s.row, s.spread]}>
+            <Pressable style={s.chip} accessibilityLabel="Less time" onPress={() => pickTarget(Math.max(1, sessionTarget - 1))}>
+              <Text style={s.btnText}>−</Text>
             </Pressable>
-          ))}
-        </View>
+            <TextInput
+              style={[s.p, s.timeInput]}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={4}
+              value={String(sessionTarget)}
+              onChangeText={(v) => { const n = parseInt(v, 10); if (!Number.isNaN(n) && n >= 1) pickTarget(n); }}
+              accessibilityLabel={`${sessionTarget} minutes, tap to edit`}
+            />
+            <Text style={s.p}>min</Text>
+            <Pressable style={s.chip} accessibilityLabel="More time" onPress={() => pickTarget(sessionTarget + 1)}>
+              <Text style={s.btnText}>+</Text>
+            </Pressable>
+          </View>
+        </>
       ) : sessionMode === "loops" && !active ? (
         <View style={[s.row, s.spread]}>
           <Pressable style={s.chip} accessibilityLabel="Fewer loops" onPress={() => pickTarget(Math.max(1, sessionTarget - 1))}><Text style={s.btnText}>−</Text></Pressable>
@@ -261,6 +281,7 @@ const s = StyleSheet.create({
   mainText: { color: "#151820", fontSize: 18, fontWeight: "600" },
   btnText: { color: "#fff", fontSize: 16 },
   chip: { borderColor: "#c9ced8", borderWidth: 1, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
+  timeInput: { minWidth: 56, textAlign: "center" },
   on: { backgroundColor: "#2a3142", borderColor: "#8ab4ff" },
   off: { opacity: 0.5 },
   script: { gap: 10, marginTop: 8 },

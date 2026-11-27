@@ -7,7 +7,9 @@ import { displayTitle } from "@/lib/script";
 import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { nowPlaying, playAll, useNowPlaying } from "../../src/player/nowPlayingStore";
-import { DEFAULT_SESSION_MODE, makeSessionStore, type SessionMode } from "../../src/player/sessionStore";
+import { DEFAULT_SESSION_MODE, DEFAULT_TIME, makeSessionStore, type SessionMode } from "../../src/player/sessionStore";
+import { LOOP_GAP_MS } from "../../src/player/loop";
+import { planSession } from "@/lib/session/planSession";
 import { kv } from "../../src/seams/kv";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
@@ -59,10 +61,14 @@ export default function LibraryScreen() {
   const bell = useBell();
   const [sessionMode, setSessionMode] = useState<SessionMode>(DEFAULT_SESSION_MODE);
   const [sessionLoops, setSessionLoops] = useState(3);
+  const [sessionTarget, setSessionTarget] = useState(DEFAULT_TIME);
   useEffect(() => {
     void sessionStore.readMode().then((m) => {
       setSessionMode(m);
-      if (m === "loops") void sessionStore.readTarget(m).then(setSessionLoops);
+      void sessionStore.readTarget(m).then((t) => {
+        if (m === "loops") setSessionLoops(t);
+        else if (m === "time") setSessionTarget(t);
+      });
     });
   }, []);
   // The controller plays one thing at a time; this card shows it only when it is the Library loop.
@@ -129,18 +135,28 @@ export default function LibraryScreen() {
             <>
               <Button
                 kind="primary"
-                label={copied ? (sessionMode === "until-stopped" ? "Play all on loop" : `Play all · ${sessionMode === "loops" ? `${sessionLoops} loops` : "session"}`) : "Preparing playlist…"}
+                label={copied ? (sessionMode === "until-stopped" ? "Play all on loop" : sessionMode === "loops" ? `Play all · ${sessionLoops} loops` : `Play all · ${sessionTarget} min`) : "Preparing playlist…"}
                 disabled={!copied}
                 onPress={() => void nowPlaying.play({
                   ...playAll.job,
                   prepare: async () => {
                     const p = await playAll.job.prepare();
                     if (!p) return null;
-                    const loop = sessionMode === "until-stopped";
-                    const clips = !loop && sessionMode === "loops"
-                      ? Array.from({ length: sessionLoops }, () => p.clips).flat()
-                      : p.clips;
-                    return { clips, loop, music: MUSIC_ENABLED, at: p.at };
+                    if (sessionMode === "until-stopped") return { ...p, music: MUSIC_ENABLED };
+                    if (sessionMode === "loops") {
+                      const clips = Array.from({ length: sessionLoops }, () => p.clips).flat();
+                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+                    }
+                    // time mode: use playlist duration to compute how many full passes fit
+                    if (p.durationSec && p.durationSec > 0) {
+                      const gapSec = LOOP_GAP_MS / 1000;
+                      const plan = planSession([p.durationSec], "time", sessionTarget, undefined, gapSec);
+                      const loops = plan.loops ?? 1;
+                      const clips = Array.from({ length: loops }, () => p.clips).flat();
+                      return { clips, loop: false, music: MUSIC_ENABLED, at: p.at };
+                    }
+                    // duration unknown: fall back to until-stopped
+                    return { ...p, loop: true, music: MUSIC_ENABLED };
                   },
                 })}
               />

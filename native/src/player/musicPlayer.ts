@@ -12,11 +12,11 @@ import type { MusicChoice } from "@/lib/music";
 /** What should be playing: a track, at the level it sits under the voice. */
 export type Track = { id: Exclude<MusicChoice, "none">; src: string | number; volume: number };
 /** One loaded player. `remove` stops and unloads it; nothing is called after it. */
-export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): void; remove(): void };
+export type MusicHandle = { play(): void; pause(): void; setVolume(v: number): void; remove(): void; /** Fade volume to 0 over `durationSec` s, then remove. When present, called instead of `remove` on natural session end. */ fade?(durationSec: number): void };
 /** Loops the track. May finish late, or fail. */
 export type MusicEngine = { load(src: string | number, volume: number): Promise<MusicHandle> };
 /** A session's hold on the music. Calls from a session that has been replaced do nothing. */
-export type Follower = { voice(playing: boolean): void; close(): void };
+export type Follower = { voice(playing: boolean): void; close(): void; /** Fade music to silence over `durationSec` seconds instead of an instant cut-off. */ fade(durationSec: number): void };
 /** What is really there: the track that is loading or loaded ("none" if none), and whether a session holds the music. */
 export type MusicView = { choice: MusicChoice; active: boolean };
 
@@ -144,6 +144,21 @@ export function makeMusicPlayer(engine: MusicEngine) {
           voice = false;
           release();
           publish();
+        },
+        fade(durationSec) {
+          if (session !== mine) return;
+          hasSession = false;
+          voice = false;
+          // Detach the handle from musicPlayer tracking immediately so observers see
+          // no active session, but let the handle fade before removing itself.
+          const h = loaded?.h ?? null;
+          loaded = null;
+          loading = null;
+          token++;
+          publish();
+          if (!h) return;
+          if (h.fade) h.fade(durationSec);
+          else drop(h);
         },
       };
     },
