@@ -420,12 +420,12 @@ describe("splitTitle (#205)", () => {
 
 describe("exactLines (#229)", () => {
   const WISH = "I am attracting beautiful women. I am effortlessly confident. The women desire me.";
-  it("keeps every sentence in order and unchanged", () => {
+  it("keeps every sentence in order and transforms to second-person", () => {
     const { lines } = exactLines(WISH);
     expect(lines).toEqual([
-      "I am attracting beautiful women.",
-      "I am effortlessly confident.",
-      "The women desire me.",
+      "You are attracting beautiful women.",
+      "You are effortlessly confident.",
+      "The women desire you.",
     ]);
   });
   it("adds nothing to the sentences", () => {
@@ -436,17 +436,17 @@ describe("exactLines (#229)", () => {
   });
   it("picks the longest sentence as the refrain", () => {
     const { refrain } = exactLines(WISH);
-    expect(refrain).toBe("I am attracting beautiful women.");
+    expect(refrain).toBe("You are attracting beautiful women.");
   });
   it("handles a single sentence with no terminal punctuation", () => {
     const { lines, refrain } = exactLines("I am calm");
-    expect(lines).toEqual(["I am calm"]);
-    expect(refrain).toBe("I am calm.");
+    expect(lines).toEqual(["You are calm"]);
+    expect(refrain).toBe("You are calm.");
   });
   it("preserves terminal punctuation on sentences that have it", () => {
     const { lines } = exactLines("I am calm. I am strong.");
-    expect(lines[0]).toBe("I am calm.");
-    expect(lines[1]).toBe("I am strong.");
+    expect(lines[0]).toBe("You are calm.");
+    expect(lines[1]).toBe("You are strong.");
   });
 });
 
@@ -535,20 +535,35 @@ describe("exactLines with name (#255) — regression test", () => {
     expect(nameCount).toBeGreaterThanOrEqual(5);
     expect(lines.join(" ")).not.toMatch(/\bI\b/);
   });
-  it("backward compatible: no name leaves sentences as-is", () => {
+  it("no-name case transforms first-person to second-person (#255)", () => {
     const { lines, refrain } = exactLines("I am calm. I am strong.");
-    expect(lines[0]).toBe("I am calm.");
-    expect(refrain).toBe("I am strong."); // longest sentence (12 > 10 chars) wins
+    expect(lines[0]).toBe("You are calm.");
+    expect(lines[1]).toBe("You are strong.");
+    expect(refrain).toBe("You are strong."); // longest sentence wins
   });
   it("refrain is the longest transformed sentence without name prefix", () => {
     const { refrain } = exactLines("I am calm. I am effortlessly confident and seductive.", "Tim");
     expect(refrain).toBe("You are effortlessly confident and seductive.");
     expect(refrain).not.toMatch(/\bI\b/);
   });
-  it("no-name case uses you only and does not invent a name", () => {
+  it("no-name case uses you only and does not invent a name (#255)", () => {
     const { lines } = exactLines("I am effortlessly confident.", undefined);
-    expect(lines[0]).toBe("I am effortlessly confident.");
+    expect(lines[0]).toBe("You are effortlessly confident.");
     expect(lines.join(" ")).not.toContain("Tim");
+  });
+  it("strips thank-you prefix from exact lines — regression #255", () => {
+    const { lines } = exactLines("Thank you, I am calm.", "Tim");
+    expect(lines.join(" ")).not.toMatch(/thank\s+you/i);
+    expect(lines.some((l) => /you are calm/i.test(l))).toBe(true);
+  });
+  it("strips thank-you from no-name exact lines — regression #255", () => {
+    const { lines } = exactLines("Thank you, I am calm.", undefined);
+    expect(lines.join(" ")).not.toMatch(/thank\s+you/i);
+    expect(lines[0]).toMatch(/you are calm/i);
+  });
+  it("refrain is clean of thank-you when wish starts with thank-you — regression #255", () => {
+    const { refrain } = exactLines("Thank you, I am effortlessly confident.", "Tim");
+    expect(refrain).not.toMatch(/thank\s+you/i);
   });
 });
 
@@ -558,6 +573,15 @@ describe("speakerFirstPersonIn and thankYouIn (#255)", () => {
   });
   it("detects I feel in script lines", () => {
     expect(speakerFirstPersonIn(["You feel strong.", "I feel joy when you succeed."])).toBe("I feel");
+  });
+  it("detects possessive my (capitalized) — regression #255", () => {
+    expect(speakerFirstPersonIn(["My confidence is steady."])).not.toBeNull();
+  });
+  it("detects lowercase my — regression #255", () => {
+    expect(speakerFirstPersonIn(["Your heart is warm, my joy is full."])).not.toBeNull();
+  });
+  it("detects standalone I — regression #255", () => {
+    expect(speakerFirstPersonIn(["I believe this is true."])).not.toBeNull();
   });
   it("returns null for clean second-person lines", () => {
     expect(speakerFirstPersonIn(["You are calm.", "You feel strong.", "It is done."])).toBeNull();

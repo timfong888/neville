@@ -269,7 +269,7 @@ export function addNameToExactLines(lines: string[], name: string, nameMin = 5):
 
 /** First-person speaker word found in `lines`, or null. Used as a post-check on model output. */
 export const SPEAKER_FIRST_PERSON =
-  /\b(?:I am|I'm|I've|I'll|I'd|I feel|I see|I hear|I know|I have|I do|I sense)\b/;
+  /\b(?:I am|I'm|I've|I'll|I'd|I feel|I see|I hear|I know|I have|I do|I sense|I|[Mm]y|[Mm]e|[Mm]yself)\b/;
 
 export function speakerFirstPersonIn(lines: string[]): string | null {
   for (const l of lines) {
@@ -313,14 +313,22 @@ export function exactLines(want: string, name?: string): { lines: string[]; refr
     .filter((s) => s.length > 1 && /\w/.test(s));
   const sentences = parts.length ? parts : [raw];
 
+  // Strip thank-you phrases before transforming; keep remaining content.
+  const stripped = sentences
+    .map((s) => s.replace(/\b(?:thank\s+you|thank-you|thanks)[,!.?\s]*/gi, "").trim())
+    .filter((s) => s.length > 1 && /\w/.test(s));
+  const toUse = stripped.length ? stripped : sentences;
+
+  // Apply second-person transform to all sentences (name or not) per #255.
+  const transformed = toUse.map(firstToSecond);
+
   if (!name) {
-    let refrain = sentences[0] ?? raw;
-    for (const s of sentences) if (s.length >= refrain.length) refrain = s;
+    let refrain = transformed[0] ?? raw;
+    for (const s of transformed) if (s.length >= refrain.length) refrain = s;
     if (!/[.!?]$/.test(refrain)) refrain = `${refrain}.`;
-    return { lines: sentences, refrain };
+    return { lines: transformed, refrain };
   }
 
-  const transformed = sentences.map(firstToSecond);
   const withName = addNameToExactLines(transformed, name);
 
   // Refrain uses the transformed sentence without name prefix so it loops cleanly.
