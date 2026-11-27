@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
+import { newAttemptId } from "@/lib/attemptId";
 import { vetScript } from "@/lib/server/vet";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { parseRerecord } from "@/lib/rerecord";
@@ -12,6 +13,7 @@ import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 import { alertFailure } from "@/lib/server/alertFailure";
+import { captureEvent } from "@/lib/server/telemetry";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,6 +50,8 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, state: PaidState): Promise<Response> {
+  const attemptId = req.headers.get("X-Attempt-Id") || newAttemptId();
+  const build = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) ?? "";
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -129,6 +133,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
+  captureEvent("attempt_started", { route: "rerecord", attempt_id: attemptId, build });
   const vet = await vetScript(key, lines);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
@@ -210,20 +215,22 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // for a long script), so it is recorded, unpriced.
     await record({ route: "rerecord", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? text.length, estUsd: null, ok: false });
     console.warn("[voice_failed]", JSON.stringify({ route: "rerecord", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "rerecord", model: voice.model, status: speech.status });
+    alertFailure("voice_failed", { route: "rerecord", model: voice.model, status: speech.status, attempt_id: attemptId });
     await charged.refund();
     const wasCharged = charged.left !== null && charged.left !== "unlimited";
     const balanceAfterRefund =
       charged.left === "unlimited" ? "unlimited"
       : charged.left !== null ? String(Number(charged.left) + 1)
       : undefined;
-    return NextResponse.json({
+    const rrFailRes = NextResponse.json({
       code: "voice_failed",
       error: "The voice had a problem recording.",
       hint: "Provider issues usually clear quickly — tap Try again. If it keeps failing, hear the script now in your device's own voice.",
       ...(wasCharged ? { creditReturned: true } : {}),
       ...(balanceAfterRefund !== undefined ? { creditsBalance: balanceAfterRefund } : {}),
     }, { status: 502 });
+    rrFailRes.headers.set("X-Attempt-Id", attemptId);
+    return rrFailRes;
   }
   await record({
     route: "rerecord",
@@ -236,10 +243,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   });
   // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
   if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
+  captureEvent("attempt_done", { route: "rerecord", attempt_id: attemptId });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
+      "X-Attempt-Id": attemptId,
+      ...(build ? { "X-Build": build } : {}),
       ...(charged.left !== null ? { "X-Credits-Left": charged.left, "X-Credits-Balance": charged.left } : {}),
       "X-Voice-Id": voice.id,
       "X-Chars": String(text.length),

@@ -10,6 +10,9 @@ type SafeFields = {
   status?: number;
   elapsedMs?: number;
   requestId?: string;
+  attempt_id?: string;
+  step?: string;
+  try?: number;
 };
 
 export function alertFailure(kind: AlertKind, fields: SafeFields): void {
