@@ -108,6 +108,15 @@ describe("POST /api/rerecord", () => {
     expect((speech?.body as { input: string }).input).toBe("Take a slow breath. You are calm and steady.");
   });
 
+  it("applies the speedStep to a non-atomic voice re-record (web library fix)", async () => {
+    const res = await POST(req({ ...script, voiceId: "heygen-nadine", speedStep: "faster" }));
+    expect(res.status).toBe(200);
+    const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
+    const V = await import("@/lib/voice/options");
+    const faster = V.SPEED_OPTIONS.find((o) => o.id === "faster")!;
+    expect((speech?.body as { speed: number }).speed).toBe(faster.speed);
+  });
+
   it("records nothing when the model says no", async () => {
     vetReply = "NO";
     const res = await POST(req(script));

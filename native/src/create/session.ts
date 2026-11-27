@@ -126,24 +126,29 @@ export function setScriptMode(mode: ScriptMode): void {
   write(SCRIPT_MODE_KEY, mode);
 }
 
+/** Exposes the current state snapshot for tests; not for use in component code. */
+export const getCreateState = () => state;
+
 let run = 0;
 /** The wish the current `made` was asked for. The form can change afterwards. */
 let asked: { want: string; name: string; speedStep?: string; cadenceStep?: string } = { want: "", name: "" };
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
+  // Capture speed/cadence from state before the async settings.read(): pickSpeed/pickCadence
+  // update state synchronously but write to storage async, so storage may be stale.
+  const { speedStep, cadenceStep } = state;
   set({ making: true, made: null, savedId: "", variant, paywallError: null });
   const wish = { want: state.want, name: state.name };
   const chosen = await settings.read();
   const { voiceId } = set(voiceNow(chosen.voiceId));
-  set({ speedStep: resolveSpeed(chosen.speedStep).id, cadenceStep: resolveCadence(chosen.cadenceStep).id });
   const scriptMode = state.scriptMode;
 
   if (PAYWALL_ENABLED) {
     // Paywall path: call api.manifest directly so we can intercept 401/402/504.
     try {
-      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode }));
+      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }));
       if (run !== mine) return;
-      asked = { ...wish, speedStep: chosen.speedStep, cadenceStep: chosen.cadenceStep };
+      asked = { ...wish, speedStep, cadenceStep };
       const voice = resolveVoice(r.voiceId);
       const made: Made = {
         title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(wish.want))),
@@ -174,17 +179,17 @@ async function generate(variant: number): Promise<void> {
         note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
         recording: null,
       };
-      asked = { ...wish, speedStep: chosen.speedStep, cadenceStep: chosen.cadenceStep };
+      asked = { ...wish, speedStep, cadenceStep };
       set({ making: false, made });
     }
     return;
   }
 
   // Original non-paywall path.
-  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode }, canSpeak());
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }, canSpeak());
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;
-  asked = { ...wish, speedStep: chosen.speedStep, cadenceStep: chosen.cadenceStep };
+  asked = { ...wish, speedStep, cadenceStep };
   set({ making: false, made });
 }
 
