@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform, Text, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { canCreate, isSignedIn } from "@/lib/createGate";
+import { LIBRARY_TAB_ROUTE, playlistLabel } from "@/lib/create";
 import { useAccount } from "../../src/accountStore";
 import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
@@ -105,6 +106,21 @@ export default function Recording() {
     }
     setSaving(false);
   };
+  const goToPlaylist = async () => {
+    if (!c.savedId) {
+      if (saving) return;
+      setSaving(true);
+      try {
+        await save();
+      } catch (e) {
+        setToast(e instanceof Error && e.message ? e.message : "Could not save on this device.");
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+    }
+    router.push(LIBRARY_TAB_ROUTE);
+  };
   const back = () => {
     stop();
     leave();
@@ -124,6 +140,7 @@ export default function Recording() {
         {playing ? <Button label="■ Stop" onPress={stop} /> : <Button label={done ? "▶ Play again" : "▶ Play"} onPress={start} />}
         <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
         <Button small label="New variation" onPress={again} />
+        <Button small label={playlistLabel(c.savedId ?? "")} disabled={saving} onPress={goToPlaylist} />
       </View>
       {made.recording ? <PlayOptions loop={{ value: loop, onChange: setLoop }} bell={{ value: bell, onChange: (v) => void setBell(v), disabled: !loop }} disabled={playing} /> : null}
       {toast ? <Text accessibilityRole="alert" style={s.muted}>{toast}</Text> : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, type Recording, type WishRequest, readTitle } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
+import { freeBanner, freeLeft, LIBRARY_TAB_ROUTE, LIBRARY_WEB_ROUTE, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, playlistLabel, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
@@ -199,5 +199,20 @@ describe("X-Title header round trip (#205)", () => {
   });
   it("returns undefined for a corrupt value, not an error", () => {
     expect(readTitle("not-valid-base64!!!")).toBeUndefined();
+  });
+});
+
+describe("playlist button (#241)", () => {
+  it("shows 'My playlist' when already saved", () => {
+    expect(playlistLabel("some-saved-id")).toBe("My playlist");
+  });
+  it("shows 'Save and open playlist' when not yet saved", () => {
+    expect(playlistLabel("")).toBe("Save and open playlist");
+  });
+  it("native route targets the library tab", () => {
+    expect(LIBRARY_TAB_ROUTE).toBe("/(tabs)/library");
+  });
+  it("web route targets the library page", () => {
+    expect(LIBRARY_WEB_ROUTE).toBe("/library");
   });
 });
