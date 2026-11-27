@@ -140,4 +140,50 @@ describe("runTriage", () => {
       expect(issueBody.toLowerCase()).not.toContain(forbidden);
     }
   });
+
+  // Regression test for P1 pagination: a reason on page 2 must not cause a duplicate issue.
+  // Without pagination, page 2 is never fetched and the reason appears new, creating a duplicate.
+  it("follows Link pagination and skips reasons found on subsequent pages", async () => {
+    // Page 1 has one issue; Link header points to page 2
+    const page1 = new Response(
+      JSON.stringify([
+        {
+          title: "[auto-triage] voice_failed:http_status (2 failures on 2026-11-26)",
+          html_url: "https://github.com/timfong888/neville/issues/290",
+          number: 290,
+        },
+      ]),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          link: '<https://api.github.com/repos/timfong888/neville/issues?page=2>; rel="next"',
+        },
+      },
+    );
+    // Page 2 has the reason we're about to triage
+    const page2 = listIssuesResponse([
+      {
+        title: "[auto-triage] script_failed:timeout (1 failure on 2026-11-25)",
+        html_url: "https://github.com/timfong888/neville/issues/291",
+        number: 291,
+      },
+    ]);
+
+    fetchMock.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    // If pagination is broken, it would try to create an issue here (3rd call); this mock throws if called
+    fetchMock.mockRejectedValueOnce(new Error("unexpected create call — pagination not followed"));
+
+    const { runTriage } = await import("@/lib/server/triage");
+    const summary = {
+      "voice_failed:http_status": { count: 1, sampleIds: [] },
+      "script_failed:timeout": { count: 2, sampleIds: ["req_z"] },
+    };
+    const result = await runTriage(summary, "2026-11-27");
+
+    // Both reasons found across two pages → no new issues created
+    expect(result.created).toHaveLength(0);
+    expect(result.skipped).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // page1 + page2, no create call
+  });
 });

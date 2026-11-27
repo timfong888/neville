@@ -10,20 +10,28 @@ export type TriageResult = {
   skipped: Array<{ reason: string; existingUrl: string }>;
 };
 
-/** Existing open auto-triage issues, keyed by their reason slug. */
+/** Existing open auto-triage issues, keyed by their reason slug. Follows Link pagination. */
 async function existingIssues(token: string): Promise<Map<string, { url: string; number: number }>> {
-  const url = `https://api.github.com/repos/${REPO}/issues?labels=${LABEL}&state=open&per_page=100`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!res.ok) throw new Error(`github list issues ${res.status}`);
-  const issues = (await res.json()) as Array<{ title: string; html_url: string; number: number }>;
   const map = new Map<string, { url: string; number: number }>();
-  for (const issue of issues) {
-    // Title format: "[auto-triage] voice_failed:http_status (3 failures on 2026-11-27)"
-    const m = /^\[auto-triage\] (.+?) \(/.exec(issue.title);
-    if (m) map.set(m[1], { url: issue.html_url, number: issue.number });
+  let next: string | null =
+    `https://api.github.com/repos/${REPO}/issues?labels=${LABEL}&state=open&per_page=100`;
+
+  while (next) {
+    // eslint-disable-next-line no-await-in-loop
+    const pageRes: Response = await fetch(next, {
+      headers: { Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!pageRes.ok) throw new Error(`github list issues ${pageRes.status}`);
+    const issues = (await pageRes.json()) as Array<{ title: string; html_url: string; number: number }>;
+    for (const issue of issues) {
+      // Title format: "[auto-triage] voice_failed:http_status (3 failures on 2026-11-27)"
+      const m = /^\[auto-triage\] (.+?) \(/.exec(issue.title);
+      if (m) map.set(m[1], { url: issue.html_url, number: issue.number });
+    }
+    // Follow the next page link, if any
+    const linkHeader: string = pageRes.headers.get("link") ?? "";
+    next = /<([^>]+)>; rel="next"/.exec(linkHeader)?.[1] ?? null;
   }
   return map;
 }
