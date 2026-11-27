@@ -65,5 +65,20 @@ describe("playingItemId", () => {
       expect(playingItemId(st({ status: "paused", id: "all", index: 1 }), items)).toBe("a");
       expect(playingItemId(st({ status: "paused", id: "all", index: 3 }), items)).toBe("c");
     });
+
+    it("(b) with idFromIndex, matches the queue snapshot through a 2-track loop advance even after library items change", () => {
+      // Queue was built with [a, b]. Then c was inserted into the library.
+      // items.filter(hasAudio) order is now [a, c, b] — mismatched with the queue.
+      const changedItems = [m("a", true), m("c", true), m("b", true)];
+      // Without idFromIndex: index 2 → pos 1 → "c" (wrong — queue has "b" at this position)
+      expect(playingItemId(st({ status: "playing", id: "all", index: 2 }), changedItems)).toBe("c");
+      // Queue snapshot: a(0,1), b(2,3)
+      const snap = (i: number): string | undefined => ["a", "a", "b", "b"][i];
+      // With idFromIndex: matches the queue regardless of current library order
+      expect(playingItemId(st({ status: "playing", id: "all", index: 0 }), changedItems, snap)).toBe("a");
+      expect(playingItemId(st({ status: "playing", id: "all", index: 1 }), changedItems, snap)).toBe("a");
+      expect(playingItemId(st({ status: "playing", id: "all", index: 2 }), changedItems, snap)).toBe("b");
+      expect(playingItemId(st({ status: "playing", id: "all", index: 3 }), changedItems, snap)).toBe("b");
+    });
   });
 });
