@@ -17,9 +17,10 @@ export function WaitingPhrases() {
   const startRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
-  const reduceMotionRef = useRef(false);
+  // Conservative default: cap at REDUCED_MOTION_MS until the async isReduceMotionEnabled() resolves.
+  const reduceMotionRef = useRef(true);
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(true);
 
   useEffect(() => () => { mountedRef.current = false; }, []);
 

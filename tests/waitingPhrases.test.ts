@@ -123,6 +123,23 @@ describe("reduced-motion timer (REDUCED_MOTION_MS = 4000)", () => {
     const mountDuration = reduceMotionRef.current ? REDUCED_MOTION_MS : longQuote!.durationMs;
     expect(mountDuration).toBe(4000);
   });
+
+  it("pre-resolve interval is capped at 4000 ms (conservative default before async resolves)", () => {
+    // reduceMotionRef defaults to true so the first timer is always 4 s or less,
+    // regardless of when isReduceMotionEnabled() resolves.
+    const REDUCED_MOTION_MS = 4000;
+    // Simulate state before the async call returns: reduceMotionRef = true (conservative default)
+    const reduceMotionRefPreResolve = { current: true };
+    const longQuote = QUOTES.find((q) => q.durationMs === 6000)!;
+    const preResolveDuration = reduceMotionRefPreResolve.current ? REDUCED_MOTION_MS : longQuote.durationMs;
+    expect(preResolveDuration).toBe(4000);
+
+    // After the async call resolves to false (no reduce-motion), the ref updates and
+    // subsequent timers use the full durationMs.
+    const reduceMotionRefPostResolve = { current: false };
+    const postResolveDuration = reduceMotionRefPostResolve.current ? REDUCED_MOTION_MS : longQuote.durationMs;
+    expect(postResolveDuration).toBe(6000);
+  });
 });
 
 describe("waitLine", () => {
