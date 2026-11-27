@@ -500,6 +500,17 @@ describe("relaxed adult tier (issue 218)", () => {
         expect(adultCueRelaxed(wish), wish).toBe(false);
       }
     });
+    it("false when FAMILY_ROLES matches, even with an adult cue word", () => {
+      for (const wish of [
+        "my adult sister finds me attractive",
+        "my adult niece who is attracted to me",
+        "my wife who is also my cousin",
+        "women including my sister admire me",
+        "my stepsister is a grown woman who desires me",
+      ]) {
+        expect(adultCueRelaxed(wish), wish).toBe(false);
+      }
+    });
   });
 
   describe("sexInRelaxed", () => {

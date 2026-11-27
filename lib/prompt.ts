@@ -287,9 +287,9 @@ export function sexualIn(lines: string[], wish = ""): string | null {
 // Relaxed-tier adult cue: adds generic adult-class words (women, men) that ADULT_CUE does not cover.
 const ADULT_CUE_RELAXED_WORDS = /\b(?:women|woman|men|man|adults?|wife|husband|spouse|married|partner|fianc\w+)\b/i;
 
-/** True when the wish has an adult cue (women/man/etc. or ADULT_CUE) and no MINOR_CLEAR word. */
+/** True when the wish has an adult cue (women/man/etc. or ADULT_CUE), no MINOR_CLEAR word, and no family-role word. */
 export function adultCueRelaxed(wish: string): boolean {
-  return (ADULT_CUE_RELAXED_WORDS.test(wish) || ADULT_CUE.test(wish)) && !MINOR_CLEAR.test(wish);
+  return (ADULT_CUE_RELAXED_WORDS.test(wish) || ADULT_CUE.test(wish)) && !MINOR_CLEAR.test(wish) && !FAMILY_ROLES.test(wish);
 }
 
 /** Appended to SYSTEM for relaxed accounts when adultCueRelaxed is true. */
