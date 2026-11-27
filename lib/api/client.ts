@@ -83,6 +83,8 @@ export type WishRequest = {
   variant?: number;
   pace?: unknown;
   tone?: unknown;
+  speedStep?: unknown;
+  cadenceStep?: unknown;
 };
 
 /** Line start times from the `X-Line-Starts` header, or undefined unless they are all sound. */
@@ -181,8 +183,8 @@ export function createApi(opts: ApiOptions) {
       return recording(await call("/api/manifest", json(req)));
     },
     /** Records an existing script again, in one voice. */
-    async rerecord(lines: string[], voiceId: string): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId })), lines);
+    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown } = {}): Promise<Recording> {
+      return recording(await call("/api/rerecord", json({ lines, voiceId, ...opts })), lines);
     },
 
     async credits(): Promise<CreditsResponse> {

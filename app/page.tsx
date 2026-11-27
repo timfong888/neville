@@ -9,7 +9,7 @@ import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
-import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
+import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice } from "@/lib/deliveryStore";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -372,6 +372,8 @@ export default function DemoPage() {
           variant: v,
           pace: readPaceChoice(),
           tone: readToneChoice(),
+          speedStep: readSpeedStepChoice(),
+          cadenceStep: readCadenceStepChoice(),
           repeat: repeatMin > 0,
         }),
       });

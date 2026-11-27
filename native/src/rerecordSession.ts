@@ -59,7 +59,7 @@ export async function startRecording(m: Manifestation): Promise<void> {
   const voiceId = resolveVoice(m.voiceId).id;
 
   try {
-    const r = await api.rerecord(m.lines, voiceId);
+    const r = await api.rerecord(m.lines, voiceId, { speedStep: m.speedStep, cadenceStep: m.cadenceStep });
 
     // May have navigated away while in flight; still update state.
     if (session.id !== id) return;
@@ -80,6 +80,8 @@ export async function startRecording(m: Manifestation): Promise<void> {
       voiceName: usedVoice.name,
       hasAudio: true,
       updatedAt: Date.now(),
+      ...(m.speedStep !== undefined ? { speedStep: m.speedStep } : {}),
+      ...(m.cadenceStep !== undefined ? { cadenceStep: m.cadenceStep } : {}),
     };
     await library.save(updated, { bytes: new Uint8Array(r.audio), mime: r.mime });
 

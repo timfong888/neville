@@ -8,6 +8,7 @@ import { parseRerecord } from "@/lib/rerecord";
 import { resolveVoice } from "@/lib/voices";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
+import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 import { alertFailure } from "@/lib/server/alertFailure";
@@ -63,6 +64,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
   const { lines } = parsed.value;
   const voice = resolveVoice(parsed.value.voiceId);
+  const speedOpt = parsed.value.speedStep !== null ? resolveSpeed(parsed.value.speedStep) : null;
+  const cadenceOpt = parsed.value.cadenceStep !== null ? resolveCadence(parsed.value.cadenceStep) : null;
 
   // A configured tester must be signed in before their network slot is skipped.
   // This lookup happens even while the paywall is off, so tester access stays useful during testing.
@@ -160,7 +163,15 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // Voices flagged atomic record the edited lines in one request with a
     // pause after each, at the default pace's speed, style and pause, as
     // /api/manifest does (#76). Other voices keep the one-request text above.
-    ...(voice.atomic === true ? { lines, ...DEFAULT_DELIVERY, atomic: true } : {}),
+    ...(voice.atomic === true
+      ? {
+          lines,
+          ...DEFAULT_DELIVERY,
+          ...(speedOpt ? { speed: speedOpt.speed } : {}),
+          ...(cadenceOpt ? { pauseMs: cadenceOpt.pauseMs } : {}),
+          atomic: true,
+        }
+      : {}),
   });
   if (!speech.ok) {
     // A failed recording may still have been billed in part (several requests

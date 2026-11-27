@@ -68,7 +68,7 @@ export function pickOnCreate(p: VoicePick, id: string, current: string, asDefaul
 }
 
 /** The wish as typed, and the choices from Settings. */
-export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown };
+export type Wish = Draft & { voiceId?: string | null; variant?: number; pace?: unknown; tone?: unknown; speedStep?: unknown; cadenceStep?: unknown };
 
 /** The body of `POST /api/manifest`. The server checks every field again. */
 export function wishRequest(w: Wish): WishRequest {
@@ -79,6 +79,8 @@ export function wishRequest(w: Wish): WishRequest {
     variant: w.variant ?? 0,
     pace: w.pace,
     tone: w.tone,
+    speedStep: w.speedStep,
+    cadenceStep: w.cadenceStep,
   };
 }
 
@@ -149,7 +151,7 @@ export function lineForProgress(index: number, at: number, starts: number[]): nu
 }
 
 /** The Library item for a result, as the website's Save builds it. */
-export function toManifestation(made: Made, w: Draft, id: string, now = Date.now()): Manifestation {
+export function toManifestation(made: Made, w: Wish, id: string, now = Date.now()): Manifestation {
   return {
     id,
     title: made.title,
@@ -161,5 +163,7 @@ export function toManifestation(made: Made, w: Draft, id: string, now = Date.now
     hasAudio: !!made.recording,
     createdAt: now,
     updatedAt: now,
+    ...(typeof w.speedStep === "string" ? { speedStep: w.speedStep } : {}),
+    ...(typeof w.cadenceStep === "string" ? { cadenceStep: w.cadenceStep } : {}),
   };
 }
