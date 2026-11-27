@@ -74,7 +74,10 @@ export default function Wish() {
               </Text>
             </View>
           ) : null}
-          <Text nativeID="want" style={s.muted}>What do you want?</Text>
+          <Text nativeID="want" style={s.muted}>What is already yours?</Text>
+          <Text style={[s.muted, { fontStyle: "italic", fontSize: 12 }]}>
+            {"To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret."}
+          </Text>
           <TextInput
             accessibilityLabelledBy="want"
             aria-labelledby="want"

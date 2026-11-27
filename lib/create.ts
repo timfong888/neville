@@ -11,10 +11,10 @@ import { resolveVoice } from "@/lib/voices";
 export { MAX_NAME, MAX_WANT };
 
 export const EXAMPLES = [
-  "I want to be calm and confident when I speak",
-  "a healthy, strong body that I enjoy living in",
-  "to run my own business doing work I love",
-  "a loving, easy relationship with my family",
+  "I am calm and confident when I speak",
+  "I am healthy and strong",
+  "I run my own business doing work I love",
+  "I have a loving, easy relationship with my family",
 ];
 
 /** Where the free-creation count is kept on the device. */
