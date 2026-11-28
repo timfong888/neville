@@ -3,15 +3,16 @@
 // steps each, mapped to the values the provider actually uses.
 import { ENABLED_VOICES, type Voice } from "@/lib/voices";
 
-/** The 5 curated voices offered in the create flow. Tim picks the final set from the PR samples. */
-export const CURATED_VOICE_IDS = [
+/** The 5 curated voice ids offered in the create flow's inline voice picker. */
+export const CURATED_VOICE_IDS: readonly string[] = [
   "gemini-sulafat",        // Warm female
   "gemini-vindemiatrix",   // Gentle female
   "gemini-algieba",        // Smooth male
   "gemini-charon",         // Low, steady male
   "heygen-nadine",         // Calm female, lower pitch
-] as const;
+];
 
+/** Curated Voice objects for the web create flow (native uses the server-fetched list). */
 export const CURATED_VOICES: Voice[] = ENABLED_VOICES.filter(
   (v) => (CURATED_VOICE_IDS as readonly string[]).includes(v.id) && v.generate,
 );

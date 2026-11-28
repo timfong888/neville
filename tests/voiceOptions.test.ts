@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CADENCE_OPTIONS,
-  CURATED_VOICES,
+  CURATED_VOICE_IDS,
   DEFAULT_CADENCE_STEP,
   DEFAULT_SPEED_STEP,
   SPEED_OPTIONS,
@@ -9,6 +9,7 @@ import {
   resolveSpeed,
   voiceOptionLabel,
 } from "@/lib/voice/options";
+import { ENABLED_VOICES } from "@/lib/voices";
 import { parseRerecord } from "@/lib/rerecord";
 
 describe("voice options — speed mapping", () => {
@@ -43,12 +44,14 @@ describe("voice options — cadence mapping", () => {
 });
 
 describe("voice options — curated list", () => {
-  it("contains only recordable voices with existing samples", () => {
-    expect(CURATED_VOICES.length).toBeGreaterThanOrEqual(4);
-    for (const v of CURATED_VOICES) {
-      expect(v.generate).toBe(true);
-      expect(v.enabled).toBe(true);
-      expect(v.sample).toMatch(/^\//);
+  it("curated ids name recordable voices with existing samples", () => {
+    expect(CURATED_VOICE_IDS.length).toBeGreaterThanOrEqual(4);
+    for (const id of CURATED_VOICE_IDS) {
+      const v = ENABLED_VOICES.find((vv) => vv.id === id);
+      expect(v, id).toBeDefined();
+      expect(v!.generate, id).toBe(true);
+      expect(v!.enabled, id).toBe(true);
+      expect(v!.sample, id).toMatch(/^\//);
     }
   });
 });

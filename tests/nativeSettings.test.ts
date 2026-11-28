@@ -38,10 +38,13 @@ describe("native settings store", () => {
     expect(calls).toBe(1);
   });
 
-  it("falls back to the default for unknown, disabled or sample-only ids", async () => {
+  it("returns the stored voice id as-is (server validates); falls back for unknown pace/tone", async () => {
+    // The settings store no longer validates voice ids against the bundled list —
+    // the server validates on every request and falls back to its own default.
     const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
-    const store = makeSettingsStore(memory({ nv_voice: sampleOnly?.id ?? "gone", nv_pace: "warp", nv_tone: "angry" }));
-    expect(await store.read()).toEqual({ voiceId: DEFAULT_VOICE_ID, pace: DEFAULT_PACE_ID, tone: DEFAULT_TONE_ID, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP });
+    const storedId = sampleOnly?.id ?? "gone";
+    const store = makeSettingsStore(memory({ nv_voice: storedId, nv_pace: "warp", nv_tone: "angry" }));
+    expect(await store.read()).toEqual({ voiceId: storedId, pace: DEFAULT_PACE_ID, tone: DEFAULT_TONE_ID, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP });
   });
 
   it("reports a device that refuses storage", async () => {

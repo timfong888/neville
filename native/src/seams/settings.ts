@@ -3,7 +3,7 @@
 //   const { settings: s, ready } = useSettings();
 import { useEffect, useState } from "react";
 import { DEFAULT_PACE_ID, DEFAULT_TONE_ID } from "@/lib/delivery";
-import { DEFAULT_VOICE_ID } from "@/lib/voices";
+import { FALLBACK_VOICE_ID } from "./voiceConstants";
 import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP } from "@/lib/voice/options";
 import { kv } from "./kv";
 import { makeSettingsStore, type Settings } from "./settingsCore";
@@ -13,7 +13,7 @@ export type { Settings } from "./settingsCore";
 export const settings = makeSettingsStore(kv);
 
 export const DEFAULT_SETTINGS: Settings = {
-  voiceId: DEFAULT_VOICE_ID,
+  voiceId: FALLBACK_VOICE_ID,
   pace: DEFAULT_PACE_ID,
   tone: DEFAULT_TONE_ID,
   speedStep: DEFAULT_SPEED_STEP,
