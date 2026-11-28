@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIANT_COUNT } from "@/lib/script";
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
-import { newAttemptId, shortRef, copyLine } from "@/lib/attemptId";
+import { newAttemptId, codeRef, copyLine } from "@/lib/attemptId";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { useRouter as useNextRouter } from "next/navigation";
@@ -908,7 +908,7 @@ export default function DemoPage() {
       {note && <p className="small muted">{note}</p>}
       {!made && attemptId.current ? (
         <p className="small muted">
-          Reference {shortRef(attemptId.current)}{" "}
+          Code: {codeRef(attemptId.current)}{" "}
           <button
             className="chip"
             onClick={() => void navigator.clipboard.writeText(copyLine(attemptId.current, attemptBuild.current)).catch(() => undefined)}

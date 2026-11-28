@@ -23,6 +23,13 @@ import { currentUser } from "@/lib/server/accounts";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/** Attaches X-Attempt-Id and X-Support-Code to any response. */
+function withAttemptHeaders(res: Response, attemptId: string): Response {
+  res.headers.set("X-Attempt-Id", attemptId);
+  res.headers.set("X-Support-Code", attemptId.replace(/-/g, "").slice(0, 8));
+  return res;
+}
+
 // Only these models take a style instruction apart from the script. It is
 // never part of the spoken text, so it cannot be read aloud.
 const TAKES_STYLE = /^google\/gemini/;
@@ -165,13 +172,15 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         adultScript = { lines, source: "exact", refrain };
       }
     } else {
-      const adultResult = await writeAdultScript({ key, want, name, variant });
+      const adultResult = await writeAdultScript({ key, want, name, variant, attemptId });
       if (!adultResult.ok) {
-        console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest" }));
+        console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest", attempt_id: attemptId }));
         if (adultResult.reason === "output_gate") {
           await charged.refund();
           await slot?.release();
-          return NextResponse.json({ code: "content_policy", error: "The script did not pass the content check. Please try again." }, { status: 422 });
+          const r = NextResponse.json({ code: "content_policy", supportCode: attemptId.replace(/-/g, "").slice(0, 8), error: "The script did not pass the content check. Please try again." }, { status: 422 });
+          withAttemptHeaders(r, attemptId);
+          return r;
         }
         // no_model: adult models unavailable — alert and fall through to the standard script path.
         alertFailure("adult_models_unavailable", { route: "manifest", attempt_id: attemptId });
@@ -189,14 +198,14 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     if (adultScript.source === "model" || (adultScript.costUsd ?? 0) > 0) {
       await record({ route: "manifest", kind: "script", source: adultScript.source, model: adultScript.model ?? null, chars: spoken, estUsd: adultScript.costUsd ?? null });
     }
+    console.info("[script_stage]", JSON.stringify({ attempt_id: attemptId, stage: "script", source: adultScript.source, model: adultScript.model ?? null, chars: spoken, elapsedMs: Date.now() - started }));
     if (state.timedOut) {
-      alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: adultScript.model ?? null, elapsedMs: Date.now() - started });
+      alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", step: "script", model: adultScript.model ?? null, elapsedMs: Date.now() - started, attempt_id: attemptId });
       return timeoutResponse(true);
     }
     // Adult-tier TTS: try up to MAX_ADULT_TTS voices in fallback order.
     // The requested voice is first; config fallbacks follow if it refuses or errors.
     const MAX_ADULT_TTS = 3;
-    const adultAttemptId = crypto.randomUUID().slice(0, 8);
     const chain = buildAdultVoiceChain(
       { id: voice.id, model: voice.model, voice: voice.voice, atomic: voice.atomic },
       LIMITS.adultTtsFallback,
@@ -217,11 +226,19 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       }
       const ms = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
       if (ms === null) {
-        alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: c.model, elapsedMs: Date.now() - started });
+        alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", step: "audio", model: c.model, voice: c.id, elapsedMs: Date.now() - started, attempt_id: attemptId });
         return timeoutAnswer(state);
       }
-      const s = await synthesize({ key, model: c.model, voice: c.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(c.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: ms, atomic: c.atomic });
-      console.info("[adult_tts_attempt]", JSON.stringify({ adultAttemptId, attempt: i + 1, model: c.model, ok: s.ok, ...(!s.ok ? { status: s.status } : {}) }));
+      const audioStart = Date.now();
+      let s: Awaited<ReturnType<typeof synthesize>>;
+      try {
+        s = await synthesize({ key, model: c.model, voice: c.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(c.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: ms, atomic: c.atomic });
+      } catch (e) {
+        const name = e instanceof Error ? e.name : "unknown";
+        console.warn("[audio_stage]", JSON.stringify({ attempt_id: attemptId, stage: "audio", attempt: i + 1, model: c.model, voice: c.id, outcome: name, ms: Date.now() - audioStart }));
+        s = { ok: false, status: 504, message: name };
+      }
+      console.info("[audio_stage]", JSON.stringify({ attempt_id: attemptId, stage: "audio", attempt: i + 1, model: c.model, voice: c.id, ok: s.ok, ms: Date.now() - audioStart, ...(!s.ok ? { status: s.status } : {}) }));
       if (s.ok) {
         await record({ route: "manifest", kind: "speech", model: c.model, voiceId: c.id, chars: s.sentChars, estUsd: await estimateSpeech(c.model, s.sentChars) });
       } else {
@@ -234,7 +251,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
     if (!speech?.ok) {
       await charged.refund();
-      return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now.", ...(adultScript.source === "model" ? { lines: adultScript.lines } : {}) }, { status: 502 });
+      const r = NextResponse.json({ code: "voice_failed", supportCode: attemptId.replace(/-/g, "").slice(0, 8), error: "The voice could not be recorded just now.", ...(adultScript.source === "model" ? { lines: adultScript.lines } : {}) }, { status: 502 });
+      withAttemptHeaders(r, attemptId);
+      return r;
     }
     if (!state.timedOut) await charged.fulfil();
     return new NextResponse(speech.audio, {
@@ -255,6 +274,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     } // end if (adultScript)
   } // end if (isAdult)
 
+  console.info("[attempt_started]", JSON.stringify({ attempt_id: attemptId, build, route: "manifest" }));
   captureEvent("attempt_started", { route: "manifest", attempt_id: attemptId, build });
   let script: Script;
   if (isExact) {
@@ -272,6 +292,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (script.source === "model") {
     captureEvent("script_ok", { route: "manifest", attempt_id: attemptId, model: script.model, elapsedMs: Date.now() - started });
   }
+  console.info("[script_stage]", JSON.stringify({ attempt_id: attemptId, stage: "script", source: script.source, model: script.model ?? null, chars: script.lines.join(" ").length, elapsedMs: Date.now() - started }));
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
   // can be cut apart in the browser.
@@ -294,44 +315,82 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   // The deadline passed while the script was being written: do not start the voice, the credit is already refunded.
   if (state.timedOut) {
-    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started });
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", step: "script", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started, attempt_id: attemptId });
     return timeoutResponse(true);
   }
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s): the route's own 52 s budget alone could pass it.
   const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
   if (voiceMs === null) {
-    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started });
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", step: "audio", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started, attempt_id: attemptId });
     return timeoutAnswer(state);
   }
-  const speech = await synthesize({
-    key,
-    model: voice.model,
-    voice: voice.voice,
-    text,
-    lines: pausedLines,
-    // The refrain follows the closing with no pause, and its length does not
-    // shorten the pauses between the script's lines.
-    tail,
-    pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
-    pauseMsPerGap,
-    speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
-    instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
-    compact: true,
-    // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
-    timeoutMs: voiceMs,
-    atomic: voice.atomic === true,
-  });
-  if (!speech.ok) {
+
+  // Try the primary voice, then one fallback from adultTtsFallback if it fails or throws.
+  const audioFallbacks = (LIMITS.adultTtsFallback ?? []).slice(0, 1);
+  const voiceChain = [
+    { id: voice.id, model: voice.model, voice: voice.voice, atomic: voice.atomic === true },
+    ...audioFallbacks,
+  ];
+  let speech: Awaited<ReturnType<typeof synthesize>> | undefined;
+  let usedVoiceId = voice.id;
+  let remainingMs = voiceMs;
+
+  for (let vi = 0; vi < voiceChain.length; vi++) {
+    const vc = voiceChain[vi];
+    if (vi > 0) {
+      // Re-check budget for the fallback attempt.
+      const fb = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
+      if (fb === null) break;
+      remainingMs = fb;
+    }
+    const audioStart = Date.now();
+    let s: Awaited<ReturnType<typeof synthesize>>;
+    try {
+      s = await synthesize({
+        key,
+        model: vc.model,
+        voice: vc.voice,
+        text,
+        lines: pausedLines,
+        // The refrain follows the closing with no pause, and its length does not
+        // shorten the pauses between the script's lines.
+        tail,
+        pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
+        pauseMsPerGap,
+        speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
+        instructions: TAKES_STYLE.test(vc.model) ? styleInstruction(pace, tone) : undefined,
+        compact: true,
+        // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
+        timeoutMs: remainingMs,
+        atomic: vc.atomic,
+      });
+    } catch (e) {
+      const name = e instanceof Error ? e.name : "unknown";
+      console.warn("[audio_stage]", JSON.stringify({ attempt_id: attemptId, stage: "audio", attempt: vi + 1, model: vc.model, voice: vc.id, outcome: name, ms: Date.now() - audioStart }));
+      s = { ok: false, status: 504, message: name };
+    }
+    console.info("[audio_stage]", JSON.stringify({ attempt_id: attemptId, stage: "audio", attempt: vi + 1, model: vc.model, voice: vc.id, ok: s.ok, ms: Date.now() - audioStart, ...(!s.ok ? { status: s.status } : {}) }));
+    if (s.ok) {
+      await record({ route: "manifest", kind: "speech", model: vc.model, voiceId: vc.id, chars: s.sentChars, estUsd: await estimateSpeech(vc.model, s.sentChars) });
+    } else {
+      await record({ route: "manifest", kind: "speech", model: vc.model, voiceId: vc.id, chars: s.sentChars ?? spoken, estUsd: null, ok: false });
+    }
+    speech = s;
+    usedVoiceId = vc.id;
+    if (s.ok) break;
+  }
+
+  if (!speech?.ok) {
     // A failed recording may still have been billed in part (several requests
     // for a long script), so it is recorded, unpriced.
-    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
-    console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech.status, elapsedMs: Date.now() - started, attempt_id: attemptId });
+    console.warn("[voice_failed]", JSON.stringify({ attempt_id: attemptId, route: "manifest", model: voice.model, voiceId: voice.id, status: speech?.status, message: speech?.message }));
+    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech?.status, elapsedMs: Date.now() - started, attempt_id: attemptId });
     await charged.refund();
     const failRes = NextResponse.json(
       {
         code: "voice_failed",
+        supportCode: attemptId.replace(/-/g, "").slice(0, 8),
         error: "The voice could not be recorded just now.",
         // The model's script was already written and vetted: the device voice
         // reads it instead of the general one. A template script is not sent.
@@ -341,20 +400,11 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       },
       { status: 502 },
     );
-    failRes.headers.set("X-Attempt-Id", attemptId);
+    withAttemptHeaders(failRes, attemptId);
     return failRes;
   }
 
   captureEvent("voice_ok", { route: "manifest", attempt_id: attemptId, model: voice.model, elapsedMs: Date.now() - started });
-  await record({
-    route: "manifest",
-    kind: "speech",
-    model: voice.model,
-    voiceId: voice.id,
-    // What was sent, as billed: pause tags and any discarded first take included.
-    chars: speech.sentChars,
-    estUsd: await estimateSpeech(voice.model, speech.sentChars),
-  });
   // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
   if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
   captureEvent("attempt_done", { route: "manifest", attempt_id: attemptId, elapsedMs: Date.now() - started });
@@ -378,7 +428,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       ...(body.repeat === true && !repeat ? { "X-Repeat": "unsupported" } : {}),
       ...(repeat && speech.tailDropped ? { "X-Repeat": "skipped" } : {}),
       ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
-      "X-Voice-Id": voice.id,
+      "X-Voice-Id": usedVoiceId,
       "X-Chars": String(text.length),
       "X-Pace": pace.id,
       "X-Tone": tone.id,
