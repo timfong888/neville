@@ -1,8 +1,35 @@
 // Pure helpers for the edit-and-re-record feature on the recording screen.
 // No React, no network: used by the web page, the native screen, and tests.
 import { linesFromText, sameLines } from "@/lib/library/model";
+import limits from "@/config/limits.json";
 
 export { linesFromText };
+
+/** Maximum characters the server will record. Source: config/limits.json maxScriptChars. */
+export const MAX_SCRIPT_CHARS: number = limits.maxScriptChars;
+
+/** How many characters over the audio limit the edited text is; 0 when within budget. */
+export function charOverage(text: string, limit: number = MAX_SCRIPT_CHARS): number {
+  return Math.max(0, linesFromText(text).join(" ").length - limit);
+}
+
+/**
+ * Label for the Re-record button: describes what changed from the current recording.
+ * Any combination of voice, speed, cadence and script edits is handled.
+ */
+export function rrButtonLabel(
+  scriptDiffers: boolean,
+  voiceChanged: boolean, voiceName: string,
+  speedChanged: boolean, speedLabel: string,
+  cadenceChanged: boolean, cadenceLabel: string,
+): string {
+  const parts: string[] = [];
+  if (voiceChanged) parts.push(`in ${voiceName}`);
+  if (speedChanged) parts.push(speedLabel.toLowerCase());
+  if (cadenceChanged) parts.push(cadenceLabel.toLowerCase());
+  if (scriptDiffers) parts.push("with my edits");
+  return parts.length ? `Re-record ${parts.join(", ")}` : "Re-record";
+}
 
 /** True when the edited textarea text has at least one line that differs from the original. */
 export function editEnablesRerecord(original: string[], editedText: string): boolean {
