@@ -5,6 +5,9 @@ export type SafeProps = {
   route?: string;
   reason?: string;
   model?: string | null;
+  provider?: string;
+  voice?: string;
+  chunkIndex?: number;
   status?: number;
   elapsedMs?: number;
   requestId?: string;
