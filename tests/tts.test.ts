@@ -408,3 +408,49 @@ describe("atomic voices (#76)", () => {
     expect(seen).toHaveLength(3);
   });
 });
+
+describe("synthesize with format:pcm (Orpheus, #289)", () => {
+  it("stitches Orpheus lines with real silence when format is pcm", async () => {
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "canopylabs/orpheus-3b-0.1-ft", voice: "tara",
+      text: lines.join("\n\n"), lines, pauseMs: 1000, speed: 0.85, format: "pcm", compact: true,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // 3 separate requests, each for one line
+    expect(seen).toHaveLength(3);
+    expect(seen.map((b) => b.input)).toEqual(lines);
+    expect(seen.every((b) => b.response_format === "pcm")).toBe(true);
+    // 3 x 0.5 s of speech (44100 bytes at 44.1 kHz), compacted to 22050 bytes, plus 2 pauses of 1 s (44100 bytes each)
+    expect(out.audio.byteLength).toBe(44 + 3 * 22050 + 2 * 44100);
+    expect(out.pauseMs).toBe(1000);
+    expect(out.starts).toHaveLength(3);
+  });
+
+  it("does NOT stitch Orpheus without format:pcm (old behavior preserved)", async () => {
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "canopylabs/orpheus-3b-0.1-ft", voice: "tara",
+      text: lines.join("\n\n"), lines, pauseMs: 1000, speed: 0.85, compact: true,
+    });
+    expect(out.ok).toBe(true);
+    // No stitching: single request with the full text
+    expect(seen).toHaveLength(1);
+  });
+
+  it("4 MB cap still shrinks pauses first for format:pcm voice", async () => {
+    // A pause long enough that adding it would push the file over 4 MB, even though speech is small.
+    // At 44.1 kHz (what the mock server returns), 300 s × 2 gaps = 600 s of silence
+    // = 600 × 44100 × 2 = 52,920,000 bytes >> 4 MB.
+    const synthesize = await load();
+    const out = await synthesize({
+      key: "k", model: "canopylabs/orpheus-3b-0.1-ft", voice: "tara",
+      text: lines.join("\n\n"), lines, pauseMs: 300_000, format: "pcm",
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // pauses were shrunk to fit under the 4 MB cap
+    expect(out.pauseMs).toBeLessThan(300_000);
+  });
+});

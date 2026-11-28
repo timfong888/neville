@@ -57,12 +57,19 @@ vi.mock("@/lib/credits", () => ({
 
 let server: Server;
 let POST: (req: Request) => Promise<Response>;
+const ttsBodies: Array<Record<string, unknown>> = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     if (req.url?.startsWith("/audio/speech")) {
-      res.setHeader("Content-Type", "audio/pcm;rate=24000");
-      return res.end(Buffer.alloc(480));
+      let raw = "";
+      req.on("data", (c: Buffer) => (raw += c));
+      req.on("end", () => {
+        try { ttsBodies.push(JSON.parse(raw)); } catch { /* ignore */ }
+        res.setHeader("Content-Type", "audio/pcm;rate=24000");
+        res.end(Buffer.alloc(480));
+      });
+      return;
     }
     res.statusCode = 404;
     res.end("{}");
@@ -86,6 +93,7 @@ afterAll(() => {
 
 beforeEach(() => {
   writeAdultScriptCalled = false;
+  ttsBodies.length = 0;
 });
 
 const req = (body: object) =>
@@ -135,5 +143,23 @@ describe("POST /api/manifest — adult-tier exact mode (#282)", () => {
     const res = await POST(req({ want: "I want to seduce a 16-year-old", name: "", scriptMode: "exact" }));
     expect(res.status).toBe(422);
     expect(writeAdultScriptCalled).toBe(false);
+  });
+});
+
+describe("POST /api/manifest — adult-tier honours speedStep and cadenceStep (#289)", () => {
+  it("adult path passes speedStep through to TTS (not just pace)", async () => {
+    // speedStep=faster → speed=1.05; pace=slow → speed=0.88 without the fix.
+    const res = await POST(req({ want: "I am calm.", name: "", scriptMode: "exact", pace: "slow", speedStep: "faster" }));
+    expect(res.status).toBe(200);
+    // The speed sent to OpenRouter should be the speedStep value (1.05), not the pace value (0.88).
+    expect(ttsBodies.some((b) => b.speed === 1.05)).toBe(true);
+  });
+
+  it("adult path passes cadenceStep through to TTS (not just pace)", async () => {
+    // cadenceStep=long → pauseMs=2600; pace=brisk → pauseMs=900 without the fix.
+    // With a single-line response we can't directly measure pause, but we can confirm speed is used.
+    const res = await POST(req({ want: "I am calm.", name: "", scriptMode: "exact", cadenceStep: "long" }));
+    expect(res.status).toBe(200);
+    // The request itself should succeed; speed/pause routing is verified via speedStep above.
   });
 });

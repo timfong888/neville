@@ -33,6 +33,17 @@ export type Voice = {
    */
   atomic?: boolean;
   tier: Tier;
+  /**
+   * The audio format the model returns. "pcm" voices are recorded line by line
+   * and stitched with real silence so pauses work (#289). Absent means mp3.
+   */
+  format?: "pcm" | "mp3";
+  /**
+   * Whether the model slows down when asked via the speed field. Measured in
+   * #289: Orpheus accepts the field but ignores it; Gemini honours it (#19).
+   * Absent means untested.
+   */
+  paceSupport?: "honours" | "ignores" | "untested";
 };
 
 const TIERS: Tier[] = ["free", "cheap", "low", "mid", "premium"];
@@ -55,6 +66,8 @@ function load(): { all: Voice[]; defaultId: string } {
       throw new Error(`config/voices.json: "${v.id}" has an empty or invalid "desc".`);
     }
     if (v.atomic !== undefined && typeof v.atomic !== "boolean") throw new Error(`config/voices.json: "${v.id}" has "atomic" that is not true or false.`);
+    if (v.format !== undefined && v.format !== "pcm" && v.format !== "mp3") throw new Error(`config/voices.json: "${v.id}" has invalid "format"; use "pcm" or "mp3".`);
+    if (v.paceSupport !== undefined && !["honours", "ignores", "untested"].includes(v.paceSupport)) throw new Error(`config/voices.json: "${v.id}" has invalid "paceSupport"; use "honours", "ignores", or "untested".`);
     if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);
