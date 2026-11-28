@@ -14,14 +14,27 @@ import { newAttemptId } from "@/lib/attemptId";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { segmentLines, segmentsToPausedLines } from "@/lib/speech/pauses";
-import { resolveVoice } from "@/lib/voices";
-import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
+import { ENABLED_VOICES, resolveVoice } from "@/lib/voices";
+import { resolveCadence, resolveSpeed, type SpeedOption, type CadenceOption } from "@/lib/voice/options";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
 import { isFilterRelaxed, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/** Resolved speed and pauseMs for a recording, honouring the simpler create-flow chips when present. */
+function resolvedSynthParams(
+  pace: ReturnType<typeof resolvePace>,
+  tone: ReturnType<typeof resolveTone>,
+  speedOpt: SpeedOption | null,
+  cadenceOpt: CadenceOption | null,
+) {
+  return {
+    speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
+    pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
+  };
+}
 
 // Only these models take a style instruction apart from the script. It is
 // never part of the spoken text, so it cannot be read aloud.
@@ -220,7 +233,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: c.model, elapsedMs: Date.now() - started });
         return timeoutAnswer(state);
       }
-      const s = await synthesize({ key, model: c.model, voice: c.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(c.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: ms, atomic: c.atomic });
+      const { speed: synthSpeed, pauseMs: synthPauseMs } = resolvedSynthParams(pace, tone, speedOpt, cadenceOpt);
+      const cFormat = ENABLED_VOICES.find((v) => v.id === c.id)?.format;
+      const s = await synthesize({ key, model: c.model, voice: c.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: synthPauseMs, speed: synthSpeed, format: cFormat, instructions: TAKES_STYLE.test(c.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: ms, atomic: c.atomic });
       console.info("[adult_tts_attempt]", JSON.stringify({ adultAttemptId, attempt: i + 1, model: c.model, ok: s.ok, ...(!s.ok ? { status: s.status } : {}) }));
       if (s.ok) {
         await record({ route: "manifest", kind: "speech", model: c.model, voiceId: c.id, chars: s.sentChars, estUsd: await estimateSpeech(c.model, s.sentChars) });
@@ -236,6 +251,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       await charged.refund();
       return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now.", ...(adultScript.source === "model" ? { lines: adultScript.lines } : {}) }, { status: 502 });
     }
+    const usedVoice = resolveVoice(usedId);
     if (!state.timedOut) await charged.fulfil();
     return new NextResponse(speech.audio, {
       headers: {
@@ -247,7 +263,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(adultScript.refrain, "utf8").toString("base64") } : {}),
         ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
         "X-Voice-Id": usedId, "X-Chars": String(text.length), "X-Pace": pace.id, "X-Tone": tone.id,
-        "X-Speed-Applied": speech.speedApplied ? "1" : "0",
+        "X-Speed-Applied": usedVoice.paceSupport === "ignores" ? "0" : speech.speedApplied ? "1" : "0",
         ...(speech.pauseMs ? { "X-Pause-Ms": String(speech.pauseMs) } : {}),
         ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
       },
@@ -303,6 +319,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started });
     return timeoutAnswer(state);
   }
+  const { speed: synthSpeed, pauseMs: synthPauseMs } = resolvedSynthParams(pace, tone, speedOpt, cadenceOpt);
   const speech = await synthesize({
     key,
     model: voice.model,
@@ -312,9 +329,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // The refrain follows the closing with no pause, and its length does not
     // shorten the pauses between the script's lines.
     tail,
-    pauseMs: cadenceOpt ? cadenceOpt.pauseMs : pauseFor(pace, tone),
+    pauseMs: synthPauseMs,
     pauseMsPerGap,
-    speed: speedOpt ? speedOpt.speed : speedFor(pace, tone),
+    speed: synthSpeed,
+    format: voice.format,
     instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined,
     compact: true,
     // 8 s are kept for the ledger writes and the reply; a slow script leaves the voice less, and a failed voice returns the script for the device voice.
@@ -383,7 +401,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "X-Pace": pace.id,
       "X-Tone": tone.id,
       // Whether the model took the speed we sent, and the pause used between lines.
-      "X-Speed-Applied": speech.speedApplied ? "1" : "0",
+      "X-Speed-Applied": voice.paceSupport === "ignores" ? "0" : speech.speedApplied ? "1" : "0",
       ...(speech.pauseMs ? { "X-Pause-Ms": String(speech.pauseMs) } : {}),
       ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
     },

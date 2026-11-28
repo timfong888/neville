@@ -180,6 +180,8 @@ export async function synthesize(opts: {
   instructions?: string;
   compact?: boolean;
   timeoutMs?: number;
+  /** "pcm" voices are recorded line by line and stitched with real silence (config voices.json#format). */
+  format?: "pcm" | "mp3";
   /**
    * How many of the last `lines` are extras the app cuts off (the refrain,
    * #77): joined after the body→tail gap from `pauseMsPerGap` when present,
@@ -222,8 +224,9 @@ export async function synthesize(opts: {
   }
   const { key, model, voice, text, instructions } = opts;
   const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
+  const isPcmVoice = opts.format === "pcm" || PCM_ONLY.test(model);
   const stitch = Boolean(
-    opts.lines && opts.lines.length > 1 && ((opts.pauseMs ?? 0) > 0 || opts.pauseMsPerGap) && PCM_ONLY.test(model),
+    opts.lines && opts.lines.length > 1 && ((opts.pauseMs ?? 0) > 0 || opts.pauseMsPerGap) && isPcmVoice,
   );
   // Some models cap the text per request. Longer scripts go sentence by
   // sentence as raw PCM, which can be joined end to end; MP3 files cannot.
@@ -231,7 +234,7 @@ export async function synthesize(opts: {
   const parts = stitch ? opts.lines! : limit && text.length > limit ? splitText(text, limit) : [text];
   // Every request sent, retries included (see Speech.sentChars).
   let sentChars = 0;
-  const pcm = PCM_ONLY.test(model) || parts.length > 1;
+  const pcm = isPcmVoice || parts.length > 1;
   // 1 is the model's own pace, so it is not sent. Brisk asks for a little faster.
   const wantSpeed = opts.speed && opts.speed >= 0.5 && opts.speed <= 1.2 && opts.speed !== 1 ? opts.speed : undefined;
   let speedRefused = false;

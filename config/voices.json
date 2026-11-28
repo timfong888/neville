@@ -253,7 +253,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — expressive female voice"
+      "desc": "Orpheus — expressive female voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-leah",
@@ -266,7 +268,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — female voice"
+      "desc": "Orpheus — female voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-jess",
@@ -279,7 +283,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — female voice"
+      "desc": "Orpheus — female voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-leo",
@@ -292,7 +298,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — male voice"
+      "desc": "Orpheus — male voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-dan",
@@ -305,7 +313,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — male voice"
+      "desc": "Orpheus — male voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-mia",
@@ -318,7 +328,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — female voice"
+      "desc": "Orpheus — female voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-zac",
@@ -331,7 +343,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — male voice"
+      "desc": "Orpheus — male voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "orpheus-zoe",
@@ -344,7 +358,9 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "desc": "Orpheus — female voice"
+      "desc": "Orpheus — female voice",
+      "format": "pcm",
+      "paceSupport": "ignores"
     },
     {
       "id": "sesame-read-speech-a",

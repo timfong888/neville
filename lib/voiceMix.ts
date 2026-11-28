@@ -8,12 +8,13 @@ import { ENABLED_VOICES, type Voice } from "@/lib/voices";
  * `speed`; HeyGen voices (Nadine and the other nine) did not, so Sleep is no
  * slower in them apart from the pauses. Others are unmeasured: not in the default mix, labelled untested.
  */
-export function honoursPace(v: Pick<Voice, "model">): boolean {
+export function honoursPace(v: Pick<Voice, "model" | "paceSupport">): boolean {
   return paceSupport(v) === "honours";
 }
 
-/** Measured behaviour for pace: honours (Gemini), ignores (HeyGen, #19), or untested (everything else). */
-export function paceSupport(v: Pick<Voice, "model">): "honours" | "ignores" | "untested" {
+/** Measured behaviour for pace: honours (Gemini), ignores (HeyGen, #19; Orpheus, #289), or untested. */
+export function paceSupport(v: Pick<Voice, "model" | "paceSupport">): "honours" | "ignores" | "untested" {
+  if (v.paceSupport) return v.paceSupport;
   if (/^google\/gemini/.test(v.model)) return "honours";
   if (/^heygen\//.test(v.model)) return "ignores";
   return "untested";

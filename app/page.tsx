@@ -8,6 +8,7 @@ import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { useRouter as useNextRouter } from "next/navigation";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
+import { paceSupport } from "@/lib/voiceMix";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
@@ -854,6 +855,9 @@ export default function DemoPage() {
               </button>
             ))}
           </div>
+          {paceSupport(nextVoice) === "ignores" && (
+            <p className="small muted">{nextVoice.name} keeps its own pace; pauses are adjustable.</p>
+          )}
           <div className="row">
             <span className="small muted">Cadence</span>
             {CADENCE_OPTIONS.map((o) => (
