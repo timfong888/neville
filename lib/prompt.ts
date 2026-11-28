@@ -495,7 +495,7 @@ export function splitTitle(raw: string, name?: string): { script: string; title:
   if (!found) return { script, title: null };
   const t = found.replace(/["""'''`*_]/g, "").replace(EDGE_DECORATION, "").replace(/\s+/g, " ").trim();
   const words = t.split(" ").filter(Boolean);
-  const hasFirstPerson = /\bI\b/.test(t) || /\b(?:me|my|mine|myself)\b/i.test(t);
+  const hasFirstPerson = /\bI\b/i.test(t) || /\b(?:me|my|mine|myself)\b/i.test(t);
   const ok =
     words.length >= 2 &&
     words.length <= 5 &&
@@ -505,8 +505,8 @@ export function splitTitle(raw: string, name?: string): { script: string; title:
     !/^you\b/i.test(t) &&
     // Reject gerund opener ("Tapping into...", "Attracting effortless...")
     !/^\w+ing\b/i.test(t) &&
-    // Belief-style: first-person marker required for titles ≥ 3 words
-    (hasFirstPerson || words.length <= 2) &&
+    // First-person required for all belief-style titles (Tim, 2026-11-28)
+    hasFirstPerson &&
     // No email addresses
     !/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+/.test(t) &&
     (!name || !new RegExp(`\\b${name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
