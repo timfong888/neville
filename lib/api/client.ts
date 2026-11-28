@@ -46,6 +46,8 @@ export type AccountState = {
   user: { id: string; name: string; email: string; image: string | null } | null;
   missing?: string[];
   providers?: ("google" | "apple")[];
+  /** True when the signed-in user is on the relaxed minor-word filter allowlist. */
+  relaxed?: boolean;
 };
 
 /** What a `POST /api/manifest` or `/api/rerecord` returns: the recording and what it was made from. */
@@ -58,6 +60,8 @@ export type Recording = {
   source: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** The minor word that caused a withheld result, for guidance text. */
+  term?: string;
   /** Line start times as fractions of the clip, when the server sent sound ones. */
   starts?: number[];
   /** 2–5 word title from the model, via X-Title (base64 UTF-8). Absent for templates. */
@@ -66,6 +70,10 @@ export type Recording = {
   creditsBalance?: string | null;
   /** Which writing mode produced this script: "exact" or absent when enhance. */
   scriptMode?: "exact";
+  /** The attempt ID echoed back by the server. */
+  attemptId?: string;
+  /** Short build tag from X-Build, when the server sent it. */
+  build?: string;
 };
 
 /** Thrown for any non-2xx response. `lines` is the written script when only the voice failed. */
@@ -176,8 +184,11 @@ export function createApi(opts: ApiOptions) {
     const script = lines ?? readScript(res.headers.get("X-Script"));
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
     const title = readTitle(res.headers.get("X-Title"));
+    const term = res.headers.get("X-Script-Term") ?? undefined;
     const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
     const scriptModeHeader = res.headers.get("X-Script-Mode");
+    const attemptId = res.headers.get("X-Attempt-Id") ?? undefined;
+    const build = res.headers.get("X-Build") ?? undefined;
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -186,10 +197,18 @@ export function createApi(opts: ApiOptions) {
       source: res.headers.get("X-Script-Source") ?? "",
       ...(reason !== undefined ? { reason } : {}),
       ...(title !== undefined ? { title } : {}),
+      ...(term !== undefined ? { term } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
       ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
       ...(scriptModeHeader === "exact" ? { scriptMode: "exact" as const } : {}),
+      ...(attemptId ? { attemptId } : {}),
+      ...(build ? { build } : {}),
     };
+  }
+
+  function withAttemptId(init: RequestInit, attemptId?: string): RequestInit {
+    if (!attemptId) return init;
+    return { ...init, headers: { ...(init.headers as Record<string, string>), "X-Attempt-Id": attemptId } };
   }
 
   return {
@@ -207,16 +226,26 @@ export function createApi(opts: ApiOptions) {
     },
 
     /** A wish in; a script and its recording out. One paid request. */
-    async manifest(req: WishRequest): Promise<Recording> {
-      return recording(await call("/api/manifest", json(req)));
+    async manifest(req: WishRequest, opts: { attemptId?: string } = {}): Promise<Recording> {
+      return recording(await call("/api/manifest", withAttemptId(json(req), opts.attemptId)));
     },
     /** Records an existing script again, in one voice. */
-    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown } = {}): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId, ...opts })), lines);
+    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown; attemptId?: string } = {}): Promise<Recording> {
+      const { attemptId, ...rest } = opts;
+      return recording(await call("/api/rerecord", withAttemptId(json({ lines, voiceId, ...rest }), attemptId)), lines);
     },
 
     async credits(): Promise<CreditsResponse> {
       return (await (await call("/api/credits")).json()) as CreditsResponse;
+    },
+
+    /** The signed-in user's profile first name and plan. */
+    async profileName(): Promise<{ firstName: string; plan: string }> {
+      return (await (await call("/api/profile")).json()) as { firstName: string; plan: string };
+    },
+    /** Updates the signed-in user's first name. */
+    async saveProfileName(firstName: string): Promise<void> {
+      await call("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName }) });
     },
 
     async voices(): Promise<VoicesResponse> {
