@@ -99,9 +99,9 @@ describe("POST /api/rerecord", () => {
     expect(res.headers.get("Content-Type")).toMatch(/^audio\//);
     expect(paths()).toContain("/chat/completions");
     const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
-    // The default voice (orpheus-tara) is non-atomic: one request, lines joined with a space.
+    // The default voice (orpheus-tara) is non-atomic: one request, lines joined with a blank line.
     expect(calls.filter((c) => c.path.startsWith("/audio/speech"))).toHaveLength(1);
-    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. You are calm and steady.");
+    expect((speech?.body as { input: string }).input).toBe("Take a slow breath.\n\nYou are calm and steady.");
   });
 
   it("records a non-atomic PCM voice (HeyGen) line-by-line so pauses can be stitched", async () => {
@@ -168,8 +168,8 @@ describe("POST /api/rerecord", () => {
     const rows = await L.ledger().recent(10);
     expect(rows.map((r) => r.kind)).toEqual(["speech", "vet"]);
     expect(rows[1]).toMatchObject({ route: "rerecord", model: "google/gemini-2.5-flash-lite", estUsd: 0.00002 });
-    // The default voice (orpheus-tara) is non-atomic: chars = plain joined text.
-    expect(rows[0].chars).toBe("Take a slow breath. You are calm and steady.".length);
+    // The default voice (orpheus-tara) is non-atomic: chars = lines joined with blank-line separator.
+    expect(rows[0].chars).toBe("Take a slow breath.\n\nYou are calm and steady.".length);
   });
 
   it("records a rejected vet (it was paid for) but no speech", async () => {
