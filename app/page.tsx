@@ -28,7 +28,7 @@ import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
 import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
-import { editEnablesRerecord, linesFromText, rrErrorMessage } from "@/lib/scriptEdit";
+import { charOverage, editEnablesRerecord, linesFromText, rrButtonLabel, rrErrorMessage } from "@/lib/scriptEdit";
 
 type Stage = "form" | "making" | "player";
 
@@ -134,6 +134,10 @@ export default function DemoPage() {
   const [rrRunning, setRrRunning] = useState(false);
   const [rrError, setRrError] = useState("");
   const [prevMade, setPrevMade] = useState<Made | null>(null);
+  // Voice and pace for re-record. Initialized from the recording; changing here updates the label.
+  const [rrVoiceId, setRrVoiceId] = useState("");
+  const [rrVoiceName, setRrVoiceName] = useState("");
+  const [initRrVoiceId, setInitRrVoiceId] = useState("");
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState("");
@@ -500,7 +504,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? noteForReason(scriptReason) : next.source === "exact" ? "Your exact words." : "",
+            next.source === "template" ? noteForReason(scriptReason) : next.source === "exact" ? "Your words, spoken to you." : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"
@@ -513,6 +517,7 @@ export default function DemoPage() {
     setEditScript((next?.saveLines ?? next?.lines ?? written ?? []).join("\n"));
     setRrError("");
     setPrevMade(null);
+    if (next) { setRrVoiceId(next.voiceId); setRrVoiceName(next.voiceName); setInitRrVoiceId(next.voiceId); }
     setStage("player");
   };
 
@@ -527,7 +532,7 @@ export default function DemoPage() {
       const res = await fetch("/api/rerecord", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lines, voiceId: made.voiceId }),
+        body: JSON.stringify({ lines, voiceId: rrVoiceId || made.voiceId, speedStep, cadenceStep }),
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
@@ -556,6 +561,7 @@ export default function DemoPage() {
       }
       setPrevMade(made);
       setMade(newMade);
+      setRrVoiceId(newMade.voiceId); setRrVoiceName(newMade.voiceName); setInitRrVoiceId(newMade.voiceId);
       setEditScript(lines.join("\n"));
       if (savedId) {
         try {
@@ -930,7 +936,7 @@ export default function DemoPage() {
       >
         <div className="blob" />
         <div className="line" aria-live="polite">
-          {current ?? (idx >= lines.length ? CLOSING : "")}
+          {current ?? (idx >= lines.length ? CLOSING : (lines[0] ?? ""))}
         </div>
       </div>
 
@@ -945,7 +951,7 @@ export default function DemoPage() {
           </button>
         )}
         <button className="btn sm" onClick={newVariation}>
-          New variation
+          Write a new script
         </button>
         <button className="btn sm" onClick={share}>
           Share
@@ -1008,6 +1014,31 @@ export default function DemoPage() {
         </div>
       ) : (
         <>
+          {/* Voice and pace for re-record */}
+          <div className="controls" style={{ flexWrap: "wrap", gap: "6px" }}>
+            <span className="small muted">Re-record voice:</span>
+            {serverVoices.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className={`chip${rrVoiceId === v.id ? " active" : ""}`}
+                aria-pressed={rrVoiceId === v.id}
+                onClick={() => { setRrVoiceId(v.id); setRrVoiceName(v.name); }}
+              >{v.name}</button>
+            ))}
+          </div>
+          <div className="controls" style={{ flexWrap: "wrap", gap: "6px" }}>
+            <span className="small muted">Speed:</span>
+            {SPEED_OPTIONS.map((o) => (
+              <button key={o.id} type="button" className={`chip${speedStep === o.id ? " active" : ""}`} aria-pressed={speedStep === o.id} onClick={() => setSpeedStep(o.id as SpeedStep)}>{o.label}</button>
+            ))}
+            <span className="small muted">Cadence:</span>
+            {CADENCE_OPTIONS.map((o) => (
+              <button key={o.id} type="button" className={`chip${cadenceStep === o.id ? " active" : ""}`} aria-pressed={cadenceStep === o.id} onClick={() => setCadenceStep(o.id as CadenceStep)}>{o.label}</button>
+            ))}
+          </div>
+          {/* Editable script */}
+          <p className="small muted">✏ Edit and re-record — edits are recorded exactly as written.</p>
           <textarea
             className="script-edit"
             aria-label="Script"
@@ -1015,10 +1046,13 @@ export default function DemoPage() {
             disabled={playing}
             onChange={(e) => { setEditScript(e.target.value); setRrError(""); }}
           />
-          {editEnablesRerecord(lines, editScript) && (
+          {charOverage(editScript) > 0 && (
+            <p className="small muted" role="alert">{charOverage(editScript)} character{charOverage(editScript) !== 1 ? "s" : ""} to cut.</p>
+          )}
+          {(editEnablesRerecord(lines, editScript) || rrVoiceId !== initRrVoiceId) && (
             <div className="controls">
-              <button className="btn sm primary" onClick={() => void rerecordEdit()} disabled={playing}>
-                Re-record
+              <button className="btn sm primary" onClick={() => void rerecordEdit()} disabled={playing || charOverage(editScript) > 0}>
+                {rrButtonLabel(editEnablesRerecord(lines, editScript), rrVoiceId !== initRrVoiceId, rrVoiceName, false, "", false, "")}
               </button>
               {prevMade && (
                 <button className="btn sm ghost" onClick={undoRerecord}>
@@ -1027,7 +1061,7 @@ export default function DemoPage() {
               )}
             </div>
           )}
-          {prevMade && !editEnablesRerecord(lines, editScript) && (
+          {prevMade && !editEnablesRerecord(lines, editScript) && rrVoiceId === initRrVoiceId && (
             <div className="controls">
               <button className="btn sm ghost" onClick={undoRerecord}>
                 Undo re-record

@@ -188,9 +188,9 @@ describe("exact mode (#229)", () => {
     const req2 = wishRequest({ want: "I am calm.", name: "", scriptMode: "enhance" });
     expect(req2).not.toHaveProperty("scriptMode");
   });
-  it("shows 'Your exact words.' as the note when source is exact", async () => {
+  it("shows 'Your words, spoken to you.' as the note when source is exact", async () => {
     const m = await makeManifestation(api(rec({ source: "exact", scriptMode: "exact" })), wish, true);
-    expect(m.note).toBe("Your exact words.");
+    expect(m.note).toBe("Your words, spoken to you.");
     expect(m.scriptMode).toBe("exact");
   });
   it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {

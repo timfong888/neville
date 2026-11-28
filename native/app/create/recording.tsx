@@ -3,12 +3,12 @@ import { AppState, Platform, Text, TextInput, View } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { canCreate, isSignedIn } from "@/lib/createGate";
 import { LIBRARY_TAB_ROUTE, playlistLabel } from "@/lib/create";
-import { editEnablesRerecord, linesFromText, rrErrorMessage } from "@/lib/scriptEdit";
+import { charOverage, editEnablesRerecord, linesFromText, rrButtonLabel, rrErrorMessage } from "@/lib/scriptEdit";
 import { useAccount } from "../../src/accountStore";
 import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
 import { pauseWatch } from "../../src/create/pauseWatch";
-import { canSpeak, leave, newVariation, save, updateMade, useCreate } from "../../src/create/session";
+import { canSpeak, leave, newVariation, pickCadence, pickSpeed, pickVoice, save, updateMade, useCreate } from "../../src/create/session";
 import { shortRef, copyLine } from "@/lib/attemptId";
 import { Share } from "react-native";
 import { Button, Gate, s } from "../../src/create/ui";
@@ -16,7 +16,9 @@ import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
+import { VoiceSection } from "../../src/ui/VoiceSection";
 import { WaitingPhrases } from "../../src/create/WaitingPhrases";
+import { resolveSpeed, resolveCadence } from "@/lib/voice/options";
 import { api } from "../../src/api";
 import { ApiError } from "@/lib/api/client";
 import { colors, space } from "../../src/theme";
@@ -46,6 +48,10 @@ export default function Recording() {
   const [rrError, setRrError] = useState("");
   // One-step undo: the Made snapshot before the last re-record (D120).
   const [prevMade, setPrevMade] = useState<typeof made>(null);
+  // Capture initial voice/pace to detect what changed for the Re-record button label.
+  const [initVoiceId] = useState(() => made?.recording?.voiceId ?? c.voiceId);
+  const [initSpeedStep] = useState(() => c.speedStep);
+  const [initCadenceStep] = useState(() => c.cadenceStep);
 
   // Sync editScript when made changes externally (e.g. after a successful re-record),
   // but only when the edit matches the previous lines (user has not drifted further).
@@ -60,6 +66,15 @@ export default function Recording() {
   }, [made]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scriptDiffers = made ? editEnablesRerecord(made.lines, editScript) : false;
+  const over = charOverage(editScript);
+  const voiceChanged = c.voiceId !== initVoiceId;
+  const speedChanged = c.speedStep !== initSpeedStep;
+  const cadenceChanged = c.cadenceStep !== initCadenceStep;
+  const rrBtnLabel = rrButtonLabel(
+    scriptDiffers, voiceChanged, c.voiceName,
+    speedChanged, resolveSpeed(c.speedStep).label,
+    cadenceChanged, resolveCadence(c.cadenceStep).label,
+  );
 
   const pauseNote = useRef(false);
   const clearPauseNote = () => {
@@ -157,8 +172,7 @@ export default function Recording() {
     setRrError("");
     const snapshot = made; // capture before updateMade changes c.made
     try {
-      const voiceId = made.recording?.voiceId ?? c.voiceId;
-      const r = await api.rerecord(lines, voiceId);
+      const r = await api.rerecord(lines, c.voiceId, { speedStep: c.speedStep, cadenceStep: c.cadenceStep });
       await updateMade(r.audio, r.mime, r.voiceId, lines);
       setPrevMade(snapshot);
       setToast("New recording ready. Tap Play to hear it.");
@@ -203,36 +217,52 @@ export default function Recording() {
           <Button small label="Copy" onPress={() => void Share.share({ message: copyLine(made.attemptId!, made.build ?? "") })} />
         </View>
       ) : null}
-      <View style={[s.card, s.stage]} accessibilityLiveRegion="polite">
-        <Text style={s.spoken} adjustsFontSizeToFit numberOfLines={3}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
-      </View>
+      {(playing || paused || done) ? (
+        <View style={[s.card, s.stage]} accessibilityLiveRegion="polite">
+          <Text style={s.spoken}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
+        </View>
+      ) : null}
       <View style={s.row}>
         {paused ? <Button label="▶ Resume" onPress={() => (setPaused(false), clearPauseNote(), stopper.current?.resume())} /> : null}
         {playing ? <Button label="■ Stop" onPress={stop} /> : <Button label={done ? "▶ Play again" : "▶ Play"} onPress={start} />}
         <Button small label={c.savedId ? "✓ Saved · Open" : saving ? "Saving…" : "Save"} onPress={keep} />
-        <Button small label="New variation" onPress={again} />
         <Button small label={playlistLabel(c.savedId ?? "")} disabled={saving} onPress={goToPlaylist} />
       </View>
       {made.recording ? <PlayOptions loop={{ value: loop, onChange: setLoop }} bell={{ value: bell, onChange: (v) => void setBell(v), disabled: !loop }} disabled={playing} /> : null}
       {toast ? <Text accessibilityRole="alert" style={s.muted}>{toast}</Text> : null}
-      {rrError ? <Text accessibilityRole="alert" style={[s.muted, { color: colors.warn }]}>{rrError}</Text> : null}
       {!made.recording && !canSpeak() ? <Text style={s.muted}>This device has no built-in speech here, so the lines are shown in time instead.</Text> : null}
 
-      {/* Editable script */}
+      {/* Voice and pace — changes are reflected in the Re-record button label */}
+      <VoiceSection
+        voiceId={c.voiceId}
+        voiceName={c.voiceName}
+        speedStep={c.speedStep}
+        cadenceStep={c.cadenceStep}
+        onPickVoice={(id) => void pickVoice(id)}
+        onPickSpeed={(id) => void pickSpeed(id)}
+        onPickCadence={(id) => void pickCadence(id)}
+      />
+
+      {/* Editable script — label "Edit and re-record" */}
+      <Text style={[s.muted, { fontSize: 12 }]}>✏ Edit and re-record — edits are recorded exactly as written.</Text>
       <TextInput
         accessibilityLabel="Script"
         value={editScript}
         onChangeText={(t) => { setEditScript(t); setRrError(""); }}
         multiline
-        style={[s.card, { color: colors.text, minHeight: 120, textAlignVertical: "top", lineHeight: 22, padding: space.md }]}
+        style={[s.card, { color: colors.text, minHeight: 120, textAlignVertical: "top", lineHeight: 22, padding: space.md, ...(scriptDiffers ? { borderColor: colors.accent } : {}) }]}
         editable={!playing}
       />
-      {scriptDiffers && (
-        <Button label="Re-record" onPress={() => void rerecord()} disabled={playing} />
-      )}
-      {prevMade && !scriptDiffers && (
+      {scriptDiffers && over > 0 ? (
+        <Text style={[s.muted, { color: colors.warn, fontSize: 12 }]}>{over} character{over !== 1 ? "s" : ""} to cut.</Text>
+      ) : null}
+      {(scriptDiffers || voiceChanged || speedChanged || cadenceChanged) ? (
+        <Button label={rrBtnLabel} onPress={() => void rerecord()} disabled={playing || over > 0} />
+      ) : null}
+      {prevMade && !scriptDiffers && !voiceChanged && !speedChanged && !cadenceChanged ? (
         <Button small label="Undo re-record" onPress={() => void undoNativeRerecord()} />
-      )}
+      ) : null}
+      {rrError ? <Text accessibilityRole="alert" style={[s.muted, { color: colors.warn }]}>{rrError}</Text> : null}
 
       <Text style={s.muted}>
         {made.recording
@@ -241,16 +271,13 @@ export default function Recording() {
             ? "Read by your device's own voice. Nothing was recorded."
             : "Nothing was recorded."}
       </Text>
+
+      {/* Write a new script — set apart from the re-record controls above */}
       <View style={s.row}>
-        <Text style={s.muted}>
-          Next variation: <Text style={s.p}>{c.voiceName}</Text>
-        </Text>
-        <Button small label="Change voice" onPress={() => (stop(), router.push("/create/voice"))} />
-      </View>
-      {c.gate || done || !canCreate(signedIn, c.used) ? <Gate signedIn={signedIn} /> : null}
-      <View style={s.row}>
+        <Button small label="Write a new script" onPress={again} />
         <Button small label="← Create another" onPress={back} />
       </View>
+      {c.gate || done || !canCreate(signedIn, c.used) ? <Gate signedIn={signedIn} /> : null}
     </Screen>
   );
 }

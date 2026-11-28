@@ -159,7 +159,7 @@ async function generate(variant: number): Promise<void> {
       const made: Made = {
         title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(wish.want))),
         lines: r.lines,
-        note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your exact words." : "",
+        note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your words, spoken to you." : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
         ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
         attemptId: r.attemptId ?? attemptId,
