@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIANT_COUNT } from "@/lib/script";
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
+import { newAttemptId, shortRef, copyLine } from "@/lib/attemptId";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
 import { useRouter as useNextRouter } from "next/navigation";
@@ -117,6 +118,8 @@ export default function DemoPage() {
   // The server's own script when only the voice failed: read by the device voice.
   const [fallback, setFallback] = useState<string[] | null>(null);
   const [note, setNote] = useState("");
+  const attemptId = useRef("");
+  const attemptBuild = useRef("");
   const audio = useRef<HTMLAudioElement | null>(null);
   const [used, setUsed] = useState(0);
   const [gate, setGate] = useState(false);
@@ -390,6 +393,9 @@ export default function DemoPage() {
   const generate = async (v: number) => {
     stop();
     const mine = ++run.current;
+    const aid = newAttemptId();
+    attemptId.current = aid;
+    attemptBuild.current = "";
     setStage("making");
     setNote("");
     setIdx(-1);
@@ -407,7 +413,7 @@ export default function DemoPage() {
     try {
       const res = await fetch("/api/manifest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Attempt-Id": aid },
         body: JSON.stringify({
           want: want.trim(),
           name: name.trim(),
@@ -426,6 +432,7 @@ export default function DemoPage() {
         const made = JSON.parse(new TextDecoder().decode(Uint8Array.from(packed, (c) => c.charCodeAt(0))));
         if (!Array.isArray(made) || !made.every((l) => typeof l === "string")) throw new Error("bad script");
         const audio = await res.blob();
+        attemptBuild.current = res.headers.get("X-Build") ?? "";
         const scriptSource = res.headers.get("X-Script-Source") ?? "";
         scriptReason = res.headers.get("X-Script-Reason") ?? undefined;
         const titleB64 = res.headers.get("X-Title");
@@ -891,6 +898,17 @@ export default function DemoPage() {
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>
       {note && <p className="small muted">{note}</p>}
+      {!made && attemptId.current ? (
+        <p className="small muted">
+          Reference {shortRef(attemptId.current)}{" "}
+          <button
+            className="chip"
+            onClick={() => void navigator.clipboard.writeText(copyLine(attemptId.current, attemptBuild.current)).catch(() => undefined)}
+          >
+            Copy
+          </button>
+        </p>
+      ) : null}
 
       <div
         className={`visual${playing ? " playing" : ""}`}

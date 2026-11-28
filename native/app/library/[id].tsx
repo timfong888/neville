@@ -10,6 +10,7 @@ import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
 import { ImageGallery } from "../../src/image/Gallery";
+import { useAccountView } from "../../src/accountStore";
 import { PAYWALL_ENABLED } from "../../src/config";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
@@ -26,6 +27,7 @@ const IMAGES_ENABLED = process.env.EXPO_PUBLIC_IMAGES === "1";
 export default function LibraryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { account } = useAccountView();
   const toLibrary = () => router.dismissTo("/library");
   const [m, setM] = useState<Manifestation | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
@@ -254,7 +256,7 @@ export default function LibraryDetail() {
               )
             ) : null}
 
-            {IMAGES_ENABLED ? <ImageGallery wish={m.want} /> : null}
+            {IMAGES_ENABLED ? <ImageGallery wish={m.want} relaxed={account?.relaxed ?? false} /> : null}
 
             <View style={s.script}>
               {m.lines.map((l, i) => (

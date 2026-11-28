@@ -93,6 +93,7 @@ describe("failureStore", () => {
     expect(mem[today]?.["voice_failed:http_status"]?.count).toBe(2);
   });
 
+
   it("calls waitUntil to keep the Redis write alive in serverless context", async () => {
     mockWaitUntil.mockClear();
     const { recordFailure, resetFailureStore } = await fresh();

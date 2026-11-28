@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
+import { EXAMPLES, MAX_WANT } from "@/lib/create";
 import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
 import { create, clearPaywallError, edit, load, pickCadence, pickSpeed, pickVoice, reset, setScriptMode, useCreate } from "../../src/create/session";
@@ -103,19 +103,6 @@ export default function Wish() {
               <Button key={e} small label={e} onPress={() => edit({ want: e })} />
             ))}
           </View>
-          <Text nativeID="name" style={s.muted}>Your first name (optional)</Text>
-          <TextInput
-            accessibilityLabelledBy="name"
-            aria-labelledby="name"
-            style={s.input}
-            value={c.name}
-            maxLength={MAX_NAME}
-            autoComplete="given-name"
-            returnKeyType="done"
-            placeholder="Tim"
-            placeholderTextColor={colors.muted}
-            onChangeText={(name) => edit({ name })}
-          />
           <View style={s.row}>
             <Text style={s.muted}>Script</Text>
             <Button small label="Enhance with AI" disabled={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />

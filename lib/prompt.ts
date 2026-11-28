@@ -171,7 +171,7 @@ const EXPLICIT = /\b(?:nude|naked|nudity|topless|breasts|nipples?|genitals?|peni
 const SENSUAL = /\b(?:sensual\w*|seduc\w+|cleavage|thighs?|caress\w*|make[s]? love|turned on)\b/i;
 // Romantic or intimate intent only. Mentioning a wife, a girl or "attract more clients" is not a request for sensual writing.
 const ASKS_FOR_INTIMACY =
-  /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive)\b/i;
+  /\b(?:romanc\w*|romantic|intima\w*|girlfriend|boyfriend|soulmate|dating|kiss\w*|sensual\w*|sex\w*|passionate (?:night|evening|kiss|love)|crush on|flirt\w*|seduc\w+|attracted to me|find me attractive|sleep(?:ing)? with|slept with|mak(?:e|es|ing) love|hook(?:ing)? up with|hooked up with)\b/i;
 
 // Fail closed (#170): the sensual exception needs romantic words and a positive
 // adult cue (a spouse, a partner, an adult age), and no sign of a minor. A word
@@ -187,6 +187,38 @@ const MINOR = new RegExp(
     "|teen\\w*|minors?|underage|child\\w*|kids?|boys?|girls?|schoolgirl|schoolboy|students?|pupils?|grade" +
     "|(?:high|middle|elementary|primary|grammar|prep)[- ]?school\\w*|class(?:mate|room)s?|freshman|sophomore|junior" +
     "|niece|nephew|cousin|little|young\\w*(?!\\W+(?:\\w+\\W+){0,2}(?:women|woman|men|man|adults?)(?!\\w))|baby|babies|daughter|son|sons|sister|brother" +
+    ")(?!\\w)",
+  "i",
+);
+
+/**
+ * Family and relative role words. When paired with an intimate or explicit word,
+ * this triggers a refusal for every account tier (issue 219, block 4).
+ * Non-sexual family wishes are explicitly allowed: "a hug from my sister" passes;
+ * "kiss my sister" does not.
+ */
+export const FAMILY_ROLES = new RegExp(
+  "(?<!\\w)(?:" +
+    "(?:step)?(?:mother|father|mom|dad|mommy|daddy|mummy|mum|sister|brother|son|daughter)" +
+    "|aunt|uncle|niece|nephew|cousin" +
+    "|grand(?:mother|father|ma|pa|daughter|son)" +
+    ")(?!\\w)",
+  "i",
+);
+
+/**
+ * Narrower minor-word list for relaxed accounts: keeps unambiguous child-safety terms,
+ * drops family/relative words that commonly appear in adult wishes.
+ * Dropped from MINOR: little, young*, baby/babies, son/sons, daughter, sister, brother,
+ * cousin, niece, nephew, junior, grade.
+ */
+export const MINOR_CLEAR = new RegExp(
+  "(?<!\\w)(?:" +
+    "(?:[1-9]|1[0-7])[- ]?(?:years?[- ]old|yrs?\\.?|y\\.? ?o\\.?|y/o|years? of age)" +
+    "|(?:" + AGE_WORDS + ")[- ]?(?:years?[- ]old|years?|yrs?\\.?|y\\.? ?o\\.?)" +
+    "|aged? (?:[1-9]|1[0-7])|aged? (?:" + AGE_WORDS + ")" +
+    "|teen\\w*|minors?|underage|child\\w*|kids?|boys?|girls?|schoolgirl|schoolboy|students?|pupils?" +
+    "|(?:high|middle|elementary|primary|grammar|prep)[- ]?school\\w*|class(?:mate|room)s?|freshman|sophomore" +
     ")(?!\\w)",
   "i",
 );
@@ -213,6 +245,37 @@ export function wishSexualisesMinorCategory(wish: string): "minor_word+intimacy_
   if (ASKS_FOR_INTIMACY.test(wish)) return "minor_word+intimacy_word";
   if (EXPLICIT.test(wish)) return "minor_word+explicit_word";
   return null;
+}
+
+/**
+ * True when a wish pairs a family/relative role with an intimate or explicit word.
+ * Family roles in non-sexual context are allowed; family + sex is refused for every account
+ * (issue 219, block 4). "a hug from my sister" passes; "kiss my sister" does not.
+ */
+export function wishSexualisesFamilyRole(wish: string): boolean {
+  return FAMILY_ROLES.test(wish) && (ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish));
+}
+
+/**
+ * Like wishSexualisesMinor but uses MINOR_CLEAR for the minor-word check.
+ * Additionally refuses any family/relative role + intimate/explicit word (issue 219 block 4).
+ * Used for relaxed-filter accounts.
+ */
+export function wishSexualisesMinorRelaxed(wish: string): boolean {
+  const hasIntimacy = ASKS_FOR_INTIMACY.test(wish) || EXPLICIT.test(wish);
+  return (MINOR_CLEAR.test(wish) || FAMILY_ROLES.test(wish)) && hasIntimacy;
+}
+
+/**
+ * The first minor-word match in the wish, for use in guidance text.
+ * When relaxed, checks MINOR_CLEAR first, then FAMILY_ROLES (for family-role withholds).
+ * When strict, uses the full MINOR list.
+ * Returns null when no minor word matches.
+ */
+export function withheldMinorTerm(wish: string, relaxed = false): string | null {
+  const main = (relaxed ? MINOR_CLEAR : MINOR).exec(wish)?.[0];
+  if (main) return main;
+  return FAMILY_ROLES.exec(wish)?.[0] ?? null;
 }
 
 /** True when the wish asks for romance or intimacy, with an adult cue and no sign of anyone under 18. */

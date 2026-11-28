@@ -50,8 +50,13 @@ describe("the Create flow (#120)", () => {
 
   it("shows a withheld-specific note when reason is withheld", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), wish, true);
-    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
     expect(m.title).toBe("A moment of calm");
+  });
+
+  it("includes the matched term in the withheld note when server sends one", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld", term: "teen" })), wish, true);
+    expect(m.note).toBe(`The word "teen" held this wish back. Try describing adults only. This is a general script.`);
   });
 
   it("shows the generic template note for all other failure reasons", async () => {
@@ -190,7 +195,7 @@ describe("exact mode (#229)", () => {
   });
   it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
-    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
     expect(m.scriptMode).toBeUndefined();
   });
 });
