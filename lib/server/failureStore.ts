@@ -9,6 +9,8 @@ const MAX_IDS = 5;
 const TTL_SEC = 8 * 24 * 3600;
 
 const mem = new Map<string, FailureEntry>();
+// Idempotency: each requestId is counted exactly once per reason per day.
+const seen = new Set<string>();
 
 export function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -16,6 +18,11 @@ export function todayUTC(): string {
 
 export function recordFailure(reason: string, requestId?: string): void {
   const k = `${todayUTC()}:${reason}`;
+  if (requestId) {
+    const dedup = `${k}:${requestId}`;
+    if (seen.has(dedup)) return;
+    seen.add(dedup);
+  }
   const e = mem.get(k) ?? { count: 0, sampleIds: [] };
   e.count++;
   if (requestId && e.sampleIds.length < MAX_IDS) e.sampleIds.push(requestId);
@@ -97,4 +104,5 @@ export function failureSummaryMemory(): Record<string, DaySummary> {
 /** For tests. */
 export function resetFailureStore(): void {
   mem.clear();
+  seen.clear();
 }

@@ -68,6 +68,32 @@ describe("failureStore", () => {
     expect(mem[today]?.["manifest_timeout:timeout"]?.count).toBe(1);
   });
 
+  // Idempotency principle: the same requestId for the same reason counts as one occurrence,
+  // even if recordFailure is called twice (e.g. serverless retry on the same instance).
+  // This test fails without the seen-set dedup in recordFailure.
+  it("does not double-count the same requestId (idempotency)", async () => {
+    const { recordFailure, resetFailureStore, failureSummaryMemory } = await fresh();
+    resetFailureStore();
+    recordFailure("voice_failed:http_status", "req_idem");
+    recordFailure("voice_failed:http_status", "req_idem"); // same id — must not increment again
+    const today = new Date().toISOString().slice(0, 10);
+    const mem = failureSummaryMemory();
+    expect(mem[today]?.["voice_failed:http_status"]?.count).toBe(1);
+    expect(mem[today]?.["voice_failed:http_status"]?.sampleIds).toHaveLength(1);
+  });
+
+  it("counts distinct requestIds independently (no over-dedup)", async () => {
+    const { recordFailure, resetFailureStore, failureSummaryMemory } = await fresh();
+    resetFailureStore();
+    recordFailure("voice_failed:http_status", "req_a");
+    recordFailure("voice_failed:http_status", "req_b");
+    recordFailure("voice_failed:http_status", "req_a"); // duplicate — skip
+    const today = new Date().toISOString().slice(0, 10);
+    const mem = failureSummaryMemory();
+    expect(mem[today]?.["voice_failed:http_status"]?.count).toBe(2);
+  });
+
+
   it("calls waitUntil to keep the Redis write alive in serverless context", async () => {
     mockWaitUntil.mockClear();
     const { recordFailure, resetFailureStore } = await fresh();

@@ -138,7 +138,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       const category = wishSexualisesMinorCategory(want);
       script = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN, ...(category ? {} : {}) };
     } else {
-      const { lines, refrain } = exactLines(want);
+      const { lines, refrain } = exactLines(want, name);
       script = { lines, source: "exact", refrain };
     }
   } else {

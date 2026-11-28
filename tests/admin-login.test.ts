@@ -35,7 +35,7 @@ describe("admin login", () => {
     expect(c).toMatch(/nv_admin=\d+\.\d+\.[0-9a-f]{64}/);
     expect(c).toMatch(/HttpOnly/i);
     expect(c).toMatch(/SameSite=strict/i);
-    // Path=/ so the cookie is sent to both /admin/* and /api/admin/* routes
+    // Path=/ covers both /admin/* and /api/admin/* (failure summary + triage endpoints)
     expect(c).toMatch(/Path=\/(?!admin)/);
     expect(c).toMatch(/Secure/i);
     expect(c).not.toContain(process.env.ADMIN_TOKEN!);
