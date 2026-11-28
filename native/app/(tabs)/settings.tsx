@@ -6,7 +6,10 @@ import { DEFAULT_VOICE_ID, ENABLED_VOICES, TIER_LABEL, resolveVoice, voiceBlurb 
 import { paceSupport } from "@/lib/voiceMix";
 import { useSample } from "../../src/create/useSample";
 import { settings, useSettings, type Settings } from "../../src/seams/settings";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { OptionRow, SmallButton } from "../../src/ui/OptionRow";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
 
@@ -17,6 +20,7 @@ export default function SettingsScreen() {
   const { settings: chosen } = useSettings();
   const [note, setNote] = useState("");
   const { playing, error, toggle, stop, clearError } = useSample();
+  const np = useNowPlaying();
   // Tabs stay mounted, so stop when the screen loses focus as well as when it unmounts.
   useFocusEffect(useCallback(() => stop, [stop]));
 
@@ -27,7 +31,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen title="Settings">
+    <Screen title="Settings" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Text accessibilityRole="header" style={type.h2}>Delivery</Text>
       <View accessibilityRole="radiogroup" accessibilityLabel="Pace" style={s.list}>
         <Text style={type.muted}>Pace</Text>

@@ -128,7 +128,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (state.timedOut) {
     // The deadline already passed while the credit was being taken: give it back and stop.
     await charged.refund();
-    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", elapsedMs: Date.now() - started });
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: voice.model, voice: voice.id, elapsedMs: Date.now() - started });
     return timeoutResponse(true);
   }
 
@@ -206,11 +206,11 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       const category = wishSexualisesMinorCategory(want);
       script = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN, ...(category ? {} : {}) };
     } else {
-      const { lines, refrain } = exactLines(want);
+      const { lines, refrain } = exactLines(want, name);
       script = { lines, source: "exact", refrain };
     }
   } else {
-    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote });
+    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, voiceId: voice.id, voiceModel: voice.model });
   }
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
@@ -234,13 +234,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   // The deadline passed while the script was being written: do not start the voice, the credit is already refunded.
   if (state.timedOut) {
-    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? null, elapsedMs: Date.now() - started });
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started });
     return timeoutResponse(true);
   }
   // With the paywall on, the voice call also ends before the paywall's deadline (50 s): the route's own 52 s budget alone could pass it.
   const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
   if (voiceMs === null) {
-    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? null, elapsedMs: Date.now() - started });
+    alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: script.model ?? voice.model, voice: voice.id, elapsedMs: Date.now() - started });
     return timeoutAnswer(state);
   }
   const speech = await synthesize({
@@ -267,7 +267,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "manifest", model: voice.model, status: speech.status, elapsedMs: Date.now() - started });
+    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech.status, elapsedMs: Date.now() - started });
     await charged.refund();
     return NextResponse.json(
       {

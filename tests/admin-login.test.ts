@@ -27,7 +27,7 @@ const login = (token: string, ip = "10.1.1.1", origin?: string) =>
   );
 
 describe("admin login", () => {
-  it("sets an httpOnly, strict, path-scoped cookie holding a hash, never the token", async () => {
+  it("sets an httpOnly, strict, root-scoped cookie holding a hash, never the token", async () => {
     const res = await login(process.env.ADMIN_TOKEN!);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("https://neville.test/admin/usage");
@@ -35,7 +35,8 @@ describe("admin login", () => {
     expect(c).toMatch(/nv_admin=\d+\.\d+\.[0-9a-f]{64}/);
     expect(c).toMatch(/HttpOnly/i);
     expect(c).toMatch(/SameSite=strict/i);
-    expect(c).toMatch(/Path=\/admin/);
+    // Path=/ covers both /admin/* and /api/admin/* (failure summary + triage endpoints)
+    expect(c).toMatch(/Path=\/(?!admin)/);
     expect(c).toMatch(/Secure/i);
     expect(c).not.toContain(process.env.ADMIN_TOKEN!);
     const value = /nv_admin=(\d+\.\d+\.[0-9a-f]{64})/.exec(c)![1];

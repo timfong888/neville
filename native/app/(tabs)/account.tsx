@@ -6,7 +6,10 @@ import { api } from "../../src/api";
 import { clearUser, refreshAccount, useAccount } from "../../src/accountStore";
 import { appleCodeForDeletion, authClient, signInWithApple, signInWithAppleOnWeb } from "../../src/auth";
 import { deviceData } from "../../src/deviceData";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { colors, radius, space, type } from "../../src/theme";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 
 const WEB = Platform.OS === "web";
@@ -14,6 +17,7 @@ const WEB = Platform.OS === "web";
 // Account (#121): Sign in with Apple, who is signed in, sign out, delete the account.
 export default function Account() {
   const account = useAccount();
+  const np = useNowPlaying();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState(false);
@@ -77,7 +81,7 @@ export default function Account() {
   const canSignIn = !!account?.enabled && !!account.providers?.includes("apple") && (WEB || sheet);
 
   return (
-    <Screen title={user ? "Your account" : "Account"}>
+    <Screen title={user ? "Your account" : "Account"} footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
 
       {!account ? null : user ? (
         <View style={s.card}>
