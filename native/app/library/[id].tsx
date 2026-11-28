@@ -105,8 +105,8 @@ export default function LibraryDetail() {
     if (!newLines.length) return setMsg("The script needs at least one line.");
     const next: Manifestation = { ...m, title: cleanTitle(title) || m.title, lines: newLines, updatedAt: Date.now() };
     try {
-      await library.save(next, scriptChanged ? null : undefined);
-      setM({ ...next, hasAudio: scriptChanged ? false : m.hasAudio });
+      await library.save(next, undefined);
+      setM(next);
       setEditing(false);
       if (scriptChanged) {
         editSaved(id);
@@ -180,21 +180,19 @@ export default function LibraryDetail() {
               placeholderTextColor={colors.muted}
             />
             {losesAudio ? (
-              <Text style={s.warn}>Changing the words removes the recording. Tap Record after saving to hear your edit.</Text>
+              <Text style={s.warn}>The existing recording plays until you re-record with the new script.</Text>
             ) : null}
             <View style={s.acts}>
-              <Button kind="primary" label={losesAudio ? "Save and remove recording" : "Save"} onPress={save} />
+              <Button kind="primary" label="Save" onPress={save} />
               <Button label="Cancel" onPress={() => (setEditing(false), setMsg(""))} />
             </View>
           </>
         ) : (
           <>
             <Text style={type.muted}>
-              {m.hasAudio && rrState.status !== "saved_not_recorded"
+              {m.hasAudio || rrState.status === "done"
                 ? `Recorded in the voice of ${m.voiceName}.`
-                : rrState.status === "done"
-                  ? `Recorded in the voice of ${m.voiceName}.`
-                  : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`}{" "}
+                : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`}{" "}
               Saved {new Date(m.createdAt).toLocaleDateString()}.
             </Text>
 

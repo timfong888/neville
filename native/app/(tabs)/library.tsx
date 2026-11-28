@@ -95,7 +95,7 @@ export default function LibraryScreen() {
   const scrollRef = useRef<ScrollViewInstance>(null);
   const rowRefs = useRef(new Map<string, PressableInstance | null>());
   const isDragging = useRef(false);
-  const playingId = playingItemId(np, items);
+  const playingId = playingItemId(np, items, (i) => playAll.idAtClipIndex(i));
   const prevPlayingId = useRef<string | null>(null);
   useEffect(() => {
     if (playingId === prevPlayingId.current) return;
