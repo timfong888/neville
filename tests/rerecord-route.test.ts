@@ -253,6 +253,7 @@ describe("POST /api/rerecord", () => {
     expect(res.status).toBe(422);
   });
 
+
   // --- regression: error messages must carry suggestions, not dead-ends (#253) ---
 
   it("not_recordable carries a plain-words error and a hint with suggestions — fails on main without this fix", async () => {

@@ -8,6 +8,7 @@ import { neutralScript } from "@/lib/script";
 import { captureEvent } from "@/lib/server/telemetry";
 import { adultGate } from "@/lib/adult/gate";
 import { isAdultTierUser } from "@/lib/adult/tier";
+import { buildAdultVoiceChain } from "@/lib/adult/tts";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { newAttemptId } from "@/lib/attemptId";
 import { estimateSpeech, record } from "@/lib/server/ledger";
@@ -174,18 +175,42 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: adultScript.model ?? null, elapsedMs: Date.now() - started });
       return timeoutResponse(true);
     }
-    const voiceMs = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
-    if (voiceMs === null) {
-      alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: adultScript.model ?? null, elapsedMs: Date.now() - started });
-      return timeoutAnswer(state);
+    // Adult-tier TTS: try up to MAX_ADULT_TTS voices in fallback order.
+    // The requested voice is first; config fallbacks follow if it refuses or errors.
+    const MAX_ADULT_TTS = 3;
+    const adultAttemptId = crypto.randomUUID().slice(0, 8);
+    const chain = buildAdultVoiceChain(
+      { id: voice.id, model: voice.model, voice: voice.voice, atomic: voice.atomic },
+      LIMITS.adultTtsFallback,
+      MAX_ADULT_TTS,
+    );
+
+    let speech: Awaited<ReturnType<typeof synthesize>> | undefined;
+    let usedId = voice.id;
+
+    for (let i = 0; i < chain.length; i++) {
+      const c = chain[i];
+      const ms = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
+      if (ms === null) {
+        alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: c.model, elapsedMs: Date.now() - started });
+        return timeoutAnswer(state);
+      }
+      const s = await synthesize({ key, model: c.model, voice: c.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(c.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: ms, atomic: c.atomic });
+      console.info("[adult_tts_attempt]", JSON.stringify({ adultAttemptId, attempt: i + 1, model: c.model, ok: s.ok, ...(!s.ok ? { status: s.status } : {}) }));
+      if (s.ok) {
+        await record({ route: "manifest", kind: "speech", model: c.model, voiceId: c.id, chars: s.sentChars, estUsd: await estimateSpeech(c.model, s.sentChars) });
+      } else {
+        await record({ route: "manifest", kind: "speech", model: c.model, voiceId: c.id, chars: s.sentChars ?? spoken, estUsd: null, ok: false });
+      }
+      speech = s;
+      usedId = c.id;
+      if (s.ok) break;
     }
-    const speech = await synthesize({ key, model: voice.model, voice: voice.voice, text, lines: recorded, tail: repeat ? 1 : 0, pauseMs: pauseFor(pace, tone), speed: speedFor(pace, tone), instructions: TAKES_STYLE.test(voice.model) ? styleInstruction(pace, tone) : undefined, compact: true, timeoutMs: voiceMs, atomic: voice.atomic === true });
-    if (!speech.ok) {
-      await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
+
+    if (!speech?.ok) {
       await charged.refund();
       return NextResponse.json({ code: "voice_failed", error: "The voice could not be recorded just now.", ...(adultScript.source === "model" ? { lines: adultScript.lines } : {}) }, { status: 502 });
     }
-    await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars, estUsd: await estimateSpeech(voice.model, speech.sentChars) });
     if (!state.timedOut) await charged.fulfil();
     return new NextResponse(speech.audio, {
       headers: {
@@ -195,7 +220,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         "X-Adult": "1",
         ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(adultScript.refrain, "utf8").toString("base64") } : {}),
         ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
-        "X-Voice-Id": voice.id, "X-Chars": String(text.length), "X-Pace": pace.id, "X-Tone": tone.id,
+        "X-Voice-Id": usedId, "X-Chars": String(text.length), "X-Pace": pace.id, "X-Tone": tone.id,
         "X-Speed-Applied": speech.speedApplied ? "1" : "0",
         ...(speech.pauseMs ? { "X-Pause-Ms": String(speech.pauseMs) } : {}),
         ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
