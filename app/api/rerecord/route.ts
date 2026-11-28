@@ -138,7 +138,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
 
   captureEvent("attempt_started", { route: "rerecord", attempt_id: attemptId, build });
-  const vet = await vetScript(key, lines, isAdult);
+  // Use the relaxed (adult) vet when the account is on either allowlist.
+  // isAdult checks ADULT_TIER_EMAILS; relaxed checks RELAXED_FILTER_EMAILS or RELAXED_FILTER_IDS
+  // (the ID path lets Apple private-relay accounts match without an email change).
+  const vet = await vetScript(key, lines, isAdult || relaxed);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }
@@ -148,16 +151,21 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     // that never answered gives the slot back.
     if (vet.reason === "unavailable") await slot?.release();
     await charged.refund();
-    return vet.reason === "rejected"
-      ? NextResponse.json(
-          {
-            code: "not_recordable",
-            error: "The script has content this service won't record in a synthetic voice.",
-            hint: "Sexual, violent, or harmful wording triggers this. To raise the chance it records: replace explicit body or desire language with general terms (warm, alive, connected); keep each line as a personal affirmation about your own feelings or goals; shorten the script if any lines are long. You can also hear the script now in your device's own voice.",
-          },
-          { status: 422 },
-        )
-      : NextResponse.json({ code: "vet_unavailable", error: "Recording is paused for a moment." }, { status: 503 });
+    if (vet.reason === "rejected") {
+      const hint =
+        isAdult || relaxed
+          ? "This script has content that won't record even on the adult tier. Hard limits apply to all accounts: minors, real named people, non-consent, harm to others, and family roles. Remove any of those and try again."
+          : "Sexual, violent, or harmful wording triggers this. To raise the chance it records: replace explicit body or desire language with general terms (warm, alive, connected); keep each line as a personal affirmation about your own feelings or goals; shorten the script if any lines are long. You can also hear the script now in your device's own voice.";
+      return NextResponse.json(
+        {
+          code: "not_recordable",
+          error: "The script has content this service won't record in a synthetic voice.",
+          hint,
+        },
+        { status: 422 },
+      );
+    }
+    return NextResponse.json({ code: "vet_unavailable", error: "Recording is paused for a moment." }, { status: 503 });
   }
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
