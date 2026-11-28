@@ -95,7 +95,13 @@ export type Made = {
   title: string;
   /** Why this is not the recording that was asked for, or which mode was used. */
   note: string;
-  recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
+  recording: {
+    audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string;
+    /** Start shares (0–1) for playback timing. May be audio-based or character-count estimated. */
+    starts: number[];
+    /** Only set when starts came from actual audio timing (X-Line-Starts header). */
+    audioStarts?: number[];
+  } | null;
   /** "exact" when the script uses the person's own sentences unchanged. */
   scriptMode?: "exact";
   /** The attempt ID for this generation, used to show a reference on failure. */
@@ -131,7 +137,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
       title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
       lines: r.lines,
       note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your words, spoken to you." : "",
-      recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
+      recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines), ...(r.starts ? { audioStarts: r.starts } : {}) },
       ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
       ...(r.attemptId ? { attemptId: r.attemptId } : { attemptId }),
       ...(r.build ? { build: r.build } : {}),
@@ -180,6 +186,7 @@ export const LIBRARY_WEB_ROUTE = "/library" as const;
 
 /** The Library item for a result, as the website's Save builds it. */
 export function toManifestation(made: Made, w: Wish, id: string, now = Date.now()): Manifestation {
+  const audioStarts = made.recording?.audioStarts;
   return {
     id,
     title: made.title,
@@ -193,5 +200,6 @@ export function toManifestation(made: Made, w: Wish, id: string, now = Date.now(
     updatedAt: now,
     ...(typeof w.speedStep === "string" ? { speedStep: w.speedStep } : {}),
     ...(typeof w.cadenceStep === "string" ? { cadenceStep: w.cadenceStep } : {}),
+    ...(audioStarts && audioStarts.length === made.lines.length ? { lineStarts: audioStarts } : {}),
   };
 }
