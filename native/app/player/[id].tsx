@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { lineForProgress } from "@/lib/create";
-import { lineStarts } from "@/lib/audio";
+import { lineStarts as charLineStarts } from "@/lib/audio";
+import { activePhrase, MAX_PHRASE_WORDS, progressWithinLine } from "@/lib/phraseBox";
 import { displayTitle } from "@/lib/script";
 import { buildQueue, gapClip, roundAt } from "@/lib/playerQueue";
 import { planSession } from "@/lib/session/planSession";
@@ -16,7 +17,7 @@ import { LOOP_GAP_MS, loopQueue, playerGapName } from "../../src/player/loop";
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
 import { colors } from "../../src/theme";
-import { CurrentLinePanel } from "../../src/ui/CurrentLinePanel";
+import { PhraseBox } from "../../src/ui/PhraseBox";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 import {
@@ -47,7 +48,11 @@ export default function Player() {
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const lastLineRef = useRef(0);
   const np = useNowPlaying();
-  const starts = useMemo(() => (loaded ? lineStarts(loaded.lines) : []), [loaded]);
+  // Use audio-based line starts when stored (new recordings); fall back to character-count.
+  const starts = useMemo(
+    () => (loaded ? (loaded.lineStarts ?? charLineStarts(loaded.lines)) : []),
+    [loaded],
+  );
 
   useEffect(() => {
     let live = true;
@@ -134,6 +139,16 @@ export default function Player() {
     if (l !== null) lastLineRef.current = l;
   }
   const currentLine: number | null = mine && phase !== "idle" ? lastLineRef.current : null;
+  const currentPhrase: string | null = (() => {
+    if (currentLine === null) return null;
+    const lineText = item.lines[currentLine] ?? "";
+    if (!lineText.trim()) return null;
+    // Show whole line (which is a short phrase in new recordings per issue 306).
+    // Fall back to phrase-splitting for old recordings with long lines.
+    if (lineText.trim().split(/\s+/).length <= MAX_PHRASE_WORDS) return lineText;
+    const lineProg = progressWithinLine(currentLine, starts, np.progress);
+    return activePhrase(lineText, lineProg);
+  })();
   const busy = mine && np.status === "preparing";
   const rawNote = mine && np.status === "idle" ? np.note : "";
   const note = rawNote === "Finished." ? "Session complete." : rawNote;
@@ -189,7 +204,7 @@ export default function Player() {
         <Text style={s.p}>{note}</Text>
       ) : null}
 
-      {currentLine !== null ? <CurrentLinePanel line={item.lines[currentLine] ?? ""} /> : null}
+      {currentPhrase !== null ? <PhraseBox phrase={currentPhrase} /> : null}
 
       <Text style={s.label}>Session length{active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>

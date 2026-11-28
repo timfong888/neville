@@ -20,6 +20,12 @@ export type Manifestation = {
   speedStep?: string;
   /** Cadence step chosen when this recording was made. Re-record reuses it. */
   cadenceStep?: string;
+  /**
+   * Where each line starts as a share (0–1) of the whole recording, from the
+   * actual audio timing (X-Line-Starts). When present, used in place of the
+   * character-count estimate from lineStarts(lines). Absent for old recordings.
+   */
+  lineStarts?: number[];
 };
 
 /** A named, ordered set of manifestations. */
@@ -145,21 +151,27 @@ export function parseLibrary(raw: unknown): Library {
   const r = raw as { manifestations?: unknown; playlists?: unknown };
   const str = (v: unknown) => typeof v === "string";
   const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
-  const manifestations = (Array.isArray(r.manifestations) ? r.manifestations : []).filter(
-    (m): m is Manifestation =>
-      !!m &&
-      str(m.id) &&
-      str(m.title) &&
-      str(m.want) &&
-      str(m.firstName) &&
-      Array.isArray(m.lines) &&
-      m.lines.every(str) &&
-      str(m.voiceId) &&
-      str(m.voiceName) &&
-      typeof m.hasAudio === "boolean" &&
-      num(m.createdAt) &&
-      num(m.updatedAt),
-  );
+  const manifestations = (Array.isArray(r.manifestations) ? r.manifestations : [])
+    .filter(
+      (m): m is Manifestation =>
+        !!m &&
+        str(m.id) &&
+        str(m.title) &&
+        str(m.want) &&
+        str(m.firstName) &&
+        Array.isArray(m.lines) &&
+        m.lines.every(str) &&
+        str(m.voiceId) &&
+        str(m.voiceName) &&
+        typeof m.hasAudio === "boolean" &&
+        num(m.createdAt) &&
+        num(m.updatedAt),
+    )
+    .map((m): Manifestation => {
+      const ls = m.lineStarts;
+      const lineStartsOk = Array.isArray(ls) && ls.length === m.lines.length && (ls as unknown[]).every(num);
+      return lineStartsOk ? m : { ...m, lineStarts: undefined };
+    });
   const ids = new Set(manifestations.map((m) => m.id));
   const playlists = (Array.isArray(r.playlists) ? r.playlists : [])
     .filter(

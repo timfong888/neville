@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRouter } from "expo-router";
 import { AccessibilityInfo, Animated, Platform, Pressable, type PressableInstance, type ScrollViewInstance, StyleSheet, Text, View } from "react-native";
 import { type Manifestation, newestFirst } from "@/lib/library/model";
+import { lineForProgress } from "@/lib/create";
+import { lineStarts as charLineStarts } from "@/lib/audio";
+import { activePhrase, MAX_PHRASE_WORDS, progressWithinLine } from "@/lib/phraseBox";
 import { playingItemId } from "@/lib/playingItemId";
 import { displayTitle } from "@/lib/script";
 import { setBell, useBell } from "../../src/player/bellStore";
@@ -13,6 +16,7 @@ import { planSession } from "@/lib/session/planSession";
 import { kv } from "../../src/seams/kv";
 import { useLibrary } from "../../src/seams/useLibrary";
 import { Button } from "../../src/ui/Button";
+import { PhraseBox } from "../../src/ui/PhraseBox";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
@@ -96,6 +100,27 @@ export default function LibraryScreen() {
   const rowRefs = useRef(new Map<string, PressableInstance | null>());
   const isDragging = useRef(false);
   const playingId = playingItemId(np, items, (i) => playAll.idAtClipIndex(i));
+  const playingItem = useMemo(() => items.find((m) => m.id === playingId) ?? null, [items, playingId]);
+  // Audio-based line starts when stored; fall back to character-count.
+  const libLineStarts = useMemo(
+    () => (playingItem ? (playingItem.lineStarts ?? charLineStarts(playingItem.lines)) : []),
+    [playingItem],
+  );
+  const libLastLineRef = useRef(0);
+  const libNowActive = now.status === "playing" || now.status === "stopped-mid";
+  if (libNowActive && libLineStarts.length > 0) {
+    const l = lineForProgress(np.index, np.progress, libLineStarts);
+    if (l !== null) libLastLineRef.current = l;
+  }
+  const libCurrentLine = libNowActive ? libLastLineRef.current : null;
+  const libCurrentPhrase: string | null = (() => {
+    if (libCurrentLine === null || !playingItem) return null;
+    const lineText = playingItem.lines[libCurrentLine] ?? "";
+    if (!lineText.trim()) return null;
+    if (lineText.trim().split(/\s+/).length <= MAX_PHRASE_WORDS) return lineText;
+    const lineProg = progressWithinLine(libCurrentLine, libLineStarts, np.progress);
+    return activePhrase(lineText, lineProg);
+  })();
   const prevPlayingId = useRef<string | null>(null);
   useEffect(() => {
     if (playingId === prevPlayingId.current) return;
@@ -174,6 +199,7 @@ export default function LibraryScreen() {
                   <Button label="Stop" onPress={() => nowPlaying.pause()} />
                 )}
               </View>
+              {libCurrentPhrase !== null ? <PhraseBox phrase={libCurrentPhrase} /> : null}
               <PlayOptions bell={{ value: bell, onChange: (v) => void setBell(v) }} disabled={false} />
             </>
           )}
