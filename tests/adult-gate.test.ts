@@ -66,6 +66,15 @@ describe("adultGate — real-person blocks", () => {
     "based on this selfie of me",
     "based on a selfie I took",
     "using this selfie",
+    // P1 fix — single-name celebrities via person-reference verbs
+    "make love to Madonna",
+    "kissing Beyoncé",
+    "sleep with Rihanna",
+    "be like Scarlett",
+    "pretend to be Cher",
+    // P1 fix — accented full names (Unicode)
+    "André Garcia in a romantic scene",
+    "make love to Beyoncé Knowles",
   ];
   for (const wish of cases) {
     it(`blocks: "${wish}"`, () => {

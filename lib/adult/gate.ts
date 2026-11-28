@@ -16,9 +16,15 @@ export type AdultGateResult =
   | { allowed: true }
   | { allowed: false; reason: BlockReason; guidance: string };
 
-// Two consecutive title-cased words (3+ chars each) = likely a full person's name.
-// Mirrored from lib/image/gate.ts; kept local to avoid coupling.
-const PROPER_NAME = /\b[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}\b/;
+// Two consecutive title-cased Unicode words (3+ chars each) = likely a full person's name.
+// The `u` flag enables \p{Lu}/\p{Ll} Unicode property classes for accented characters
+// (Beyoncé Knowles, André Garcia, etc.). Mirrored from lib/image/gate.ts; kept local.
+const PROPER_NAME = /\b\p{Lu}\p{Ll}{2,}\s+\p{Lu}\p{Ll}{2,}\b/u;
+
+// A single title-cased name after a person-reference or sexual verb — catches single-name
+// celebrities (Madonna, Beyoncé, Cher, etc.) that the two-word PROPER_NAME misses.
+const SINGLE_NAME_CONTEXT =
+  /\b(?:be with|sex with|sleep with|make love to|kiss(?:ing)?|touch(?:ing)?|date(?:ing)?|fantasiz\w+ (?:about|of)|dream(?:ing)? (?:about|of)|pretend (?:to be|you are|i am|i'm)|play as|be like|impersonat\w+)\s+\p{Lu}\p{Ll}{3,}\b/iu;
 
 // Phrases indicating a request to base content on a photo or likeness of a real person.
 const LIKENESS =
@@ -112,7 +118,7 @@ export function adultGate(wish: string): AdultGateResult {
   if (wishSexualisesMinor(wish)) {
     return { allowed: false, reason: "minor", guidance: GUIDANCE.minor };
   }
-  if (PROPER_NAME.test(wish) || LIKENESS.test(wish)) {
+  if (PROPER_NAME.test(wish) || SINGLE_NAME_CONTEXT.test(wish) || LIKENESS.test(wish)) {
     return { allowed: false, reason: "real_person", guidance: GUIDANCE.real_person };
   }
   if (PROHIBITED_ACT.test(wish)) {

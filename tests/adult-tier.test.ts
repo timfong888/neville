@@ -170,4 +170,35 @@ describe("classifyScript — refuses blocked output", () => {
     expect(r.verdict).toBe("refuse");
     if (r.verdict === "refuse") expect(r.category).toBe("violence");
   });
+
+  // P1 fix — real_person and family_role checks
+  it("refuses script containing a two-word person name", () => {
+    const r = classifyScript(["You are with Taylor Swift in this moment.", "It is done."]);
+    expect(r.verdict).toBe("refuse");
+    if (r.verdict === "refuse") expect(r.category).toBe("real_person");
+  });
+
+  it("refuses script containing an accented full name", () => {
+    const r = classifyScript(["She looks like Beyoncé Knowles in the light.", "It is done."]);
+    expect(r.verdict).toBe("refuse");
+    if (r.verdict === "refuse") expect(r.category).toBe("real_person");
+  });
+
+  it("refuses script containing a family role word", () => {
+    const r = classifyScript(["Your sister enters the room.", "It is done."]);
+    expect(r.verdict).toBe("refuse");
+    if (r.verdict === "refuse") expect(r.category).toBe("family_role");
+  });
+
+  it("refuses script containing mother", () => {
+    const r = classifyScript(["She reminds you of your mother and smiles.", "It is done."]);
+    expect(r.verdict).toBe("refuse");
+    if (r.verdict === "refuse") expect(r.category).toBe("family_role");
+  });
+
+  it("checks minor before real_person in output gate", () => {
+    const r = classifyScript(["A teenage Taylor Swift stands before you.", "It is done."]);
+    expect(r.verdict).toBe("refuse");
+    if (r.verdict === "refuse") expect(r.category).toBe("minor");
+  });
 });
