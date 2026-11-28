@@ -12,9 +12,10 @@ import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "
 import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isFilterRelaxed, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
-import { isAdultTierUser } from "@/lib/adult/tier";
+import { adultTierEnabled, isAdultTierUser } from "@/lib/adult/tier";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
+import { forAttempt } from "@/lib/server/logger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -41,6 +42,22 @@ function visitor(req: Request): string {
   );
 }
 
+/** Builds a JSON error response with X-Attempt-Id, X-Support-Code and both fields in the body. */
+function reply(attemptId: string, status: number, body: Record<string, unknown>): Response {
+  const supportCode = attemptId.replace(/-/g, "").slice(0, 8);
+  const r = NextResponse.json({ ...body, attemptId, supportCode }, { status });
+  r.headers.set("X-Attempt-Id", attemptId);
+  r.headers.set("X-Support-Code", supportCode);
+  return r;
+}
+
+/** Returns a loggable reason code for the adult-tier allowlist check. Never logs the email. */
+function allowlistReason(session: { email?: string | null } | null | undefined): "flag_off" | "no_email" | "not_listed" | "listed" {
+  if (!adultTierEnabled()) return "flag_off";
+  if (!session?.email) return "no_email";
+  return isAdultTierUser(session.email) ? "listed" : "not_listed";
+}
+
 // Records a script the person edited. Same guards as /api/manifest: the kill
 // switch, the daily slots, and the spend ceiling. The text model vets the
 // script but does not rewrite it. Nothing is stored.
@@ -53,11 +70,12 @@ export async function POST(req: Request) {
 async function handle(req: Request, state: PaidState): Promise<Response> {
   const attemptId = req.headers.get("X-Attempt-Id") || newAttemptId();
   const build = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) ?? "";
+  const log = forAttempt(attemptId, build);
   if (!generationEnabled()) {
-    return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
+    return reply(attemptId, 503, { code: "off", error: "Recording is switched off." });
   }
   const key = apiKey();
-  if (!key) return NextResponse.json({ code: "off", error: "Recording is not set up here." }, { status: 503 });
+  if (!key) return reply(attemptId, 503, { code: "off", error: "Recording is not set up here." });
 
   // With the paywall off, runPaid does not set deadlineAt. Set one now so
   // voiceBudget caps both voice attempts to remaining time, keeping the total
@@ -70,10 +88,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ code: "bad_request", error: "Send JSON." }, { status: 400 });
+    return reply(attemptId, 400, { code: "bad_request", error: "Send JSON." });
   }
   const parsed = parseRerecord(body, LIMITS.maxScriptChars);
-  if (!parsed.ok) return NextResponse.json({ code: "bad_request", error: parsed.error }, { status: 400 });
+  if (!parsed.ok) return reply(attemptId, 400, { code: "bad_request", error: parsed.error });
   const { lines } = parsed.value;
   let voice = resolveVoice(parsed.value.voiceId);
   const speedOpt = parsed.value.speedStep !== null ? resolveSpeed(parsed.value.speedStep) : null;
@@ -142,6 +160,15 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }
+  log.info("[vet_decision]", {
+    route: "rerecord",
+    tier_flag: adultTierEnabled(),
+    allowlisted: isAdult || relaxed,
+    reason: allowlistReason(session),
+    relaxed,
+    verdict: vet.ok ? "yes" : "no",
+    ...(vet.ok === false && vet.reason !== "unavailable" ? { block_class: vet.reason } : {}),
+  });
   if (!vet.ok) {
     // A rejection was a paid model call, so it keeps its slot: otherwise a
     // caller could loop rejected scripts past the daily limits. Only a check
@@ -149,21 +176,18 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     if (vet.reason === "unavailable") await slot?.release();
     await charged.refund();
     return vet.reason === "rejected"
-      ? NextResponse.json(
-          {
-            code: "not_recordable",
-            error: "The script has content this service won't record in a synthetic voice.",
-            hint: "Sexual, violent, or harmful wording triggers this. To raise the chance it records: replace explicit body or desire language with general terms (warm, alive, connected); keep each line as a personal affirmation about your own feelings or goals; shorten the script if any lines are long. You can also hear the script now in your device's own voice.",
-          },
-          { status: 422 },
-        )
-      : NextResponse.json({ code: "vet_unavailable", error: "Recording is paused for a moment." }, { status: 503 });
+      ? reply(attemptId, 422, {
+          code: "not_recordable",
+          error: "The script has content this service won't record in a synthetic voice.",
+          hint: "Sexual, violent, or harmful wording triggers this. To raise the chance it records: replace explicit body or desire language with general terms (warm, alive, connected); keep each line as a personal affirmation about your own feelings or goals; shorten the script if any lines are long. You can also hear the script now in your device's own voice.",
+        })
+      : reply(attemptId, 503, { code: "vet_unavailable", error: "Recording is paused for a moment." });
   }
   // Checked again so the switch also stops a request already under way.
   if (!generationEnabled()) {
     await slot?.release();
     await charged.refund();
-    return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
+    return reply(attemptId, 503, { code: "off", error: "Recording is switched off." });
   }
 
   // A blank line between lines is the pause we can ask of non-PCM voices (e.g. HeyGen);
@@ -253,6 +277,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
       "X-Attempt-Id": attemptId,
+      "X-Support-Code": attemptId.replace(/-/g, "").slice(0, 8),
       ...(build ? { "X-Build": build } : {}),
       ...(charged.left !== null ? { "X-Credits-Left": charged.left, "X-Credits-Balance": charged.left } : {}),
       "X-Voice-Id": voice.id,
