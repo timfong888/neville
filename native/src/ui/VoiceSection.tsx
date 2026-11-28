@@ -1,10 +1,10 @@
 // Collapsed "Voice" section for the create screen and library item screen.
 // Shows the current choice as a one-line summary; expands to let the user pick
 // a voice (with sample playback), speed and cadence.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { CADENCE_OPTIONS, CURATED_VOICE_IDS, SPEED_OPTIONS, voiceOptionLabel, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
-import { useVoices } from "../seams/voiceList";
+import { CADENCE_OPTIONS, SPEED_OPTIONS, voiceOptionLabel, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
+import { resolveVoiceId, useVoices } from "../seams/voiceList";
 import { useSample } from "../create/useSample";
 import { OptionRow, SmallButton } from "./OptionRow";
 import { colors, radius, space, type as ty } from "../theme";
@@ -22,10 +22,23 @@ type Props = {
 export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPickVoice, onPickSpeed, onPickCadence }: Props) {
   const [open, setOpen] = useState(false);
   const { playing, toggle, stop } = useSample();
-  const { voices } = useVoices();
-  const curatedVoices = voices.filter((v) => CURATED_VOICE_IDS.includes(v.id) && v.generate);
+  const { voices, defaultId } = useVoices();
+  const pickableVoices = voices.filter((v) => v.generate);
 
-  const summary = voiceOptionLabel(voiceName, speedStep, cadenceStep);
+  // Resolve stale stored id against server list; fall back to server default.
+  const effectiveId = resolveVoiceId(voiceId, pickableVoices) ?? defaultId;
+  const resolvedName = pickableVoices.find((v) => v.id === effectiveId)?.name ?? voiceName;
+
+  // When server list loads and the stored id is gone, update the parent once.
+  useEffect(() => {
+    if (pickableVoices.length > 0 && effectiveId !== voiceId) {
+      onPickVoice(effectiveId);
+    }
+    // onPickVoice is recreated each render; omit it to avoid infinite loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveId, voiceId, pickableVoices.length]);
+
+  const summary = voiceOptionLabel(resolvedName, speedStep, cadenceStep);
 
   const close = () => {
     stop();
@@ -49,12 +62,12 @@ export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPic
         <View style={s.panel}>
           <Text style={ty.muted}>Choose a voice — samples are pre-made, so listening is free.</Text>
           <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
-            {curatedVoices.map((v) => (
+            {pickableVoices.map((v) => (
               <OptionRow
                 key={v.id}
                 label={v.name}
                 note={v.desc ?? v.label}
-                selected={voiceId === v.id}
+                selected={effectiveId === v.id}
                 onPress={() => onPickVoice(v.id)}
                 right={
                   <SmallButton
