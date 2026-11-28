@@ -39,6 +39,10 @@ export type ApiErrorData = {
   creditReturned?: boolean;
   /** Actionable suggestions shown below the error message, when the server sent them. */
   hint?: string;
+  /** First 8 hex chars of the attempt_id; shown to the user as a support reference. */
+  supportCode?: string;
+  /** The full attempt UUID, from X-Attempt-Id header or body. */
+  attemptId?: string;
 };
 
 export type AccountState = {
@@ -160,14 +164,22 @@ export function createApi(opts: ApiOptions) {
     const extra = (await opts.headers?.()) ?? {};
     const res = await doFetch(`${base}${path}`, { cache: "no-store", ...(opts.credentials ? { credentials: opts.credentials } : {}), ...init, headers: { ...extra, ...(init.headers as Record<string, string>) } });
     if (res.ok) return res;
-    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown; hint?: unknown } | null;
+    const j = (await res.json().catch(() => null)) as { error?: string; code?: string; lines?: unknown; balance?: unknown; creditReturned?: unknown; hint?: unknown; supportCode?: unknown; attemptId?: unknown } | null;
     const lines = Array.isArray(j?.lines) && j.lines.every((l) => typeof l === "string") ? (j.lines as string[]) : undefined;
+    const supportCode = typeof j?.supportCode === "string" && j.supportCode
+      ? j.supportCode
+      : (res.headers.get("X-Support-Code") ?? undefined);
+    const attemptId = typeof j?.attemptId === "string" && j.attemptId
+      ? j.attemptId
+      : (res.headers.get("X-Attempt-Id") ?? undefined);
     const data = j
       ? {
           ...(typeof j.code === "string" ? { code: j.code } : {}),
           ...(typeof j.balance === "number" ? { balance: j.balance } : {}),
           ...(j.creditReturned === true ? { creditReturned: true } : {}),
           ...(typeof j.hint === "string" && j.hint ? { hint: j.hint } : {}),
+          ...(supportCode ? { supportCode } : {}),
+          ...(attemptId ? { attemptId } : {}),
         }
       : undefined;
     throw new ApiError(j?.error ?? `Request failed (${res.status}).`, res.status, j?.code, lines, data);

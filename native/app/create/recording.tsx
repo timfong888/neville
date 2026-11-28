@@ -9,7 +9,7 @@ import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
 import { pauseWatch } from "../../src/create/pauseWatch";
 import { canSpeak, leave, newVariation, save, updateMade, useCreate } from "../../src/create/session";
-import { shortRef, copyLine } from "@/lib/attemptId";
+import { codeRef, copyLine } from "@/lib/attemptId";
 import { Share } from "react-native";
 import { Button, Gate, s } from "../../src/create/ui";
 import { setBell, useBell } from "../../src/player/bellStore";
@@ -199,7 +199,7 @@ export default function Recording() {
       {made.note ? <Text style={s.muted}>{made.note}</Text> : null}
       {!made.recording && made.attemptId ? (
         <View style={s.row}>
-          <Text style={s.muted}>Reference {shortRef(made.attemptId)}</Text>
+          <Text style={s.muted}>Code: {codeRef(made.attemptId)}</Text>
           <Button small label="Copy" onPress={() => void Share.share({ message: copyLine(made.attemptId!, made.build ?? "") })} />
         </View>
       ) : null}

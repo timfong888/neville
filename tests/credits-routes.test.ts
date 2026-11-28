@@ -612,7 +612,7 @@ describe("relaxed filter route logging and writeScript arg (issue 215)", () => {
     await callManifest();
     const relaxedLogs = infoSpy.mock.calls.filter((c: unknown[]) => c[0] === "[relaxed]");
     expect(relaxedLogs).toHaveLength(1);
-    expect(relaxedLogs[0][1]).toBe("alice");
+    expect(relaxedLogs[0][1]).toContain('"userId":"alice"');
     expect(writeScriptFn.mock.calls[0][0]).toMatchObject({ relaxed: true });
   });
 

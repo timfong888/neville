@@ -278,8 +278,9 @@ export type AdultScriptResult =
  * Write a script for an adult-tier wish. Applies the output gate before returning.
  * On gate refusal: logs verdict (category only, never content) and returns ok:false.
  * Falls back to ok:false/"no_model" when no adult model is configured.
+ * Tries every model in adultScriptModels in order within the script time budget.
  */
-export async function writeAdultScript(opts: { key: string; want: string; name: string; variant: number }): Promise<AdultScriptResult> {
+export async function writeAdultScript(opts: { key: string; want: string; name: string; variant: number; attemptId?: string }): Promise<AdultScriptResult> {
   const models = await adultScriptModels();
   if (!models.length) return { ok: false, reason: "no_model" };
 
@@ -290,18 +291,18 @@ export async function writeAdultScript(opts: { key: string; want: string; name: 
   let priced = false;
 
   const template = (): AdultScriptResult => {
-    console.warn("[adult_script_fallback]", JSON.stringify({ reason: failure.reason, model: model ?? null, elapsedMs: Date.now() - started }));
+    console.warn("[adult_script_fallback]", JSON.stringify({ reason: failure.reason, model: model ?? null, elapsedMs: Date.now() - started, attempt_id: opts.attemptId ?? null }));
     return { ok: false, reason: "no_model" };
   };
 
   try {
     const deadline = Date.now() + limits.scriptTimeoutMs;
-    let m = 0;
     let variant = opts.variant;
-    for (let i = 0; i < 2 && m < models.length; i++) {
+    for (let m = 0; m < models.length; m++) {
       const left = deadline - Date.now();
-      if (i > 0 && left < limits.scriptTimeoutMs / 5) break;
+      if (left < limits.scriptTimeoutMs / 10) break;
       model = models[m];
+      const tryStart = Date.now();
       let res: Response;
       try {
         res = await fetch(`${OPENROUTER}/chat/completions`, {
@@ -321,19 +322,21 @@ export async function writeAdultScript(opts: { key: string; want: string; name: 
         });
       } catch (e) {
         failure = classify(e);
-        m++;
+        console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: failure.reason, ms: Date.now() - tryStart }));
         continue;
       }
       if (!res.ok) {
         failure = { reason: "http_status", status: res.status };
-        if (res.status === 429 || res.status >= 500) { m++; continue; }
+        console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: "http_status", status: res.status, ms: Date.now() - tryStart }));
+        if (res.status === 429 || res.status >= 500) continue;
         return template();
       }
       let json: { choices?: Array<{ message?: { content?: unknown } }>; usage?: { cost?: unknown } };
       try { json = await res.json(); } catch (e) {
         failure = classify(e);
+        console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: failure.reason, ms: Date.now() - tryStart }));
         if (failure.reason !== "timeout") return template();
-        m++; continue;
+        continue;
       }
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
@@ -347,13 +350,15 @@ export async function writeAdultScript(opts: { key: string; want: string; name: 
         // Output gate: classify before speech. Any match → refuse, log verdict only.
         const verdict = classifyScript(lines);
         if (verdict.verdict === "refuse") {
-          console.warn("[adult_output_gate]", JSON.stringify({ verdict: "refuse", category: verdict.category, model, elapsedMs: Date.now() - started }));
+          console.warn("[adult_output_gate]", JSON.stringify({ verdict: "refuse", category: verdict.category, model, elapsedMs: Date.now() - started, attempt_id: opts.attemptId ?? null }));
           return { ok: false, reason: "output_gate", category: verdict.category };
         }
+        console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: "ok", ms: Date.now() - tryStart }));
         const script: Script = { lines, source: "model", model, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
         return { ok: true, script };
       }
       failure = { reason: "unusable_reply", status: res.status };
+      console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: "unusable_reply", ms: Date.now() - tryStart }));
       variant++;
     }
     return template();
