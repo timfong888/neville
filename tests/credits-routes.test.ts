@@ -638,3 +638,39 @@ describe("relaxed filter route logging and writeScript arg (issue 215)", () => {
     expect(writeScriptFn.mock.calls[0][0]).toMatchObject({ relaxed: false });
   });
 });
+
+describe("POST /api/manifest exact mode family-role guard (issue 219 block 4)", () => {
+  const exactReq = (want: string) =>
+    new Request("https://getneville.vercel.app/api/manifest", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-real-ip": "1.2.3.4" },
+      body: JSON.stringify({ want, name: "Al", scriptMode: "exact" }),
+    });
+  const callExact = async (want: string) =>
+    (await import("@/app/api/manifest/route")).POST(exactReq(want));
+
+  beforeEach(() => vi.stubEnv("PAYWALL_ENABLED", ""));
+
+  it("withholds sex with my aunt in exact mode (family role, every account)", async () => {
+    const res = await callExact("I want to have sex with my aunt");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Script-Source")).toBe("template");
+    expect(res.headers.get("X-Script-Reason")).toBe("withheld");
+    expect(writeScriptFn).not.toHaveBeenCalled();
+  });
+
+  it("withholds sex with my stepdaughter in exact mode (family role, every account)", async () => {
+    const res = await callExact("I want to have sex with my stepdaughter");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Script-Source")).toBe("template");
+    expect(res.headers.get("X-Script-Reason")).toBe("withheld");
+    expect(writeScriptFn).not.toHaveBeenCalled();
+  });
+
+  it("allows a clean wish in exact mode (passes through to exactLines)", async () => {
+    const res = await callExact("I am successful and confident");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Script-Source")).toBe("exact");
+    expect(writeScriptFn).not.toHaveBeenCalled();
+  });
+});

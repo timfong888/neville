@@ -3,7 +3,7 @@ import { apiKey } from "@/lib/server/openrouter";
 import { LIMITS, generationEnabled, takeSlot, underCeiling } from "@/lib/server/limits";
 import { synthesize } from "@/lib/server/tts";
 import { type Script, writeScript } from "@/lib/server/writer";
-import { DEFAULT_REFRAIN, exactLines, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, exactLines, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 import { neutralScript } from "@/lib/script";
 import { captureEvent } from "@/lib/server/telemetry";
 import { alertFailure } from "@/lib/server/alertFailure";
@@ -139,7 +139,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   const isExact = body.scriptMode === "exact";
   let script: Script;
   if (isExact) {
-    if (wishSexualisesMinor(want)) {
+    if (wishSexualisesMinor(want) || wishSexualisesFamilyRole(want)) {
       captureEvent("script_withheld", { route: "manifest", attempt_id: attemptId });
       const category = wishSexualisesMinorCategory(want);
       script = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN, ...(category ? {} : {}) };
