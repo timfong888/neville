@@ -496,6 +496,10 @@ describe("exactLines (#229)", () => {
     expect(lines[0]).toBe("You are calm.");
     expect(lines[1]).toBe("You are strong.");
   });
+  it("rewrites want-language to present tense before the second-person transform (#282)", () => {
+    const { lines } = exactLines("I want a house.");
+    expect(lines[0]).toBe("You have a house.");
+  });
 });
 
 describe("firstToSecond (#255)", () => {

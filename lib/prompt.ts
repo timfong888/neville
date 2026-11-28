@@ -382,8 +382,8 @@ export function exactLines(want: string, name?: string): { lines: string[]; refr
     .filter((s) => s.length > 1 && /\w/.test(s));
   const toUse = stripped.length ? stripped : sentences;
 
-  // Apply second-person transform to all sentences (name or not) per #255.
-  const transformed = toUse.map(firstToSecond);
+  // Apply present-tense rewrite then second-person transform per #282/#255.
+  const transformed = toUse.map((s) => firstToSecond(rewriteWant(s)));
 
   if (!name) {
     let refrain = transformed[0] ?? raw;

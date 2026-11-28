@@ -148,23 +148,40 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return NextResponse.json({ code: "content_policy", error: gate.guidance }, { status: 422 });
   }
 
+  // Read scriptMode before the adult branch so exact mode can skip writeAdultScript.
+  const isExact = body.scriptMode === "exact";
+
   // Adult-tier path: allowlisted users get the uncensored model.
   const isAdult = isAdultTierUser(session?.email ?? null);
   if (isAdult) {
-    const adultResult = await writeAdultScript({ key, want, name, variant });
-    if (!adultResult.ok) {
-      console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest" }));
-      if (adultResult.reason === "output_gate") {
-        await charged.refund();
-        await slot?.release();
-        return NextResponse.json({ code: "content_policy", error: "The script did not pass the content check. Please try again." }, { status: 422 });
+    let adultScript: Script | undefined;
+    if (isExact) {
+      // Exact mode: skip the adult model; use the user's translated lines directly.
+      if (wishSexualisesMinor(want)) {
+        captureEvent("script_withheld", { route: "manifest", attempt_id: attemptId });
+        adultScript = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN };
+      } else {
+        const { lines, refrain } = exactLines(want, name);
+        adultScript = { lines, source: "exact", refrain };
       }
-      // no_model: adult models unavailable — alert and fall through to the standard script path.
-      alertFailure("adult_models_unavailable", { route: "manifest", attempt_id: attemptId });
     } else {
+      const adultResult = await writeAdultScript({ key, want, name, variant });
+      if (!adultResult.ok) {
+        console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest" }));
+        if (adultResult.reason === "output_gate") {
+          await charged.refund();
+          await slot?.release();
+          return NextResponse.json({ code: "content_policy", error: "The script did not pass the content check. Please try again." }, { status: 422 });
+        }
+        // no_model: adult models unavailable — alert and fall through to the standard script path.
+        alertFailure("adult_models_unavailable", { route: "manifest", attempt_id: attemptId });
+      } else {
+        adultScript = adultResult.script;
+      }
+    }
+    if (adultScript !== undefined) {
     // No share link and no gallery for adult-tier items.
     // The X-Adult header tells the native app to suppress share/gallery controls.
-    const adultScript = adultResult.script;
     const repeat = body.repeat === true && /^(?:heygen\/|google\/gemini)/.test(voice.model);
     const recorded = repeat ? [...adultScript.lines, adultScript.refrain] : adultScript.lines;
     const text = recorded.join("\n\n");
@@ -225,6 +242,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         "Content-Type": speech.mime, "Cache-Control": "no-store",
         "X-Script": Buffer.from(JSON.stringify(adultScript.lines), "utf8").toString("base64"),
         "X-Script-Source": adultScript.source,
+        ...(adultScript.source === "exact" ? { "X-Script-Mode": "exact" } : {}),
         "X-Adult": "1",
         ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(adultScript.refrain, "utf8").toString("base64") } : {}),
         ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
@@ -234,11 +252,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
       },
     });
-    } // end else (adult success)
+    } // end if (adultScript)
   } // end if (isAdult)
 
   captureEvent("attempt_started", { route: "manifest", attempt_id: attemptId, build });
-  const isExact = body.scriptMode === "exact";
   let script: Script;
   if (isExact) {
     if (wishSexualisesMinor(want)) {
