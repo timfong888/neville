@@ -326,7 +326,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
 
   // Try the primary voice, then one fallback from adultTtsFallback if it fails or throws.
-  const audioFallbacks = LIMITS.adultTtsFallback.slice(0, 1);
+  const audioFallbacks = (LIMITS.adultTtsFallback ?? []).slice(0, 1);
   const voiceChain = [
     { id: voice.id, model: voice.model, voice: voice.voice, atomic: voice.atomic === true },
     ...audioFallbacks,
