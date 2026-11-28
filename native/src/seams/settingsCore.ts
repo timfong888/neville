@@ -12,21 +12,23 @@ export const SETTINGS_KEYS = {
   tone: "nv_tone",
   speedStep: "nv_speed_step",
   cadenceStep: "nv_cadence_step",
+  language: "nv_language",
 } as const;
 
-export type Settings = { voiceId: string; pace: PaceId; tone: ToneId; speedStep: SpeedStep; cadenceStep: CadenceStep };
+export type Settings = { voiceId: string; pace: PaceId; tone: ToneId; speedStep: SpeedStep; cadenceStep: CadenceStep; language: string };
 
 export function makeSettingsStore(kv: KV) {
   const listeners = new Set<() => void>();
   return {
     /** Stored choices; the default for anything missing, unknown or no longer offered. */
-    async read(): Promise<Settings> {
-      const [v, p, t, sp, ca] = await Promise.all([
+    async read(defaults: { language?: string } = {}): Promise<Settings> {
+      const [v, p, t, sp, ca, lang] = await Promise.all([
         kv.get(SETTINGS_KEYS.voiceId),
         kv.get(SETTINGS_KEYS.pace),
         kv.get(SETTINGS_KEYS.tone),
         kv.get(SETTINGS_KEYS.speedStep),
         kv.get(SETTINGS_KEYS.cadenceStep),
+        kv.get(SETTINGS_KEYS.language),
       ]);
       return {
         voiceId: v ?? FALLBACK_VOICE_ID,
@@ -34,6 +36,7 @@ export function makeSettingsStore(kv: KV) {
         tone: resolveTone(t).id,
         speedStep: resolveSpeed(sp).id,
         cadenceStep: resolveCadence(ca).id,
+        language: lang ?? defaults.language ?? "en",
       };
     },
     /** Saves the given choices. False when the device refused any of them. */

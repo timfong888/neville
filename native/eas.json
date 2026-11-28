@@ -5,6 +5,14 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": { "EXPO_PUBLIC_MUSIC": "1" }
+    },
+    "testing": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_MUSIC": "1",
+        "EXPO_PUBLIC_SHOW_VOICE_MODEL": "1"
+      }
     }
   },
   "submit": {

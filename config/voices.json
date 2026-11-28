@@ -12,7 +12,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Calm female voice, lower pitch"
+      "desc": "Calm female voice, lower pitch",
+      "gender": "female",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "heygen-tabitha",
@@ -25,7 +28,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Bright female voice, higher pitch"
+      "desc": "Bright female voice, higher pitch",
+      "gender": "female",
+      "pitch": "High",
+      "language": "en"
     },
     {
       "id": "heygen-noelle",
@@ -38,7 +44,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Female voice, mid pitch"
+      "desc": "Female voice, mid pitch",
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "heygen-meredith",
@@ -51,7 +60,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Female voice, lower pitch"
+      "desc": "Female voice, lower pitch",
+      "gender": "female",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "heygen-sabrina",
@@ -64,7 +76,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Light female voice, higher pitch"
+      "desc": "Light female voice, higher pitch",
+      "gender": "female",
+      "pitch": "High",
+      "language": "en"
     },
     {
       "id": "heygen-bram",
@@ -77,7 +92,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Deep male voice"
+      "desc": "Deep male voice",
+      "gender": "male",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "heygen-gareth",
@@ -90,7 +108,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Male voice, mid-low pitch"
+      "desc": "Male voice, mid-low pitch",
+      "gender": "male",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "heygen-lucian",
@@ -103,7 +124,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Male voice, mid-low pitch"
+      "desc": "Male voice, mid-low pitch",
+      "gender": "male",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "heygen-weston",
@@ -116,7 +140,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Lighter male voice"
+      "desc": "Lighter male voice",
+      "gender": "male",
+      "pitch": "High",
+      "language": "en"
     },
     {
       "id": "heygen-vincent",
@@ -129,7 +156,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Deepest male voice"
+      "desc": "Deepest male voice",
+      "gender": "male",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "gemini-achernar",
@@ -143,7 +173,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Soft female voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "female",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "gemini-vindemiatrix",
@@ -157,7 +190,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Gentle female voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-sulafat",
@@ -171,7 +207,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Warm female voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-enceladus",
@@ -185,7 +224,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Breathy male voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "male",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-algieba",
@@ -199,7 +241,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Smooth male voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "male",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-kore",
@@ -213,7 +258,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Firm female voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-charon",
@@ -227,7 +275,10 @@
       "tier": "mid",
       "generate": true,
       "desc": "Low, steady male voice",
-      "atomic": true
+      "atomic": true,
+      "gender": "male",
+      "pitch": "Low",
+      "language": "en"
     },
     {
       "id": "kokoro-af-heart",
@@ -240,7 +291,10 @@
       "enabled": true,
       "tier": "cheap",
       "generate": true,
-      "desc": "Bright American female voice"
+      "desc": "Bright American female voice",
+      "gender": "female",
+      "pitch": "High",
+      "language": "en"
     },
     {
       "id": "orpheus-tara",
@@ -255,7 +309,9 @@
       "generate": true,
       "desc": "Orpheus — expressive female voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "orpheus-leah",
@@ -270,7 +326,9 @@
       "generate": true,
       "desc": "Orpheus — female voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "orpheus-jess",
@@ -285,7 +343,9 @@
       "generate": true,
       "desc": "Orpheus — female voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "orpheus-leo",
@@ -300,7 +360,9 @@
       "generate": true,
       "desc": "Orpheus — male voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "male",
+      "language": "en"
     },
     {
       "id": "orpheus-dan",
@@ -315,7 +377,9 @@
       "generate": true,
       "desc": "Orpheus — male voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "male",
+      "language": "en"
     },
     {
       "id": "orpheus-mia",
@@ -330,7 +394,9 @@
       "generate": true,
       "desc": "Orpheus — female voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "orpheus-zac",
@@ -345,7 +411,9 @@
       "generate": true,
       "desc": "Orpheus — male voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "male",
+      "language": "en"
     },
     {
       "id": "orpheus-zoe",
@@ -360,7 +428,9 @@
       "generate": true,
       "desc": "Orpheus — female voice",
       "format": "pcm",
-      "paceSupport": "ignores"
+      "paceSupport": "ignores",
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "sesame-read-speech-a",
@@ -397,7 +467,7 @@
       "enabled": true,
       "tier": "free",
       "generate": true,
-      "desc": "The model’s own voice, free to record"
+      "desc": "The model's own voice, free to record"
     },
     {
       "id": "fish-s2-1-pro",
@@ -433,7 +503,9 @@
       "sample": "/voice-samples/pick/grok-eve.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": false
+      "generate": false,
+      "gender": "female",
+      "language": "en"
     },
     {
       "id": "gemini-flash-kore",
@@ -445,7 +517,10 @@
       "sample": "/voice-samples/pick/gemini-flash-kore.mp3",
       "enabled": true,
       "tier": "mid",
-      "generate": false
+      "generate": false,
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "gemini-3-1-kore",
@@ -457,7 +532,10 @@
       "sample": "/voice-samples/pick/gemini-3-1-kore.mp3",
       "enabled": true,
       "tier": "premium",
-      "generate": false
+      "generate": false,
+      "gender": "female",
+      "pitch": "Medium",
+      "language": "en"
     },
     {
       "id": "eleven-george",
@@ -469,7 +547,9 @@
       "sample": "/voice-samples/pick/eleven-george.mp3",
       "enabled": false,
       "tier": "premium",
-      "generate": false
+      "generate": false,
+      "gender": "male",
+      "language": "en"
     },
     {
       "id": "eleven-sarah",
@@ -481,7 +561,9 @@
       "sample": "/voice-samples/pick/eleven-sarah.mp3",
       "enabled": false,
       "tier": "premium",
-      "generate": false
+      "generate": false,
+      "gender": "female",
+      "language": "en"
     }
   ]
 }

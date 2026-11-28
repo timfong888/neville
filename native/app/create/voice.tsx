@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { TIER_LABEL } from "@/lib/voices";
 import { useVoices } from "../../src/seams/voiceList";
 import { load, pickVoice, useCreate } from "../../src/create/session";
 import { Button } from "../../src/create/ui";
@@ -13,9 +12,10 @@ import { OptionRow, SmallButton } from "../../src/ui/OptionRow";
 import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
+import { SHOW_VOICE_MODEL } from "../../src/config";
+import { filterVoicesByLanguage, voiceRowNote } from "@/lib/voiceDisplay";
 
 // Create: choose the voice for the next recording. The same voices and samples as Settings.
-// A pick here lasts until the voice is changed in Settings; Settings keeps its choice unless "Make this my default" is tapped.
 export default function VoicePicker() {
   const c = useCreate();
   const router = useRouter();
@@ -24,9 +24,10 @@ export default function VoicePicker() {
   const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
   const { voices, defaultId, ready } = useVoices();
-  // Opened cold (a deep link, a refresh), the wish step has not read Settings yet.
   useEffect(() => void load(), []);
   const isDefault = c.voiceId === saved.voiceId;
+
+  const filteredVoices = filterVoicesByLanguage(voices, saved.language);
 
   const makeDefault = async () => {
     clearError();
@@ -42,7 +43,6 @@ export default function VoicePicker() {
     <Screen title="Choose a voice" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Stack.Screen options={{ title: "Voice" }} />
       <Text style={type.muted}>For your next recording. Samples are pre-made, so listening is free.</Text>
-      {/* Above the long list, so the choice and its buttons need no scrolling. */}
       <Text accessibilityLiveRegion="polite" style={type.body}>{error || note}</Text>
       <Text style={type.muted}>
         {isDefault ? `${c.voiceName} is your voice in Settings.` : `${c.voiceName} is used here until you change the voice in Settings. Settings stays as it is.`}
@@ -53,12 +53,11 @@ export default function VoicePicker() {
       </View>
       <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
         {!ready && <Text style={type.muted}>Loading voices…</Text>}
-        {voices.map((v) => (
+        {filteredVoices.map((v) => (
           <OptionRow
             key={v.id}
             label={v.name}
-            // "Default" in Settings marks the app's own default, so the saved choice is named differently here.
-            note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", v.desc ?? v.label, TIER_LABEL[v.tier as keyof typeof TIER_LABEL]].filter(Boolean).join(" · ")}
+            note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", voiceRowNote(v, SHOW_VOICE_MODEL)].filter(Boolean).join(" · ")}
             selected={c.voiceId === v.id}
             disabled={!v.generate}
             onPress={() => (setNote(""), clearError(), void pickVoice(v.id))}
@@ -66,6 +65,7 @@ export default function VoicePicker() {
           />
         ))}
       </View>
+      {!ready && <Text style={type.muted}>{defaultId}</Text>}
     </Screen>
   );
 }

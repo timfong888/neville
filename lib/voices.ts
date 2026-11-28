@@ -44,6 +44,13 @@ export type Voice = {
    * Absent means untested.
    */
   paceSupport?: "honours" | "ignores" | "untested";
+  /** Voice gender, curated. Absent when not characterised. */
+  gender?: "male" | "female";
+  /** Pitch category, curated. Absent when not characterised. */
+  pitch?: "Low" | "Medium" | "High";
+  /** BCP 47 language tag for the voice's native language (e.g. "en").
+   * Absent for model-default voices that accept any input language. */
+  language?: string;
 };
 
 const TIERS: Tier[] = ["free", "cheap", "low", "mid", "premium"];
@@ -68,6 +75,9 @@ function load(): { all: Voice[]; defaultId: string } {
     if (v.atomic !== undefined && typeof v.atomic !== "boolean") throw new Error(`config/voices.json: "${v.id}" has "atomic" that is not true or false.`);
     if (v.format !== undefined && v.format !== "pcm" && v.format !== "mp3") throw new Error(`config/voices.json: "${v.id}" has invalid "format"; use "pcm" or "mp3".`);
     if (v.paceSupport !== undefined && !["honours", "ignores", "untested"].includes(v.paceSupport)) throw new Error(`config/voices.json: "${v.id}" has invalid "paceSupport"; use "honours", "ignores", or "untested".`);
+    if (v.gender !== undefined && !["male", "female"].includes(v.gender)) throw new Error(`config/voices.json: "${v.id}" has invalid "gender"; use "male" or "female".`);
+    if (v.pitch !== undefined && !["Low", "Medium", "High"].includes(v.pitch)) throw new Error(`config/voices.json: "${v.id}" has invalid "pitch"; use "Low", "Medium", or "High".`);
+    if (v.language !== undefined && (typeof v.language !== "string" || !v.language)) throw new Error(`config/voices.json: "${v.id}" has invalid "language"; use a BCP 47 tag, e.g. "en".`);
     if (v.generate && !v.enabled) throw new Error(`config/voices.json: "${v.id}" has generate on but is not enabled.`);
     if (!TIERS.includes(v.tier)) throw new Error(`config/voices.json: "${v.id}" has tier "${v.tier}"; use free, cheap, low, mid or premium.`);
     if (!v.sample.startsWith("/")) throw new Error(`config/voices.json: sample for "${v.id}" must start with "/".`);

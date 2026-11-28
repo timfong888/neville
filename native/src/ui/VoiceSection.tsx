@@ -5,9 +5,12 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { CADENCE_OPTIONS, SPEED_OPTIONS, voiceOptionLabel, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
 import { resolveVoiceId, useVoices } from "../seams/voiceList";
+import { useSettings } from "../seams/settings";
 import { useSample } from "../create/useSample";
 import { OptionRow, SmallButton } from "./OptionRow";
 import { colors, radius, space, type as ty } from "../theme";
+import { SHOW_VOICE_MODEL } from "../config";
+import { filterVoicesByLanguage, voiceRowNote } from "@/lib/voiceDisplay";
 
 type Props = {
   voiceId: string;
@@ -23,7 +26,8 @@ export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPic
   const [open, setOpen] = useState(false);
   const { playing, toggle, stop } = useSample();
   const { voices, defaultId } = useVoices();
-  const pickableVoices = voices.filter((v) => v.generate);
+  const { settings } = useSettings();
+  const pickableVoices = filterVoicesByLanguage(voices.filter((v) => v.generate), settings.language);
 
   // Resolve stale stored id against server list; fall back to server default.
   const effectiveId = resolveVoiceId(voiceId, pickableVoices) ?? defaultId;
@@ -66,7 +70,7 @@ export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPic
               <OptionRow
                 key={v.id}
                 label={v.name}
-                note={v.desc ?? v.label}
+                note={voiceRowNote(v, SHOW_VOICE_MODEL)}
                 selected={effectiveId === v.id}
                 onPress={() => onPickVoice(v.id)}
                 right={

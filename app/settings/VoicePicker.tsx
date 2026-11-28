@@ -4,14 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEFAULT_VOICE_ID,
   ENABLED_VOICES,
-  TIER_LABEL,
   resolveVoice,
-  voiceBlurb,
 } from "@/lib/voices";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
-import { paceSupport } from "@/lib/voiceMix";
-
-const PACE_LABEL = { honours: "", ignores: "Ignores pace", untested: "Pace untested" } as const;
+import { voiceRowNote } from "@/lib/voiceDisplay";
 
 export default function VoicePicker() {
   const [chosen, setChosen] = useState(DEFAULT_VOICE_ID);
@@ -19,8 +15,6 @@ export default function VoicePicker() {
   const [note, setNote] = useState("");
   const audio = useRef<HTMLAudioElement | null>(null);
 
-  // The stored choice is read after the page loads; an id that is no longer
-  // offered falls back to the default.
   useEffect(() => {
     setChosen(resolveVoice(readVoiceChoice()).id);
   }, []);
@@ -81,9 +75,7 @@ export default function VoicePicker() {
                 {v.id === DEFAULT_VOICE_ID && <span className="pill">Default</span>}
               </span>
               <span className="small muted">
-                {[v.generate ? "" : "Sample only", voiceBlurb(v), v.provider, TIER_LABEL[v.tier], v.generate ? PACE_LABEL[paceSupport(v)] : ""]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[v.generate ? "" : "Sample only", voiceRowNote(v)].filter(Boolean).join(" · ")}
               </span>
             </label>
             <button
