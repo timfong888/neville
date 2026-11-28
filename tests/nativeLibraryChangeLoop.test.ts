@@ -69,7 +69,7 @@ function setup(items: { id: string }[]) {
 function handleLibraryChange(np: ReturnType<typeof makeNowPlaying>, pa: ReturnType<typeof makePlayAll>) {
   const { id, status, index } = np.state();
   pa.reset();
-  if (id === "all" && (status === "playing" || status === "paused")) {
+  if (id === "all" && status === "playing") {
     const currentId = pa.idAtClipIndex(index) ?? null;
     return np.play(pa.jobFrom(currentId));
   } else if (id !== "all") {

@@ -236,6 +236,37 @@ export function reset(): void {
   write(FREE_STORAGE_KEY, "0");
 }
 
+/**
+ * Replaces the recording in `made` after a re-record on the recording screen.
+ * Also updates the saved library item when `savedId` is set.
+ */
+export async function updateMade(audio: ArrayBuffer, mime: string, voiceId: string, lines: string[]): Promise<void> {
+  const made = state.made;
+  if (!made) return;
+  const used = resolveVoice(voiceId);
+  const updated: Made = {
+    ...made,
+    lines,
+    recording: {
+      audio,
+      mime,
+      voiceId: used.id,
+      voiceName: used.name,
+      starts: made.recording?.starts ?? [],
+    },
+  };
+  set({ made: updated });
+  if (state.savedId) {
+    const existing = await library.get(state.savedId);
+    if (existing) {
+      await library.save(
+        { ...existing, lines, voiceId: used.id, voiceName: used.name, hasAudio: true, updatedAt: Date.now() },
+        { bytes: new Uint8Array(audio), mime },
+      );
+    }
+  }
+}
+
 /** Keeps the result in the Library on this device and gives its id. Rejects with a message to show. */
 export async function save(): Promise<string> {
   const made = state.made;

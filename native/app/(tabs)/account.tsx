@@ -13,7 +13,10 @@ import { deviceData } from "../../src/deviceData";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { loadProfileName, saveProfileName, useFirstName } from "../../src/profileNameStore";
 import { PAYWALL_ENABLED } from "../../src/config";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { colors, radius, space, type } from "../../src/theme";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 
 const WEB = Platform.OS === "web";
@@ -22,6 +25,7 @@ export default function Profile() {
   const account = useAccount();
   const firstName = useFirstName();
   const credits = useCredits();
+  const np = useNowPlaying();
 
   const [nameInput, setNameInput] = useState(firstName);
   const [nameError, setNameError] = useState("");
@@ -34,6 +38,7 @@ export default function Profile() {
       setNameInput(firstName);
     }
   }, [firstName]);
+
 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
@@ -115,7 +120,7 @@ export default function Profile() {
   const signedIn = !!user;
 
   return (
-    <Screen title="Profile">
+    <Screen title="Profile" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
 
       {/* First name */}
       <View style={s.card}>

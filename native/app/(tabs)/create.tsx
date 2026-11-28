@@ -11,14 +11,18 @@ import { shouldShowPaywall } from "@/lib/paywall";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
 import { PaywallSheet } from "../../src/paywall/PaywallSheet";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { colors } from "../../src/theme";
 import { Button, Gate, s } from "../../src/create/ui";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 
 // Create, step 1: the wish. One tap makes the script and the recording (step 2 shows progress).
 export default function Wish() {
   const c = useCreate();
   const router = useRouter();
+  const np = useNowPlaying();
   // The same sign-in state the Account tab keeps; it updates here when that changes (#164).
   const { account, checked } = useAccountView();
   const signedIn = isSignedIn(account);
@@ -63,6 +67,7 @@ export default function Wish() {
             {c.gate ? <Gate signedIn={signedIn} /> : null}
             {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
             <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
+            {isActive(np) ? <PlaybackBar np={np} /> : null}
           </>
         }
       >

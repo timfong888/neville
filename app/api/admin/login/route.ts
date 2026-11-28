@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     httpOnly: true,
     secure: self.protocol === "https:",
     sameSite: "strict",
-    path: "/admin",
+    path: "/",
     maxAge: SESSION_SECONDS, // the server also enforces this, in isAdminCookie
   });
   return res;
