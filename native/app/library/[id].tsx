@@ -5,6 +5,7 @@ import { MAX_TITLE, type Manifestation, cleanTitle, linesFromText, sameLines } f
 import { displayTitle } from "@/lib/script";
 import { shouldShowPaywall } from "@/lib/paywall";
 import { library } from "../../src/seams/library";
+import { nowPlaying, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
@@ -38,6 +39,7 @@ export default function LibraryDetail() {
   const [rrSpeed, setRrSpeed] = useState<SpeedStep>(DEFAULT_SPEED_STEP);
   const [rrCadence, setRrCadence] = useState<CadenceStep>(DEFAULT_CADENCE_STEP);
 
+  const np = useNowPlaying();
   const credits = useCredits();
   const rrState = useRerecordState(id);
 
@@ -234,9 +236,22 @@ export default function LibraryDetail() {
               </Text>
             ) : null}
 
-            {/* Play button — hidden while recording, shown otherwise */}
+            {/* Play / Stop / Resume — large widget mirrors player/[id] when this item is active (#262). */}
             {rrState.status !== "recording" && rrState.status !== "charged" ? (
-              <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
+              np.id === m.id && (np.status === "playing" || np.status === "stopped-mid") ? (
+                <View style={s.acts}>
+                  {np.status === "stopped-mid" ? (
+                    <>
+                      <Button kind="primary" label="Resume" onPress={() => nowPlaying.resume()} />
+                      <Button label="Start over" onPress={() => nowPlaying.stop()} />
+                    </>
+                  ) : (
+                    <Button label="Stop" onPress={() => nowPlaying.pause()} />
+                  )}
+                </View>
+              ) : (
+                <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
+              )
             ) : null}
 
             {IMAGES_ENABLED ? <ImageGallery wish={m.want} /> : null}

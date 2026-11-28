@@ -3,7 +3,7 @@ import type { Manifestation } from "@/lib/library/model";
 
 /** The subset of NowPlayingState this function needs. */
 export type PlayingState = {
-  status: "idle" | "preparing" | "playing" | "paused";
+  status: "idle" | "preparing" | "playing" | "stopped-mid";
   id: string;
   index: number;
 };
