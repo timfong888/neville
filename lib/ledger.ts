@@ -19,6 +19,8 @@ export type LedgerEntry = {
   estUsd: number | null;
   /** False when the call failed; it may still have been billed in part. */
   ok?: boolean;
+  /** The attempt id this entry belongs to, for log correlation. */
+  attempt_id?: string;
 };
 
 /** Budget levels that raise an alert, in percent of the spend ceiling. */
