@@ -153,14 +153,15 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   if (isAdult) {
     const adultResult = await writeAdultScript({ key, want, name, variant });
     if (!adultResult.ok) {
-      await charged.refund();
-      await slot?.release();
       console.warn("[adult_script_refused]", JSON.stringify({ reason: adultResult.reason, category: adultResult.category ?? null, route: "manifest" }));
-      const msg = adultResult.reason === "output_gate"
-        ? "The script did not pass the content check. Please try again."
-        : "Adult-tier script model unavailable.";
-      return NextResponse.json({ code: "content_policy", error: msg }, { status: 422 });
-    }
+      if (adultResult.reason === "output_gate") {
+        await charged.refund();
+        await slot?.release();
+        return NextResponse.json({ code: "content_policy", error: "The script did not pass the content check. Please try again." }, { status: 422 });
+      }
+      // no_model: adult models unavailable — alert and fall through to the standard script path.
+      alertFailure("adult_models_unavailable", { route: "manifest", attempt_id: attemptId });
+    } else {
     // No share link and no gallery for adult-tier items.
     // The X-Adult header tells the native app to suppress share/gallery controls.
     const adultScript = adultResult.script;
@@ -233,7 +234,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         ...(speech.starts ? { "X-Line-Starts": JSON.stringify(speech.starts) } : {}),
       },
     });
-  }
+    } // end else (adult success)
+  } // end if (isAdult)
 
   captureEvent("attempt_started", { route: "manifest", attempt_id: attemptId, build });
   const isExact = body.scriptMode === "exact";

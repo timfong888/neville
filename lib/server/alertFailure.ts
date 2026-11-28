@@ -2,7 +2,7 @@ import "server-only";
 import { captureEvent } from "@/lib/server/telemetry";
 import { recordFailure } from "@/lib/server/failureStore";
 
-export type AlertKind = "script_failed" | "voice_failed" | "manifest_timeout";
+export type AlertKind = "script_failed" | "voice_failed" | "manifest_timeout" | "adult_models_unavailable";
 
 type SafeFields = {
   route: string;

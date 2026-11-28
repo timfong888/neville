@@ -16,7 +16,11 @@
   "scriptTimeoutMs": 36000,
   "scriptTryTimeoutMs": 24000,
   "adultScriptModels": [
-    "nothingiisreal/mn-celeste-12b"
+    "sao10k/l3.1-euryale-70b",
+    "anthracite-org/magnum-v4-72b",
+    "thedrummer/cydonia-24b-v4.1",
+    "nousresearch/hermes-4-405b",
+    "x-ai/grok-4.6"
   ],
   "vetModels": [
     "google/gemini-2.5-flash-lite",
