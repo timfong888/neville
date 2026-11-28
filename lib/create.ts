@@ -36,6 +36,15 @@ export const freeBanner = (used: number): string => {
 };
 export const nextVariant = (v: number): number => (v + 1) % VARIANT_COUNT;
 
+/**
+ * Whether this selector button should appear as the active/highlighted choice.
+ * True when the button's mode matches the current scriptMode.
+ * Used by the Create screen's "Enhance with AI" / "My own words" selector.
+ */
+export function selectorButtonActive(scriptMode: ScriptMode, buttonMode: ScriptMode): boolean {
+  return scriptMode === buttonMode;
+}
+
 /** The title when there is no recording. It is not about the wish, as on the website's Save. */
 export const FALLBACK_TITLE = "A moment of calm";
 
@@ -100,6 +109,8 @@ export type Made = {
   scriptMode?: "exact";
   /** The attempt ID for this generation, used to show a reference on failure. */
   attemptId?: string;
+  /** First 8 hex chars of the attempt_id from the server error; shown as the support reference. */
+  supportCode?: string;
   /** Short build tag from the server, included in the Copy reference line. */
   build?: string;
 };
@@ -140,6 +151,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
     const written = e instanceof ApiError ? scriptLines(e.lines) : null;
     const how = deviceVoice ? "in your device's own voice" : "to read";
+    const support = e instanceof ApiError ? (e.data?.supportCode ?? e.data?.attemptId) : undefined;
     return {
       // Nothing typed is shown back when the request failed: not in the script, not in the title.
       title: FALLBACK_TITLE,
@@ -147,6 +159,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
       note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
       recording: null,
       attemptId,
+      ...(support ? { supportCode: support } : {}),
     };
   }
 }

@@ -4,10 +4,12 @@ import { Link } from "expo-router";
 import { gateCard } from "@/lib/createGate";
 import { colors as C, radius, space, type } from "../theme";
 
-export function Button(p: { label: string; onPress: () => void; disabled?: boolean; small?: boolean }) {
+export function Button(p: { label: string; onPress: () => void; disabled?: boolean; small?: boolean; active?: boolean }) {
+  const chipStyle = p.active ? s.chipActive : s.chip;
+  const chipTextStyle = p.active ? s.chipActiveText : s.chipText;
   return (
-    <Pressable accessibilityRole="button" disabled={p.disabled} onPress={p.onPress} style={[p.small ? s.chip : s.btn, p.disabled && s.off]}>
-      <Text style={p.small ? s.chipText : s.btnText}>{p.label}</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: p.active }} disabled={p.disabled} onPress={p.onPress} style={[p.small ? chipStyle : s.btn, p.disabled && s.off]}>
+      <Text style={p.small ? chipTextStyle : s.btnText}>{p.label}</Text>
     </Pressable>
   );
 }
@@ -38,6 +40,8 @@ export const s = StyleSheet.create({
   btnText: { color: C.accentInk, fontSize: 16, fontWeight: "600" },
   chip: { borderColor: C.line, borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
   chipText: { color: C.text, fontSize: 14 },
+  chipActive: { backgroundColor: C.accent, borderColor: C.accent, borderWidth: 1, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 12 },
+  chipActiveText: { color: C.accentInk, fontSize: 14, fontWeight: "600" as const },
   off: { opacity: 0.45 },
   link: { color: C.accentText, fontSize: 16 },
   line: { color: C.muted, fontSize: 14, lineHeight: 20 },
