@@ -210,6 +210,8 @@ textarea:focus, input:focus, select:focus, button:focus-visible {
 .script li.now { color: var(--text); }
 .script li.past { color: #6d6f78; }
 
+.script-edit { width: 100%; min-height: 120px; margin: 14px 0 0; resize: vertical; }
+
 .meter {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   margin-top: 16px; padding: 12px 14px; border-radius: 12px;
