@@ -60,14 +60,14 @@ describe("rerecordState", () => {
       expect(next).toBe(done);
     });
 
-    it("does nothing from failed", () => {
+    it("(a) transitions from failed to recording — allows retry after failed re-record", () => {
       const next = transition(failed, { type: "record_tap" });
-      expect(next).toBe(failed);
+      expect(next.status).toBe("recording");
     });
 
-    it("does nothing from no_credits", () => {
+    it("transitions from no_credits to recording — allows retry after paywall cleared", () => {
       const nc: RerecordState = { status: "no_credits", balance: null, failReason: null, creditReturned: false };
-      expect(transition(nc, { type: "record_tap" })).toBe(nc);
+      expect(transition(nc, { type: "record_tap" }).status).toBe("recording");
     });
   });
 
