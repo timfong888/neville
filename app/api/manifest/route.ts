@@ -14,7 +14,7 @@ import { segmentLines, segmentsToPausedLines } from "@/lib/speech/pauses";
 import { resolveVoice } from "@/lib/voices";
 import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { type PaidState, charge, runPaid, timeoutAnswer, timeoutResponse, voiceBudget, whoIsAsking } from "@/lib/server/paywall";
-import { isUnlimited, paywallEnabled } from "@/lib/credits";
+import { isFilterRelaxed, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +92,8 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
+  const relaxed = isFilterRelaxed(session);
+  if (relaxed && session) console.info("[relaxed]", session.id);
   const slot = tester ? null : await takeSlot(visitor(req));
   if (slot?.refusal) return NextResponse.json(slot.refusal, { status: slot.refusal.status });
 
@@ -146,7 +148,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       script = { lines, source: "exact", refrain };
     }
   } else {
-    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, attemptId, voiceId: voice.id, voiceModel: voice.model });
+    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, relaxed, attemptId, voiceId: voice.id, voiceModel: voice.model });
   }
   if (script.source === "model") {
     captureEvent("script_ok", { route: "manifest", attempt_id: attemptId, model: script.model, elapsedMs: Date.now() - started });
@@ -248,6 +250,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),
       ...(script.source === "exact" ? { "X-Script-Mode": "exact" } : {}),
       ...(script.title ? { "X-Title": Buffer.from(script.title, "utf8").toString("base64") } : {}),
+      ...(script.term ? { "X-Script-Term": script.term } : {}),
       // When set, the last line start belongs to this refrain, recorded after the script.
       ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(script.refrain, "utf8").toString("base64") } : {}),
       // Repetition was asked for, but this voice's audio cannot be cut apart to

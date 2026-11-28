@@ -27,6 +27,8 @@ export type AccountState = {
   user: { id: string; name: string; email: string; image: string | null } | null;
   missing?: string[];
   providers?: ("google" | "apple")[];
+  /** True when the signed-in user is on the relaxed minor-word filter allowlist. */
+  relaxed?: boolean;
 };
 
 /** What a `POST /api/manifest` or `/api/rerecord` returns: the recording and what it was made from. */
@@ -39,6 +41,8 @@ export type Recording = {
   source: string;
   /** Why the template was used; set when source is "template". */
   reason?: string;
+  /** The minor word that caused a withheld result, for guidance text. */
+  term?: string;
   /** Line start times as fractions of the clip, when the server sent sound ones. */
   starts?: number[];
   /** 2–5 word title from the model, via X-Title (base64 UTF-8). Absent for templates. */
@@ -161,6 +165,7 @@ export function createApi(opts: ApiOptions) {
     const script = lines ?? readScript(res.headers.get("X-Script"));
     const reason = res.headers.get("X-Script-Reason") ?? undefined;
     const title = readTitle(res.headers.get("X-Title"));
+    const term = res.headers.get("X-Script-Term") ?? undefined;
     const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
     const scriptModeHeader = res.headers.get("X-Script-Mode");
     const attemptId = res.headers.get("X-Attempt-Id") ?? undefined;
@@ -173,6 +178,7 @@ export function createApi(opts: ApiOptions) {
       source: res.headers.get("X-Script-Source") ?? "",
       ...(reason !== undefined ? { reason } : {}),
       ...(title !== undefined ? { title } : {}),
+      ...(term !== undefined ? { term } : {}),
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
       ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
       ...(scriptModeHeader === "exact" ? { scriptMode: "exact" as const } : {}),

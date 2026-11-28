@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // @ts-expect-error plain .mjs script, no type declarations
 import { runMigrations } from "../scripts/migrate-core.mjs";
+import { isFilterRelaxed } from "@/lib/credits";
 
 vi.mock("server-only", () => ({}));
 
@@ -45,7 +46,8 @@ vi.mock("@/lib/server/limits", () => ({
   takeSlot: (ip: string) => takeSlot(ip),
   underCeiling: async () => (underCeilingOk ? { ok: true, usage: 0 } : { ok: false, refusal: { status: 503, code: "budget_unknown", error: "Paused." } }),
 }));
-vi.mock("@/lib/server/writer", () => ({ writeScript: async () => ({ lines: ["It is done."], refrain: "r", source: "model", model: "m" }) }));
+const writeScriptFn = vi.fn();
+vi.mock("@/lib/server/writer", () => ({ writeScript: (...a: unknown[]) => writeScriptFn(...a) }));
 vi.mock("@/lib/server/vet", () => ({ vetScript: async () => ({ ok: true, model: "m", costUsd: 0 }) }));
 vi.mock("@/lib/server/tts", () => ({ synthesize: (o: unknown) => synth(o) }));
 vi.mock("@/lib/server/ledger", () => ({ record: async () => undefined, estimateSpeech: async () => 0 }));
@@ -94,7 +96,11 @@ beforeEach(async () => {
   vi.stubEnv("PAYWALL_ENABLED", "true");
   vi.stubEnv("UNLIMITED_USER_EMAILS", "");
   vi.stubEnv("UNLIMITED_USER_IDS", "");
+  vi.stubEnv("RELAXED_FILTER_EMAILS", "");
+  vi.stubEnv("RELAXED_FILTER_IDS", "");
   vi.stubEnv("REVENUECAT_ACCEPT_SANDBOX", "true");
+  writeScriptFn.mockReset();
+  writeScriptFn.mockResolvedValue({ lines: ["It is done."], refrain: "r", source: "model", model: "m" });
   pg = new PGlite();
   await runMigrations(
     { query: async (t: string, p?: unknown[]) => (p ? pg.query(t, p) : ((await pg.exec(t)).at(-1) ?? { rows: [] })) },
@@ -566,5 +572,69 @@ describe("tester daily-slot bypass", () => {
     const res = await call();
     expect(res.status).toBe(200);
     expect(takeSlot).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isFilterRelaxed (issue 215)", () => {
+  const verified = { id: "alice", email: "alice@x.test", emailVerified: true as const, name: "Alice", image: null };
+  const unverified = { ...verified, emailVerified: false as const };
+
+  it("returns false when RELAXED_FILTER_EMAILS is unset or empty", () => {
+    expect(isFilterRelaxed(verified, undefined, undefined)).toBe(false);
+    expect(isFilterRelaxed(verified, "", "")).toBe(false);
+  });
+  it("returns true for a verified email on the relaxed list", () => {
+    expect(isFilterRelaxed(verified, "alice@x.test", "")).toBe(true);
+    expect(isFilterRelaxed(verified, "ALICE@X.TEST", "")).toBe(true);
+  });
+  it("returns false for an unverified email even if listed", () => {
+    expect(isFilterRelaxed(unverified, "alice@x.test", "")).toBe(false);
+  });
+  it("returns true for a matching id regardless of email verification", () => {
+    expect(isFilterRelaxed(unverified, "", "alice")).toBe(true);
+  });
+  it("returns false for null user", () => {
+    expect(isFilterRelaxed(null, "alice@x.test", "alice")).toBe(false);
+  });
+});
+
+describe("relaxed filter route logging and writeScript arg (issue 215)", () => {
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    infoSpy.mockRestore();
+  });
+
+  it("manifest logs [relaxed] and passes relaxed: true to writeScript for a relaxed account", async () => {
+    vi.stubEnv("RELAXED_FILTER_EMAILS", "alice@x.test");
+    await callManifest();
+    const relaxedLogs = infoSpy.mock.calls.filter((c: unknown[]) => c[0] === "[relaxed]");
+    expect(relaxedLogs).toHaveLength(1);
+    expect(relaxedLogs[0][1]).toBe("alice");
+    expect(writeScriptFn.mock.calls[0][0]).toMatchObject({ relaxed: true });
+  });
+
+  it("manifest does not log [relaxed] and passes relaxed: false for a non-relaxed account", async () => {
+    await callManifest();
+    expect(infoSpy.mock.calls.filter((c: unknown[]) => c[0] === "[relaxed]")).toHaveLength(0);
+    expect(writeScriptFn.mock.calls[0][0]).toMatchObject({ relaxed: false });
+  });
+
+  it("rerecord logs [relaxed] for a relaxed account", async () => {
+    vi.stubEnv("RELAXED_FILTER_EMAILS", "alice@x.test");
+    await callRerecord();
+    const relaxedLogs = infoSpy.mock.calls.filter((c: unknown[]) => c[0] === "[relaxed]");
+    expect(relaxedLogs).toHaveLength(1);
+    expect(relaxedLogs[0][1]).toBe("alice");
+  });
+
+  it("relaxed account with unverified email is not relaxed", async () => {
+    vi.stubEnv("RELAXED_FILTER_EMAILS", "alice@x.test");
+    user = { ...alice, emailVerified: false };
+    await callManifest();
+    expect(infoSpy.mock.calls.filter((c: unknown[]) => c[0] === "[relaxed]")).toHaveLength(0);
+    expect(writeScriptFn.mock.calls[0][0]).toMatchObject({ relaxed: false });
   });
 });

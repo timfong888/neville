@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
 import { scoreVividness, type NameOpts } from "@/lib/script/vividness";
 
 type Catalog = { at: number; ids: Set<string> };
@@ -61,6 +61,8 @@ export type Script = {
   reason?: string;
   /** 2–5 word noun phrase from the model; absent when missing or invalid, absent for templates. */
   title?: string;
+  /** The minor word that caused a withheld result, for use in guidance text. Never the full wish. */
+  term?: string;
 };
 
 /** Why the last try did not give a script. */
@@ -80,7 +82,7 @@ function publicReason(f: Failure): string {
   return "writer_error";
 }
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; attemptId?: string; voiceId?: string; voiceModel?: string }): Promise<Script> {
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; relaxed?: boolean; attemptId?: string; voiceId?: string; voiceModel?: string }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
   let attempt = 0;
@@ -103,10 +105,14 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };
   // A romantic or sexual wish about someone under 18 is never sent to a model (#170).
-  if (wishSexualisesMinor(opts.want)) {
+  // Relaxed accounts use the narrower MINOR_CLEAR list; the check is never fully off.
+  const withheld = opts.relaxed ? wishSexualisesMinorRelaxed(opts.want) : (wishSexualisesMinor(opts.want) || wishSexualisesFamilyRole(opts.want));
+  if (withheld) {
     failure = { reason: "withheld" };
     const category = wishSexualisesMinorCategory(opts.want);
-    return template(category ? { category } : {});
+    const term = withheldMinorTerm(opts.want, opts.relaxed ?? false);
+    const s = template({ ...(category ? { category } : {}), ...(opts.relaxed ? { tier: "relaxed" } : {}) });
+    return term ? { ...s, term } : s;
   }
   // Rewrite want-language to present tense before the LLM sees the wish.
   // Safety checks always use the original opts.want.
