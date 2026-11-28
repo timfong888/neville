@@ -21,6 +21,10 @@ export type RerecordState = {
   failCode?: string;
   /** Actionable suggestions from the server, shown below the error message. */
   failHint?: string;
+  /** Short support reference code (8 hex chars) for the failed attempt. Shown with Copy button. */
+  supportCode?: string;
+  /** Full attempt ID for the Copy button's clipboard text. */
+  attemptId?: string;
 };
 
 export type RerecordEvent =
@@ -28,7 +32,7 @@ export type RerecordEvent =
   | { type: "record_tap" }
   | { type: "server_charged"; balance: string | null }
   | { type: "server_done" }
-  | { type: "server_failed"; reason: string; creditReturned: boolean; code?: string; hint?: string }
+  | { type: "server_failed"; reason: string; creditReturned: boolean; code?: string; hint?: string; supportCode?: string; attemptId?: string }
   | { type: "server_402" };
 
 export const INITIAL_STATE: RerecordState = {
@@ -63,7 +67,16 @@ export function transition(state: RerecordState, event: RerecordEvent): Rerecord
 
     case "server_failed":
       if (state.status !== "recording" && state.status !== "charged") return state;
-      return { status: "failed", balance: null, failReason: event.reason, creditReturned: event.creditReturned, ...(event.code ? { failCode: event.code } : {}), ...(event.hint ? { failHint: event.hint } : {}) };
+      return {
+        status: "failed",
+        balance: null,
+        failReason: event.reason,
+        creditReturned: event.creditReturned,
+        ...(event.code ? { failCode: event.code } : {}),
+        ...(event.hint ? { failHint: event.hint } : {}),
+        ...(event.supportCode ? { supportCode: event.supportCode } : {}),
+        ...(event.attemptId ? { attemptId: event.attemptId } : {}),
+      };
 
     case "server_402":
       if (state.status !== "recording") return state;

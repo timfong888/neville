@@ -85,6 +85,8 @@ export default function ManifestationPage() {
           code?: string;
           creditReturned?: boolean;
           hint?: string;
+          supportCode?: string;
+          attemptId?: string;
         } | null;
         if (res.status === 402) {
           dispatch({ type: "server_402" });
@@ -92,7 +94,15 @@ export default function ManifestationPage() {
         }
         const reason = j?.error ?? "The recording could not be made just now.";
         const creditReturned = j?.creditReturned === true;
-        dispatch({ type: "server_failed", reason, creditReturned, code: j?.code, hint: j?.hint });
+        dispatch({
+          type: "server_failed",
+          reason,
+          creditReturned,
+          code: j?.code,
+          hint: j?.hint,
+          supportCode: j?.supportCode,
+          attemptId: j?.attemptId,
+        });
         return;
       }
       const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
@@ -209,6 +219,25 @@ export default function ManifestationPage() {
       {rrState.status === "failed" && rrState.failHint && (
         <p className="small muted" role="note">
           {rrState.failHint}
+        </p>
+      )}
+      {rrState.status === "failed" && rrState.supportCode && (
+        <p className="small muted">
+          {"Reference: "}
+          <code>{rrState.supportCode}</code>
+          {" "}
+          <button
+            type="button"
+            className="btn sm ghost"
+            onClick={() => {
+              const text = rrState.attemptId
+                ? `Neville ref ${rrState.attemptId} ${new Date().toISOString()}`
+                : rrState.supportCode!;
+              void navigator.clipboard.writeText(text);
+            }}
+          >
+            Copy
+          </button>
         </p>
       )}
 
