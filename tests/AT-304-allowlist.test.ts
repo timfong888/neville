@@ -266,6 +266,83 @@ describe("AT-3: hard-block fixtures return 422 on both standard and adult tier",
   });
 });
 
+// ── Email matching invariants ─────────────────────────────────────────────────
+// isAdultTierUser does email.trim().toLowerCase() on the session email AND on each
+// allowlist entry, so a capitalised session email (e.g. Apple stores "Timfong888@gmail.com")
+// still matches a lowercase allowlist entry "timfong888@gmail.com".
+//
+// isFilterRelaxed email path ALSO normalises both sides, BUT it additionally requires
+// emailVerified === true.  The ID path (RELAXED_FILTER_IDS) has no emailVerified check.
+
+describe("email matching invariants — isAdultTierUser", () => {
+  it("capital-T session email matches lowercase allowlist entry", async () => {
+    // Reproduces Tim's exact scenario: Apple stores the email with capital T.
+    process.env.ADULT_TIER_ENABLED = "true";
+    process.env.ADULT_TIER_EMAILS = "timfong888@gmail.com";
+    const { isAdultTierUser } = await import("@/lib/adult/tier");
+    expect(isAdultTierUser("Timfong888@gmail.com")).toBe(true);
+  });
+
+  it("trailing-space session email matches trimmed allowlist entry", async () => {
+    process.env.ADULT_TIER_ENABLED = "true";
+    process.env.ADULT_TIER_EMAILS = "timfong888@gmail.com";
+    const { isAdultTierUser } = await import("@/lib/adult/tier");
+    expect(isAdultTierUser("Timfong888@gmail.com ")).toBe(true);
+  });
+
+  it("leading-space session email matches trimmed allowlist entry", async () => {
+    process.env.ADULT_TIER_ENABLED = "true";
+    process.env.ADULT_TIER_EMAILS = "timfong888@gmail.com";
+    const { isAdultTierUser } = await import("@/lib/adult/tier");
+    expect(isAdultTierUser(" timfong888@gmail.com")).toBe(true);
+  });
+
+  it("isAdultTierUser does NOT require emailVerified — matches even when emailVerified is absent", async () => {
+    // Contrast with isFilterRelaxed which requires emailVerified=true on the email path.
+    process.env.ADULT_TIER_ENABLED = "true";
+    process.env.ADULT_TIER_EMAILS = "timfong888@gmail.com";
+    vetReply = "OK";
+    currentUserMock.mockResolvedValue({ id: "u-tim", email: "Timfong888@gmail.com", emailVerified: false });
+    const res = await POST(req(FIXTURE_SCRIPT));
+    // Adult vet is used (isAdult=true from email match); no emailVerified required.
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("email matching invariants — isFilterRelaxed", () => {
+  it("capital-T session email with emailVerified=true matches lowercase RELAXED_FILTER_EMAILS entry", async () => {
+    const { isFilterRelaxed } = await import("@/lib/credits");
+    const result = isFilterRelaxed(
+      { id: "u1", email: "Timfong888@gmail.com", emailVerified: true },
+      /* rawEmails */ "timfong888@gmail.com",
+      /* rawIds */    undefined,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("capital-T session email with emailVerified=false does NOT match RELAXED_FILTER_EMAILS (email path requires verified)", async () => {
+    // Apple sign-in with a third-party (non-Apple) email may not set emailVerified=true.
+    // If that happens, RELAXED_FILTER_EMAILS fails. Use RELAXED_FILTER_IDS to avoid this.
+    const { isFilterRelaxed } = await import("@/lib/credits");
+    const result = isFilterRelaxed(
+      { id: "u1", email: "Timfong888@gmail.com", emailVerified: false },
+      "timfong888@gmail.com",
+      undefined,
+    );
+    expect(result).toBe(false);
+  });
+
+  it("ID path (RELAXED_FILTER_IDS) bypasses emailVerified check", async () => {
+    const { isFilterRelaxed } = await import("@/lib/credits");
+    const result = isFilterRelaxed(
+      { id: "stable-id-99", email: "Timfong888@gmail.com", emailVerified: false },
+      /* rawEmails */ undefined,
+      /* rawIds */    "stable-id-99",
+    );
+    expect(result).toBe(true);
+  });
+});
+
 // ── Cause (c): VET_SYSTEM_ADULT content check ─────────────────────────────────
 
 describe("cause (c): VET_SYSTEM_ADULT prompt does not hard-block the fixture script shape", () => {
