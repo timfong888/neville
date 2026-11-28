@@ -5,6 +5,7 @@ import { MAX_TITLE, type Manifestation, cleanTitle, linesFromText, sameLines } f
 import { displayTitle } from "@/lib/script";
 import { shouldShowPaywall } from "@/lib/paywall";
 import { library } from "../../src/seams/library";
+import { nowPlaying, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { Button } from "../../src/ui/Button";
 import { Screen } from "../../src/ui/Screen";
 import { colors, radius, space, type } from "../../src/theme";
@@ -40,6 +41,7 @@ export default function LibraryDetail() {
   const [rrSpeed, setRrSpeed] = useState<SpeedStep>(DEFAULT_SPEED_STEP);
   const [rrCadence, setRrCadence] = useState<CadenceStep>(DEFAULT_CADENCE_STEP);
 
+  const np = useNowPlaying();
   const credits = useCredits();
   const rrState = useRerecordState(id);
 
@@ -107,8 +109,8 @@ export default function LibraryDetail() {
     if (!newLines.length) return setMsg("The script needs at least one line.");
     const next: Manifestation = { ...m, title: cleanTitle(title) || m.title, lines: newLines, updatedAt: Date.now() };
     try {
-      await library.save(next, scriptChanged ? null : undefined);
-      setM({ ...next, hasAudio: scriptChanged ? false : m.hasAudio });
+      await library.save(next, undefined);
+      setM(next);
       setEditing(false);
       if (scriptChanged) {
         editSaved(id);
@@ -182,21 +184,19 @@ export default function LibraryDetail() {
               placeholderTextColor={colors.muted}
             />
             {losesAudio ? (
-              <Text style={s.warn}>Changing the words removes the recording. Tap Record after saving to hear your edit.</Text>
+              <Text style={s.warn}>The existing recording plays until you re-record with the new script.</Text>
             ) : null}
             <View style={s.acts}>
-              <Button kind="primary" label={losesAudio ? "Save and remove recording" : "Save"} onPress={save} />
+              <Button kind="primary" label="Save" onPress={save} />
               <Button label="Cancel" onPress={() => (setEditing(false), setMsg(""))} />
             </View>
           </>
         ) : (
           <>
             <Text style={type.muted}>
-              {m.hasAudio && rrState.status !== "saved_not_recorded"
+              {m.hasAudio || rrState.status === "done"
                 ? `Recorded in the voice of ${m.voiceName}.`
-                : rrState.status === "done"
-                  ? `Recorded in the voice of ${m.voiceName}.`
-                  : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`}{" "}
+                : `Voice: ${m.voiceName || "none"}. No recording is saved with this script.`}{" "}
               Saved {new Date(m.createdAt).toLocaleDateString()}.
             </Text>
 
@@ -238,9 +238,22 @@ export default function LibraryDetail() {
               </Text>
             ) : null}
 
-            {/* Play button — hidden while recording, shown otherwise */}
+            {/* Play / Stop / Resume — large widget mirrors player/[id] when this item is active (#262). */}
             {rrState.status !== "recording" && rrState.status !== "charged" ? (
-              <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
+              np.id === m.id && (np.status === "playing" || np.status === "stopped-mid") ? (
+                <View style={s.acts}>
+                  {np.status === "stopped-mid" ? (
+                    <>
+                      <Button kind="primary" label="Resume" onPress={() => nowPlaying.resume()} />
+                      <Button label="Start over" onPress={() => nowPlaying.stop()} />
+                    </>
+                  ) : (
+                    <Button label="Stop" onPress={() => nowPlaying.pause()} />
+                  )}
+                </View>
+              ) : (
+                <Button kind="primary" label="Play" onPress={() => router.push(`/player/${m.id}`)} />
+              )
             ) : null}
 
             {IMAGES_ENABLED ? <ImageGallery wish={m.want} relaxed={account?.relaxed ?? false} /> : null}

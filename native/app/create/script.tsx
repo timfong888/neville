@@ -4,7 +4,10 @@ import { Redirect, Stack, useRouter } from "expo-router";
 import { canCreate, isSignedIn } from "@/lib/createGate";
 import { useAccount } from "../../src/accountStore";
 import { leave, newVariation, useCreate } from "../../src/create/session";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { Button, Gate, s } from "../../src/create/ui";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { WaitingPhrases } from "../../src/create/WaitingPhrases";
 import { Screen } from "../../src/ui/Screen";
 
@@ -14,10 +17,11 @@ export default function Script() {
   const c = useCreate();
   const signedIn = isSignedIn(useAccount());
   const router = useRouter();
+  const np = useNowPlaying();
 
   if (c.making) {
     return (
-      <Screen title="Making it yours…">
+      <Screen title="Making it yours…" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
         <Stack.Screen options={{ title: "Your script" }} />
         <Text style={s.muted}>This takes up to half a minute. Keep this page open.</Text>
         <WaitingPhrases />
@@ -32,7 +36,7 @@ export default function Script() {
     router.dismissTo("/create");
   };
   return (
-    <Screen title={c.made.title}>
+    <Screen title={c.made.title} footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Stack.Screen options={{ title: "Your script" }} />
       {c.made.note ? <Text style={s.muted}>{c.made.note}</Text> : null}
       <View style={s.card}>
