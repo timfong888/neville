@@ -75,7 +75,15 @@ function classify(e: unknown): Failure {
   return name === "TimeoutError" || name === "AbortError" ? { reason: "timeout" } : { reason: "exception", error: name };
 }
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; relaxed?: boolean; voiceId?: string; voiceModel?: string }): Promise<Script> {
+/** Maps internal failure reasons to public reason codes for telemetry. */
+function publicReason(f: Failure): string {
+  if (f.reason === "withheld") return "filter_withheld";
+  if (f.reason === "timeout") return "writer_timeout";
+  if (f.reason === "http_status" && f.status === 429) return "writer_refused";
+  return "writer_error";
+}
+
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; relaxed?: boolean; attemptId?: string; voiceId?: string; voiceModel?: string }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
   let attempt = 0;
@@ -88,11 +96,12 @@ export async function writeScript(opts: { key: string; want: string; name: strin
   // saying why, from numbers and names only: never the wish, the name, the
   // model's reply, an error message (some echo the body) or the key.
   const template = (extra: Record<string, unknown> = {}): Script => {
-    console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started }));
+    const code = publicReason(failure);
+    console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started, attempt_id: opts.attemptId ?? null }));
     if (failure.reason !== "withheld") {
-      alertFailure("script_failed", { route: "manifest", reason: failure.reason, model: model ?? opts.voiceModel ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started, ...(opts.voiceId ? { voice: opts.voiceId } : {}) });
+      alertFailure("script_failed", { route: "manifest", reason: code, model: model ?? opts.voiceModel ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started, attempt_id: opts.attemptId, ...(opts.voiceId ? { voice: opts.voiceId } : {}) });
     } else {
-      captureEvent("script_withheld", { route: "manifest" });
+      captureEvent("script_withheld", { route: "manifest", reason: code, attempt_id: opts.attemptId });
     }
     return { lines: neutralScript(opts.name), source: "template", reason: failure.reason, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
   };

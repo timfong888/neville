@@ -9,6 +9,8 @@ import { CLOSING } from "@/lib/prompt";
 import { type Playback, play } from "../../src/create/playback";
 import { pauseWatch } from "../../src/create/pauseWatch";
 import { canSpeak, leave, newVariation, save, updateMade, useCreate } from "../../src/create/session";
+import { shortRef, copyLine } from "@/lib/attemptId";
+import { Share } from "react-native";
 import { Button, Gate, s } from "../../src/create/ui";
 import { setBell, useBell } from "../../src/player/bellStore";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
@@ -195,6 +197,12 @@ export default function Recording() {
       <Stack.Screen options={{ title: "Your recording" }} />
       <Text style={s.muted}>{done ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}</Text>
       {made.note ? <Text style={s.muted}>{made.note}</Text> : null}
+      {!made.recording && made.attemptId ? (
+        <View style={s.row}>
+          <Text style={s.muted}>Reference {shortRef(made.attemptId)}</Text>
+          <Button small label="Copy" onPress={() => void Share.share({ message: copyLine(made.attemptId!, made.build ?? "") })} />
+        </View>
+      ) : null}
       <View style={[s.card, s.stage]} accessibilityLiveRegion="polite">
         <Text style={s.spoken} adjustsFontSizeToFit numberOfLines={3}>{done ? CLOSING : idx >= 0 ? made.lines[idx] : ""}</Text>
       </View>
