@@ -16,8 +16,8 @@ function memory(seed: Record<string, string> = {}, refuse = false): KV & { data:
 }
 
 describe("native settings store", () => {
-  it("gives the website's defaults when nothing is stored", async () => {
-    expect(await makeSettingsStore(memory()).read()).toEqual({ voiceId: DEFAULT_VOICE_ID, pace: DEFAULT_PACE_ID, tone: DEFAULT_TONE_ID, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP });
+  it("gives null voiceId (no preference) and other defaults when nothing is stored", async () => {
+    expect(await makeSettingsStore(memory()).read()).toEqual({ voiceId: null, pace: DEFAULT_PACE_ID, tone: DEFAULT_TONE_ID, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP });
   });
 
   it("uses the website's storage keys", () => {

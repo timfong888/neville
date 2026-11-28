@@ -17,10 +17,10 @@ const api = (out: Recording | Error, seen: WishRequest[] = []) => ({
 const wish = { want: "  I want to be calm  ", name: " Tim " };
 
 describe("the Create flow (#120)", () => {
-  it("sends the trimmed wish, a known voice id and the Settings choices", async () => {
+  it("sends the trimmed wish and the voice id as-is (server validates)", async () => {
     const seen: WishRequest[] = [];
     await makeManifestation(api(rec(), seen), { ...wish, voiceId: "no-such-voice", variant: 2, pace: "slow", tone: "warm" }, true);
-    expect(seen).toEqual([{ want: "I want to be calm", name: "Tim", voiceId: DEFAULT_VOICE_ID, variant: 2, pace: "slow", tone: "warm" }]);
+    expect(seen).toEqual([{ want: "I want to be calm", name: "Tim", voiceId: "no-such-voice", variant: 2, pace: "slow", tone: "warm" }]);
   });
   it("cuts the wish and name to the web limits", () => {
     const r = wishRequest({ want: "w".repeat(400), name: "n".repeat(80) });
@@ -147,8 +147,8 @@ describe("the Create flow (#120)", () => {
     const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
     expect(voiceFor(other.id, DEFAULT_VOICE_ID)).toBe(other.id);
     expect(voiceFor(null, other.id)).toBe(other.id);
-    expect(voiceFor("gone", "also-gone")).toBe(DEFAULT_VOICE_ID);
-    if (sampleOnly) expect(voiceFor(sampleOnly.id, other.id)).toBe(other.id);
+    expect(voiceFor("gone", "also-gone")).toBe("gone");
+    if (sampleOnly) expect(voiceFor(sampleOnly.id, other.id)).toBe(sampleOnly.id);
     // The pick reaches the request body and the Library item.
     let body: WishRequest | undefined;
     const w = { want: "to be calm", name: "Tim", voiceId: voiceFor(other.id, DEFAULT_VOICE_ID) };
@@ -172,8 +172,8 @@ describe("the Create flow (#120)", () => {
     expect(seeSettingsVoice(made, b)).toEqual({ picked: b, settingsVoice: b, voiceId: b });
     // A pick made before Settings was ever read is kept by the first reading.
     expect(seeSettingsVoice(pickOnCreate(NO_PICK, b, a), a).voiceId).toBe(b);
-    // A voice that may not be recorded is not picked.
-    expect(pickOnCreate(start, "gone", a).voiceId).toBe(a);
+    // Any voice id is accepted; the server validates on each request.
+    expect(pickOnCreate(start, "gone", a).voiceId).toBe("gone");
   });
 });
 

@@ -2,7 +2,6 @@
 // Voice id is stored and returned as-is; the server validates it on every request.
 import { resolvePace, resolveTone, type PaceId, type ToneId } from "@/lib/delivery";
 import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
-import { FALLBACK_VOICE_ID } from "./voiceConstants";
 import type { KV } from "./kv.types";
 
 /** The website's keys, so a choice made there is the choice here. */
@@ -14,7 +13,7 @@ export const SETTINGS_KEYS = {
   cadenceStep: "nv_cadence_step",
 } as const;
 
-export type Settings = { voiceId: string; pace: PaceId; tone: ToneId; speedStep: SpeedStep; cadenceStep: CadenceStep };
+export type Settings = { voiceId: string | null; pace: PaceId; tone: ToneId; speedStep: SpeedStep; cadenceStep: CadenceStep };
 
 export function makeSettingsStore(kv: KV) {
   const listeners = new Set<() => void>();
@@ -29,7 +28,7 @@ export function makeSettingsStore(kv: KV) {
         kv.get(SETTINGS_KEYS.cadenceStep),
       ]);
       return {
-        voiceId: v ?? FALLBACK_VOICE_ID,
+        voiceId: v ?? null,
         pace: resolvePace(p).id,
         tone: resolveTone(t).id,
         speedStep: resolveSpeed(sp).id,

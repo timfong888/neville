@@ -14,7 +14,7 @@ type Props = {
   voiceName: string;
   speedStep: SpeedStep;
   cadenceStep: CadenceStep;
-  onPickVoice: (id: string) => void;
+  onPickVoice: (id: string, name: string) => void;
   onPickSpeed: (id: SpeedStep) => void;
   onPickCadence: (id: CadenceStep) => void;
 };
@@ -55,7 +55,7 @@ export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPic
                 label={v.name}
                 note={v.desc ?? v.label}
                 selected={voiceId === v.id}
-                onPress={() => onPickVoice(v.id)}
+                onPress={() => onPickVoice(v.id, v.name)}
                 right={
                   <SmallButton
                     label={playing === v.id ? "Stop" : "Play"}

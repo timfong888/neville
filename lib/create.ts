@@ -44,7 +44,9 @@ export const FALLBACK_TITLE = "A moment of calm";
  * recorded, else the Settings choice. Picking on Create does not change Settings (#150).
  */
 export function voiceFor(picked: string | null | undefined, settingsVoiceId: string | null | undefined): string {
-  return picked && resolveVoice(picked).id === picked ? picked : resolveVoice(settingsVoiceId).id;
+  // Server validates on each request; accept any picked id directly.
+  if (picked) return picked;
+  return resolveVoice(settingsVoiceId).id;
 }
 
 /** What Create remembers about the voice: its own pick, and the Settings voice it last saw. */
@@ -55,7 +57,7 @@ export const NO_PICK: VoicePick = { picked: null, settingsVoice: null };
  * Called with the Settings voice each time it is read. A pick on Create lasts until the
  * Settings voice changes: a newer choice there wins. The first reading clears nothing.
  */
-export function seeSettingsVoice(p: VoicePick, settingsVoiceId: string): VoicePick & { voiceId: string } {
+export function seeSettingsVoice(p: VoicePick, settingsVoiceId: string | null): VoicePick & { voiceId: string } {
   const changed = p.settingsVoice !== null && p.settingsVoice !== settingsVoiceId;
   const picked = changed ? null : p.picked;
   return { picked, settingsVoice: settingsVoiceId, voiceId: voiceFor(picked, settingsVoiceId) };
@@ -78,7 +80,7 @@ export function wishRequest(w: Wish): WishRequest {
   return {
     want: w.want.trim().slice(0, MAX_WANT),
     name: w.name.trim().slice(0, MAX_NAME),
-    voiceId: resolveVoice(w.voiceId).id,
+    voiceId: w.voiceId ?? undefined,
     variant: w.variant ?? 0,
     pace: w.pace,
     tone: w.tone,

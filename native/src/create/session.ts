@@ -2,6 +2,8 @@
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
 import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, type ScriptMode, SCRIPT_MODE_KEY, makeManifestation, nextVariant, noteForReason, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
+// Server voice names are not in the bundled lib/voices; cache them so pickers show the right name.
+const serverVoiceNames = new Map<string, string>();
 import { newAttemptId } from "@/lib/attemptId";
 import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
@@ -64,11 +66,11 @@ const write = (key: string, value: string | null) => void (value === null ? kv.r
 export const canSpeak = (): boolean => typeof (globalThis as { speechSynthesis?: unknown }).speechSynthesis !== "undefined";
 
 /** The state for a voice id: its id and the name to show. */
-const voice = (id: string) => ({ voiceId: id, voiceName: resolveVoice(id).name });
+const voice = (id: string) => ({ voiceId: id, voiceName: serverVoiceNames.get(id) ?? resolveVoice(id).name });
 
 // The Settings voice last seen; the rules are in lib/create.ts.
 let settingsVoice: string | null = null;
-function voiceNow(settingsVoiceId: string) {
+function voiceNow(settingsVoiceId: string | null) {
   const next = seeSettingsVoice({ picked: state.picked, settingsVoice }, settingsVoiceId);
   settingsVoice = next.settingsVoice;
   return { picked: next.picked, ...voice(next.voiceId) };
@@ -110,8 +112,10 @@ export function edit(p: { want?: string }): void {
   write(DRAFT_STORAGE_KEY, state.want ? JSON.stringify({ want: state.want }) : null);
 }
 
-/** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice. */
-export async function pickVoice(id: string, asDefault = false): Promise<boolean> {
+/** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice.
+ *  Pass `serverName` for voices that exist on the server but are not in the bundled lib/voices list. */
+export async function pickVoice(id: string, asDefault = false, serverName?: string): Promise<boolean> {
+  if (serverName) serverVoiceNames.set(id, serverName);
   const next = pickOnCreate({ picked: state.picked, settingsVoice }, id, state.voiceId, asDefault);
   settingsVoice = next.settingsVoice;
   set({ picked: next.picked, ...voice(next.voiceId) });
@@ -146,13 +150,15 @@ async function generate(variant: number): Promise<void> {
   set({ making: true, made: null, savedId: "", variant, paywallError: null });
   const wish = { want: state.want, name: getFirstName() };
   const chosen = await settings.read();
-  const { voiceId } = set(voiceNow(chosen.voiceId));
+  set(voiceNow(chosen.voiceId));
+  // manifestVoiceId: explicit create-screen pick or stored preference; null lets the server choose.
+  const manifestVoiceId = state.picked ?? chosen.voiceId;
   const scriptMode = state.scriptMode;
 
   if (PAYWALL_ENABLED) {
     // Paywall path: call api.manifest directly so we can intercept 401/402/504.
     try {
-      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }), { attemptId });
+      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId: manifestVoiceId, scriptMode, speedStep, cadenceStep }), { attemptId });
       if (run !== mine) return;
       asked = { ...wish, speedStep, cadenceStep };
       const voice = resolveVoice(r.voiceId);
@@ -195,7 +201,7 @@ async function generate(variant: number): Promise<void> {
   }
 
   // Original non-paywall path.
-  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }, canSpeak(), attemptId);
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId: manifestVoiceId, scriptMode, speedStep, cadenceStep }, canSpeak(), attemptId);
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;
   asked = { ...wish, speedStep, cadenceStep };

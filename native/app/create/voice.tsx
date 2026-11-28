@@ -30,7 +30,7 @@ export default function VoicePicker() {
 
   const makeDefault = async () => {
     clearError();
-    const ok = await pickVoice(c.voiceId, true);
+    const ok = await pickVoice(c.voiceId, true, c.voiceName);
     setNote(ok ? `${c.voiceName} is now your default voice.` : "This device would not save it, so it applies until you leave.");
   };
   const done = () => {
@@ -61,7 +61,7 @@ export default function VoicePicker() {
             note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", v.desc ?? v.label, TIER_LABEL[v.tier as keyof typeof TIER_LABEL]].filter(Boolean).join(" · ")}
             selected={c.voiceId === v.id}
             disabled={!v.generate}
-            onPress={() => (setNote(""), clearError(), void pickVoice(v.id))}
+            onPress={() => (setNote(""), clearError(), void pickVoice(v.id, false, v.name))}
             right={<SmallButton label={playing === v.id ? "Stop" : "Play"} a11y={`${playing === v.id ? "Stop" : "Play"} sample of ${v.name}`} onPress={() => toggle(v.id, v.sample)} />}
           />
         ))}

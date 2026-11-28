@@ -113,7 +113,7 @@ export default function Wish() {
             voiceName={c.voiceName}
             speedStep={c.speedStep}
             cadenceStep={c.cadenceStep}
-            onPickVoice={(id) => void pickVoice(id)}
+            onPickVoice={(id, name) => void pickVoice(id, false, name)}
             onPickSpeed={(id) => void pickSpeed(id)}
             onPickCadence={(id) => void pickCadence(id)}
           />
