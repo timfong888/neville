@@ -157,7 +157,7 @@ async function generate(variant: number): Promise<void> {
       asked = { ...wish, speedStep, cadenceStep };
       const voice = resolveVoice(r.voiceId);
       const made: Made = {
-        title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(wish.want))),
+        title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? FALLBACK_TITLE),
         lines: r.lines,
         note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your words, spoken to you." : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },

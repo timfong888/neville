@@ -377,21 +377,23 @@ describe("sexual content (#170)", () => {
 
 describe("splitTitle (#205)", () => {
   it("parses a valid Title label and strips it from the script", () => {
-    const { script, title } = splitTitle("Line one.\nTitle: Magnetic confidence\nLine two.");
-    expect(title).toBe("Magnetic confidence");
+    const { script, title } = splitTitle("Line one.\nTitle: I am confident\nLine two.");
+    expect(title).toBe("I am confident");
     expect(script).not.toMatch(/Title/);
     expect(script).toContain("Line one.");
     expect(script).toContain("Line two.");
   });
-  it("accepts 2 to 5 words", () => {
-    expect(splitTitle("x\nTitle: Calm sleep").title).toBe("Calm sleep");
-    expect(splitTitle("x\nTitle: Calm and clear speech now").title).toBe("Calm and clear speech now");
+  it("accepts 2 to 5 words; first-person required (Tim, 2026-11-28)", () => {
+    expect(splitTitle("x\nTitle: I am enough").title).toBe("I am enough");
+    expect(splitTitle("x\nTitle: I speak clearly now").title).toBe("I speak clearly now"); // 4 words, first-person
     expect(splitTitle("x\nTitle: One").title).toBeNull(); // 1 word → invalid
     expect(splitTitle("x\nTitle: One two three four five six").title).toBeNull(); // 6 words → invalid
+    expect(splitTitle("x\nTitle: Calm sleep").title).toBeNull(); // no first-person
+    expect(splitTitle("x\nTitle: Calm and clear speech now").title).toBeNull(); // no first-person
   });
   it("rejects titles with ellipsis", () => {
-    expect(splitTitle("x\nTitle: Magnetic confidence…").title).toBeNull();
-    expect(splitTitle("x\nTitle: Magnetic confidence...").title).toBeNull();
+    expect(splitTitle("x\nTitle: I am calm…").title).toBeNull();
+    expect(splitTitle("x\nTitle: I am calm...").title).toBeNull();
   });
   it("rejects titles starting with 'You are' or 'You have'", () => {
     expect(splitTitle("x\nTitle: You are calm now").title).toBeNull();
@@ -400,21 +402,53 @@ describe("splitTitle (#205)", () => {
   });
   it("rejects titles containing the listener's name", () => {
     expect(splitTitle("x\nTitle: Tim finds peace", "Tim").title).toBeNull();
-    expect(splitTitle("x\nTitle: Calm and peaceful", "Tim").title).toBe("Calm and peaceful");
+    expect(splitTitle("x\nTitle: I find my peace", "Tim").title).toBe("I find my peace");
   });
   it("returns null title when no Title label is present", () => {
     expect(splitTitle("Just a line.\nAnother line.").title).toBeNull();
   });
   it("strips decoration from the label", () => {
-    expect(splitTitle('x\n**Title:** Calm and clear').title).toBe("Calm and clear");
-    expect(splitTitle('x\n## Title: Calm and clear').title).toBe("Calm and clear");
+    expect(splitTitle('x\n**Title:** I am clear').title).toBe("I am clear");
+    expect(splitTitle('x\n## Title: I am clear').title).toBe("I am clear");
   });
   it("capitalises the first letter of the title", () => {
-    expect(splitTitle("x\nTitle: magnetic confidence").title).toBe("Magnetic confidence");
+    expect(splitTitle("x\nTitle: i am calm").title).toBe("I am calm");
   });
   it("asks the model for a 2 to 5 word title", () => {
     expect(SYSTEM).toMatch(/Title:/);
     expect(SYSTEM).toMatch(/2 to 5 words/);
+  });
+});
+
+// ── Belief-style titles (AT-1–AT-5, issue 305) ───────────────────────────────
+describe("belief-style titles (issue 305)", () => {
+  it("AT-1: splitTitle accepts belief-style titles; rejects gerunds and topic labels", () => {
+    // Good: first-person assertion (all titles require first-person, Tim 2026-11-28)
+    expect(splitTitle("x\nTitle: I am enough").title).toBe("I am enough");
+    expect(splitTitle("x\nTitle: Wealth comes to me").title).toBe("Wealth comes to me");
+    expect(splitTitle("x\nTitle: I attract ease").title).toBe("I attract ease");
+    expect(splitTitle("x\nTitle: My health is real").title).toBe("My health is real");
+    // Bad: gerund opener
+    expect(splitTitle("x\nTitle: Tapping into creative wealth opportunities").title).toBeNull();
+    expect(splitTitle("x\nTitle: Attracting effortless beautiful women").title).toBeNull();
+    // Bad: topic label (3+ words, no first-person marker)
+    expect(splitTitle("x\nTitle: Warm rest nearby").title).toBeNull();
+    // Bad: name + fragment (with listener name)
+    expect(splitTitle("x\nTitle: Tim, you are attracting immense", "Tim").title).toBeNull();
+    // Bad: ellipsis
+    expect(splitTitle("x\nTitle: I am calm...").title).toBeNull();
+    // Bad: too many words
+    expect(splitTitle("x\nTitle: I am calm bold free strong clear").title).toBeNull();
+  });
+
+  it("AT-3: title never contains the listener's name or an email address", () => {
+    expect(splitTitle("x\nTitle: Tim is peaceful", "Tim").title).toBeNull();
+    expect(splitTitle("x\nTitle: Send to hello@example.com now").title).toBeNull();
+  });
+
+  it("AT-5: Title instruction describes belief-style with fulfilled-present-fact examples", () => {
+    expect(SYSTEM).toMatch(/core identity|desire or assumption|fulfilled present fact/i);
+    expect(SYSTEM).toMatch(/I am enough|Wealth comes to me/i);
   });
 });
 

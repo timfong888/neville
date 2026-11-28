@@ -27,9 +27,9 @@ describe("the Create flow (#120)", () => {
     expect([r.want.length, r.name?.length, r.variant]).toEqual([280, 40, 0]);
   });
   it("returns the recording with the server's line starts", async () => {
-    const m = await makeManifestation(api(rec({ starts: [0, 0.3, 0.8] })), wish, true);
+    const m = await makeManifestation(api(rec({ starts: [0, 0.3, 0.8], title: "I am calm" })), wish, true);
     expect(m.note).toBe("");
-    expect(m.title).toBe("Calm");
+    expect(m.title).toBe("I am calm");
     expect(m.lines).toEqual(LINES);
     expect(m.recording).toMatchObject({ mime: "audio/wav", voiceName: resolveVoice(DEFAULT_VOICE_ID).name, starts: [0, 0.3, 0.8] });
   });
@@ -46,6 +46,13 @@ describe("the Create flow (#120)", () => {
   it("uses FALLBACK_TITLE when the script is a template, never the typed wish", async () => {
     const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
     expect(m.title).toBe("A moment of calm");
+  });
+
+  it("AT-4 (305): when the model returns no title, the client shows the generic fallback, not a clipped script line", async () => {
+    // rec() has source:"model" but no title field — the server failed to generate one
+    const m = await makeManifestation(api(rec()), wish, true);
+    expect(m.title).toBe("A moment of calm"); // FALLBACK_TITLE, not displayTitle(toYouStatement(wish))
+    expect(m.title).not.toBe("Calm"); // "Calm" = old clipped-wish fallback; must not appear
   });
 
   it("shows a withheld-specific note when reason is withheld", async () => {
@@ -132,9 +139,9 @@ describe("the Create flow (#120)", () => {
     const m = await makeManifestation(api(rec({ title: "Magnetic confidence" })), wish, true);
     expect(m.title).toBe("Magnetic confidence");
   });
-  it("falls back to displayTitle of the wish when server sends no title", async () => {
+  it("falls back to FALLBACK_TITLE when the server sends no title on a model script", async () => {
     const m = await makeManifestation(api(rec()), wish, true);
-    expect(m.title).toBe("Calm");
+    expect(m.title).toBe("A moment of calm"); // FALLBACK_TITLE — no clipped wish
     expect(m.title).not.toMatch(/…|\.\.\./);
   });
   it("uses FALLBACK_TITLE for template even when wish is set", async () => {

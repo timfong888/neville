@@ -58,7 +58,7 @@ Home: The key turns and the door swings open to your place. You step inside and 
 Relationship: She is across the table and her eyes find yours. The talk moves without effort. You hear your own laugh rise easily. Her hand rests near yours on the table. The warmth between you is ordinary now. It is done.
 
 Health: You take the stairs and your legs carry you easily. No tightness, no thought of stopping. You breathe full and slow at the top. The strength is ordinary now, expected. It is done.
-- Then, on the next line, write "Title: " followed by 2 to 5 words: a short noun phrase about the content of this script. No quotes, no ellipsis. Do not start with "You are" or "You have". Never include the listener's first name. Example: "Title: Magnetic confidence" or "Title: Calm and clear speech".
+- Then, on the next line, write "Title: " followed by 2 to 5 words: a belief-style title that states the core identity, desire or assumption as a fulfilled present fact. Default form: a short first-person statement, as the user would say it. Never start with "You". Never include the listener's first name. No quotes, no ellipsis. Good: "I am enough" / "Wealth comes to me" / "I attract ease" / "My health is real" / "I sleep deeply" / "Calm is mine". Bad: "Tapping into wealth" (gerund opener) / "Warm rest nearby" (topic label — no assertion) / "Creative abundance flows" (abstract filler) / "You are attracting" (you-form).
 - Then, on one last line, write "Refrain: " followed by one short phrase of 4 to 10 words, addressed to the listener as "you" like the script, in their own words for the wish, saying it is done (for example: Refrain: The house by the sea is yours). It is the phrase to repeat, not part of the script.
 
 Content rules:
@@ -495,6 +495,7 @@ export function splitTitle(raw: string, name?: string): { script: string; title:
   if (!found) return { script, title: null };
   const t = found.replace(/["""'''`*_]/g, "").replace(EDGE_DECORATION, "").replace(/\s+/g, " ").trim();
   const words = t.split(" ").filter(Boolean);
+  const hasFirstPerson = /\bI\b/i.test(t) || /\b(?:me|my|mine|myself)\b/i.test(t);
   const ok =
     words.length >= 2 &&
     words.length <= 5 &&
@@ -502,6 +503,12 @@ export function splitTitle(raw: string, name?: string): { script: string; title:
     !/\.{2,}/.test(t) &&
     !/^you\s+(are|have)\b/i.test(t) &&
     !/^you\b/i.test(t) &&
+    // Reject gerund opener ("Tapping into...", "Attracting effortless...")
+    !/^\w+ing\b/i.test(t) &&
+    // First-person required for all belief-style titles (Tim, 2026-11-28)
+    hasFirstPerson &&
+    // No email addresses
+    !/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+/.test(t) &&
     (!name || !new RegExp(`\\b${name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
   return { script, title: ok ? t.charAt(0).toUpperCase() + t.slice(1) : null };
 }

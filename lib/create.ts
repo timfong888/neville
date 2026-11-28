@@ -128,7 +128,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
     const r = await api.manifest(wishRequest(w), { attemptId });
     const voice = resolveVoice(r.voiceId);
     return {
-      title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
+      title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? FALLBACK_TITLE),
       lines: r.lines,
       note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your words, spoken to you." : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
