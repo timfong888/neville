@@ -48,7 +48,7 @@ export function ImageGallery({ wish, relaxed }: { wish: string; relaxed?: boolea
     return () => {
       live = false;
     };
-  }, [wish]);
+  }, [wish, relaxed]);
 
   if (items.length === 0) return null;
 
