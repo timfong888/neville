@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { TIER_LABEL, visibleVoices, voiceBlurb } from "@/lib/voices";
-import { api } from "../../src/api";
+import { ENABLED_VOICES, TIER_LABEL, voiceBlurb } from "@/lib/voices";
 import { load, pickVoice, useCreate } from "../../src/create/session";
 import { Button } from "../../src/create/ui";
 import { useSample } from "../../src/create/useSample";
@@ -19,13 +18,8 @@ export default function VoicePicker() {
   const { settings: saved } = useSettings();
   const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
-  const [isAdult, setIsAdult] = useState(false);
   // Opened cold (a deep link, a refresh), the wish step has not read Settings yet.
   useEffect(() => void load(), []);
-  useEffect(() => {
-    void api.adultTierStatus().then((j) => { if (j.allowed) setIsAdult(true); }).catch(() => {});
-  }, []);
-  const voices = visibleVoices(isAdult);
   const isDefault = c.voiceId === saved.voiceId;
 
   const makeDefault = async () => {
@@ -52,7 +46,7 @@ export default function VoicePicker() {
         {isDefault ? null : <Button small label="Make this my default" onPress={() => void makeDefault()} />}
       </View>
       <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
-        {voices.map((v) => (
+        {ENABLED_VOICES.map((v) => (
           <OptionRow
             key={v.id}
             label={v.name}

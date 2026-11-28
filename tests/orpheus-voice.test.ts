@@ -1,20 +1,14 @@
-// Regression tests for Orpheus voice: adult-tier default, visibility, and server-side guard.
+// Regression tests for Orpheus as the default voice for all accounts.
 import { describe, expect, it } from "vitest";
 import {
-  ADULT_DEFAULT_VOICE_ID,
   DEFAULT_VOICE_ID,
   ENABLED_VOICES,
-  resolveVoiceForUser,
-  visibleVoices,
+  resolveVoice,
 } from "@/lib/voices";
 
 describe("config", () => {
-  it("adultDefault is orpheus-tara", () => {
-    expect(ADULT_DEFAULT_VOICE_ID).toBe("orpheus-tara");
-  });
-
-  it("standard default is unchanged (gemini-sulafat)", () => {
-    expect(DEFAULT_VOICE_ID).toBe("gemini-sulafat");
+  it("default is orpheus-tara for all accounts", () => {
+    expect(DEFAULT_VOICE_ID).toBe("orpheus-tara");
   });
 
   it("orpheus-tara is enabled and generate=true", () => {
@@ -24,85 +18,46 @@ describe("config", () => {
     expect(v!.enabled).toBe(true);
   });
 
-  it("all 8 orpheus voices are adultOnly", () => {
+  it("all 8 orpheus voices are enabled and generate=true", () => {
     const orpheus = ENABLED_VOICES.filter((v) => v.model === "canopylabs/orpheus-3b-0.1-ft");
     expect(orpheus).toHaveLength(8);
     for (const v of orpheus) {
-      expect(v.adultOnly).toBe(true);
+      expect(v.generate).toBe(true);
+      expect(v.enabled).toBe(true);
     }
   });
 
-  it("non-orpheus voices are not adultOnly", () => {
-    const nonOrpheus = ENABLED_VOICES.filter((v) => v.model !== "canopylabs/orpheus-3b-0.1-ft");
-    for (const v of nonOrpheus) {
-      expect(v.adultOnly).toBeFalsy();
+  it("no voices are adultOnly (Orpheus is visible to all)", () => {
+    for (const v of ENABLED_VOICES) {
+      expect((v as { adultOnly?: boolean }).adultOnly).toBeFalsy();
     }
   });
 });
 
-describe("resolveVoiceForUser", () => {
-  it("adult user with null id gets orpheus-tara (adult default)", () => {
-    const v = resolveVoiceForUser(null, true);
-    expect(v.id).toBe("orpheus-tara");
+describe("resolveVoice with Orpheus default", () => {
+  it("null id gives orpheus-tara", () => {
+    expect(resolveVoice(null).id).toBe("orpheus-tara");
   });
 
-  it("adult user with unknown id gets orpheus-tara (adult default)", () => {
-    const v = resolveVoiceForUser("unknown-id", true);
-    expect(v.id).toBe("orpheus-tara");
+  it("unknown id gives orpheus-tara", () => {
+    expect(resolveVoice("unknown-id").id).toBe("orpheus-tara");
   });
 
-  it("non-adult user with null id gets gemini-sulafat (standard default)", () => {
-    const v = resolveVoiceForUser(null, false);
-    expect(v.id).toBe("gemini-sulafat");
+  it("explicit orpheus-tara id returns orpheus-tara", () => {
+    expect(resolveVoice("orpheus-tara").id).toBe("orpheus-tara");
   });
 
-  it("non-adult user with unknown id gets gemini-sulafat (standard default)", () => {
-    const v = resolveVoiceForUser("unknown-id", false);
-    expect(v.id).toBe("gemini-sulafat");
+  it("explicit orpheus-leah id returns orpheus-leah", () => {
+    expect(resolveVoice("orpheus-leah").id).toBe("orpheus-leah");
   });
 
-  it("adult user requesting an adultOnly voice gets that voice", () => {
-    const v = resolveVoiceForUser("orpheus-leah", true);
-    expect(v.id).toBe("orpheus-leah");
+  it("standard voice still works (gemini-sulafat)", () => {
+    expect(resolveVoice("gemini-sulafat").id).toBe("gemini-sulafat");
   });
 
-  it("non-adult user requesting an adultOnly voice is blocked (gets standard default)", () => {
-    const v = resolveVoiceForUser("orpheus-tara", false);
-    expect(v.id).toBe("gemini-sulafat");
-  });
-
-  it("non-adult user requesting a standard voice gets that voice", () => {
-    const v = resolveVoiceForUser("gemini-sulafat", false);
-    expect(v.id).toBe("gemini-sulafat");
-  });
-
-  it("adult user requesting a standard voice gets that voice", () => {
-    const v = resolveVoiceForUser("heygen-nadine", true);
-    expect(v.id).toBe("heygen-nadine");
-  });
-});
-
-describe("visibleVoices", () => {
-  it("non-adult cannot see any adultOnly voices", () => {
-    const list = visibleVoices(false);
-    expect(list.some((v) => v.adultOnly)).toBe(false);
-  });
-
-  it("adult can see adultOnly voices", () => {
-    const list = visibleVoices(true);
-    expect(list.some((v) => v.adultOnly)).toBe(true);
-  });
-
-  it("adult list includes orpheus-tara", () => {
-    expect(visibleVoices(true).some((v) => v.id === "orpheus-tara")).toBe(true);
-  });
-
-  it("non-adult list does not include orpheus-tara", () => {
-    expect(visibleVoices(false).some((v) => v.id === "orpheus-tara")).toBe(false);
-  });
-
-  it("non-adult list still includes standard voices", () => {
-    const list = visibleVoices(false);
-    expect(list.some((v) => v.id === "gemini-sulafat")).toBe(true);
+  it("resolves every voice id to a generatable voice", () => {
+    for (const v of ENABLED_VOICES) {
+      expect(resolveVoice(v.id).generate).toBe(true);
+    }
   });
 });

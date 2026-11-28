@@ -1,6 +1,5 @@
 {
-  "default": "gemini-sulafat",
-  "adultDefault": "orpheus-tara",
+  "default": "orpheus-tara",
   "voices": [
     {
       "id": "heygen-nadine",
@@ -254,7 +253,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — expressive female voice"
     },
     {
@@ -268,7 +266,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — female voice"
     },
     {
@@ -282,7 +279,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — female voice"
     },
     {
@@ -296,7 +292,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — male voice"
     },
     {
@@ -310,7 +305,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — male voice"
     },
     {
@@ -324,7 +318,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — female voice"
     },
     {
@@ -338,7 +331,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — male voice"
     },
     {
@@ -352,7 +344,6 @@
       "enabled": true,
       "tier": "low",
       "generate": true,
-      "adultOnly": true,
       "desc": "Orpheus — female voice"
     },
     {

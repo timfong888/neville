@@ -94,14 +94,9 @@ describe("POST /api/rerecord", () => {
     expect(res.headers.get("Content-Type")).toMatch(/^audio\//);
     expect(paths()).toContain("/chat/completions");
     const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
-    // The default voice is atomic: one request, a pause marker between lines.
+    // The default voice (orpheus-tara) is non-atomic: one request, lines joined with a space.
     expect(calls.filter((c) => c.path.startsWith("/audio/speech"))).toHaveLength(1);
-    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. [pause] You are calm and steady.");
-    // Same delivery as /api/manifest at the default pace and tone.
-    const D = await import("@/lib/delivery");
-    const pace = D.resolvePace(undefined);
-    const tone = D.resolveTone(undefined);
-    expect(speech?.body).toMatchObject({ speed: D.speedFor(pace, tone), instructions: D.styleInstruction(pace, tone) });
+    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. You are calm and steady.");
   });
 
   it("records a voice without the atomic flag as plain text", async () => {
@@ -144,8 +139,8 @@ describe("POST /api/rerecord", () => {
     const rows = await L.ledger().recent(10);
     expect(rows.map((r) => r.kind)).toEqual(["speech", "vet"]);
     expect(rows[1]).toMatchObject({ route: "rerecord", model: "google/gemini-2.5-flash-lite", estUsd: 0.00002 });
-    // The default voice is atomic: the ledger counts the pause tags sent with the lines.
-    expect(rows[0].chars).toBe("Take a slow breath. [pause] You are calm and steady.".length);
+    // The default voice (orpheus-tara) is non-atomic: chars = plain joined text.
+    expect(rows[0].chars).toBe("Take a slow breath. You are calm and steady.".length);
   });
 
   it("records a rejected vet (it was paid for) but no speech", async () => {

@@ -175,9 +175,6 @@ export function createApi(opts: ApiOptions) {
     async status(): Promise<unknown> {
       return (await call("/api/status")).json();
     },
-    async adultTierStatus(): Promise<{ allowed: boolean }> {
-      return (await call("/api/adult-tier-status")).json() as Promise<{ allowed: boolean }>;
-    },
 
     library: {
       async load(): Promise<Library> {
