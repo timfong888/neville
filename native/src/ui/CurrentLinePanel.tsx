@@ -7,12 +7,12 @@ type Props = { line: string };
 export function CurrentLinePanel({ line }: Props) {
   return (
     <View style={s.card} accessibilityLiveRegion="polite" accessibilityLabel={`Now speaking: ${line}`}>
-      <Text style={s.line}>{line}</Text>
+      <Text style={s.line} adjustsFontSizeToFit numberOfLines={3}>{line}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   card: { padding: space.lg, borderWidth: 1, borderColor: colors.accentText, borderRadius: radius.md, backgroundColor: colors.card },
-  line: { color: colors.text, fontSize: 22, lineHeight: 32, fontWeight: "500" },
+  line: { color: colors.text, fontSize: 16, lineHeight: 24, fontWeight: "500" },
 });

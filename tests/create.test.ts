@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, type Recording, type WishRequest } from "@/lib/api/client";
-import { freeBanner, freeLeft, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
+import { ApiError, type Recording, type WishRequest, readTitle } from "@/lib/api/client";
+import { freeBanner, freeLeft, LIBRARY_TAB_ROUTE, LIBRARY_WEB_ROUTE, lineAt, makeManifestation, nextVariant, parseCount, NO_PICK, pickOnCreate, playlistLabel, seeSettingsVoice, toManifestation, voiceFor, wishRequest } from "@/lib/create";
 import { parseDraft } from "@/lib/draftStore";
 import { neutralScript } from "@/lib/script";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
@@ -29,7 +29,7 @@ describe("the Create flow (#120)", () => {
   it("returns the recording with the server's line starts", async () => {
     const m = await makeManifestation(api(rec({ starts: [0, 0.3, 0.8] })), wish, true);
     expect(m.note).toBe("");
-    expect(m.title).toBe("You are calm");
+    expect(m.title).toBe("Calm");
     expect(m.lines).toEqual(LINES);
     expect(m.recording).toMatchObject({ mime: "audio/wav", voiceName: resolveVoice(DEFAULT_VOICE_ID).name, starts: [0, 0.3, 0.8] });
   });
@@ -50,8 +50,13 @@ describe("the Create flow (#120)", () => {
 
   it("shows a withheld-specific note when reason is withheld", async () => {
     const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), wish, true);
-    expect(m.note).toBe("That wish was held back, so this is a general script. Try wording it differently.");
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
     expect(m.title).toBe("A moment of calm");
+  });
+
+  it("includes the matched term in the withheld note when server sends one", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld", term: "teen" })), wish, true);
+    expect(m.note).toBe(`The word "teen" held this wish back. Try describing adults only. This is a general script.`);
   });
 
   it("shows the generic template note for all other failure reasons", async () => {
@@ -106,9 +111,37 @@ describe("the Create flow (#120)", () => {
       id: "id-1", title: made.title, want: "to be calm", firstName: "Tim", lines: LINES,
       voiceId: made.recording?.voiceId, voiceName: made.recording?.voiceName, hasAudio: true, createdAt: 5, updatedAt: 5,
     });
+  });
+  it("persists speedStep and cadenceStep so Library re-record can reuse them", async () => {
+    const w = { want: "to be calm", name: "", speedStep: "faster", cadenceStep: "long" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-sp", 5);
+    expect(m.speedStep).toBe("faster");
+    expect(m.cadenceStep).toBe("long");
+  });
+  it("omits speedStep/cadenceStep when not provided (backward-compat)", async () => {
+    const w = { want: "to be calm", name: "" };
+    const made = await makeManifestation({ manifest: async () => rec() }, w, false);
+    const m = toManifestation(made, w, "id-no-sp", 5);
+    expect(m).not.toHaveProperty("speedStep");
+    expect(m).not.toHaveProperty("cadenceStep");
     const failed = await makeManifestation({ manifest: async () => { throw new Error("x"); } }, w, false);
     expect(toManifestation(failed, w, "id-2", 5)).toMatchObject({ title: "A moment of calm", voiceId: "", voiceName: "Device voice", hasAudio: false });
   });
+  it("uses the AI title from the server when present", async () => {
+    const m = await makeManifestation(api(rec({ title: "Magnetic confidence" })), wish, true);
+    expect(m.title).toBe("Magnetic confidence");
+  });
+  it("falls back to displayTitle of the wish when server sends no title", async () => {
+    const m = await makeManifestation(api(rec()), wish, true);
+    expect(m.title).toBe("Calm");
+    expect(m.title).not.toMatch(/…|\.\.\./);
+  });
+  it("uses FALLBACK_TITLE for template even when wish is set", async () => {
+    const m = await makeManifestation(api(rec({ source: "template" })), wish, true);
+    expect(m.title).toBe("A moment of calm");
+  });
+
   it("uses the voice picked on Create, else the Settings voice (#150)", async () => {
     const other = ENABLED_VOICES.find((v) => v.generate && v.id !== DEFAULT_VOICE_ID)!;
     const sampleOnly = ENABLED_VOICES.find((v) => !v.generate);
@@ -141,5 +174,64 @@ describe("the Create flow (#120)", () => {
     expect(seeSettingsVoice(pickOnCreate(NO_PICK, b, a), a).voiceId).toBe(b);
     // A voice that may not be recorded is not picked.
     expect(pickOnCreate(start, "gone", a).voiceId).toBe(a);
+  });
+});
+
+describe("exact mode (#229)", () => {
+  it("sends scriptMode: exact in the request body when mode is exact", () => {
+    const req = wishRequest({ want: "I am calm.", name: "", scriptMode: "exact" });
+    expect(req).toMatchObject({ scriptMode: "exact" });
+  });
+  it("omits scriptMode when mode is enhance (default)", () => {
+    const req = wishRequest({ want: "I am calm.", name: "" });
+    expect(req).not.toHaveProperty("scriptMode");
+    const req2 = wishRequest({ want: "I am calm.", name: "", scriptMode: "enhance" });
+    expect(req2).not.toHaveProperty("scriptMode");
+  });
+  it("shows 'Your exact words.' as the note when source is exact", async () => {
+    const m = await makeManifestation(api(rec({ source: "exact", scriptMode: "exact" })), wish, true);
+    expect(m.note).toBe("Your exact words.");
+    expect(m.scriptMode).toBe("exact");
+  });
+  it("a withheld wish in exact mode returns the template, same as enhance mode", async () => {
+    const m = await makeManifestation(api(rec({ source: "template", reason: "withheld" })), { ...wish, scriptMode: "exact" }, true);
+    expect(m.note).toBe("That wish was held back. Try describing adults only. This is a general script.");
+    expect(m.scriptMode).toBeUndefined();
+  });
+});
+
+describe("X-Title header round trip (#205)", () => {
+  it("decodes a base64 UTF-8 title correctly", () => {
+    const title = "Magnetic confidence";
+    const b64 = btoa(unescape(encodeURIComponent(title)));
+    expect(readTitle(b64)).toBe(title);
+  });
+  it("handles UTF-8 multi-byte characters", () => {
+    const title = "Calm état";
+    const bytes = new TextEncoder().encode(title);
+    const b64 = btoa(String.fromCharCode(...bytes));
+    expect(readTitle(b64)).toBe(title);
+  });
+  it("returns undefined for null or empty header", () => {
+    expect(readTitle(null)).toBeUndefined();
+    expect(readTitle("")).toBeUndefined();
+  });
+  it("returns undefined for a corrupt value, not an error", () => {
+    expect(readTitle("not-valid-base64!!!")).toBeUndefined();
+  });
+});
+
+describe("playlist button (#241)", () => {
+  it("shows 'My playlist' when already saved", () => {
+    expect(playlistLabel("some-saved-id")).toBe("My playlist");
+  });
+  it("shows 'Save and open playlist' when not yet saved", () => {
+    expect(playlistLabel("")).toBe("Save and open playlist");
+  });
+  it("native route targets the library tab", () => {
+    expect(LIBRARY_TAB_ROUTE).toBe("/(tabs)/library");
+  });
+  it("web route targets the library page", () => {
+    expect(LIBRARY_WEB_ROUTE).toBe("/library");
   });
 });

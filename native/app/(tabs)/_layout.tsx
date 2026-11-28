@@ -1,30 +1,36 @@
 import { Tabs } from "expo-router";
-import { BottomTabBar } from "expo-router/build/layouts/Tabs";
-import { Platform, Text } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { colors } from "../../src/theme";
-import { NowPlayingBar } from "../../src/ui/NowPlayingBar";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 
 const TABS = [
   { name: "create", title: "Create", glyph: "＋" },
   { name: "library", title: "Library", glyph: "≡" },
   { name: "settings", title: "Settings", glyph: "◐" },
-  { name: "account", title: "Account", glyph: "○" },
+  { name: "account", title: "Profile", glyph: "○" },
 ] as const;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function LibraryGlyph({ color }: { color: any }) {
+  const c: string | undefined = typeof color === "string" ? color : undefined;
+  const np = useNowPlaying();
+  return (
+    <View>
+      <Text style={{ color: c, fontSize: 17, lineHeight: 20 }}>≡</Text>
+      {isActive(np) && (
+        <View style={{ position: "absolute", top: -2, right: -4, width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} />
+      )}
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   return (
     <Tabs
-      // The now-playing bar (#161) sits just above the tab bar on every tab.
-      tabBar={(props) => (
-        <>
-          <NowPlayingBar />
-          <BottomTabBar {...props} />
-        </>
-      )}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
-        // The web bar has no safe-area inset to grow into, so it needs its height stated.
         tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.line, ...(Platform.OS === "web" ? { height: 60, paddingBottom: 6 } : null) },
         tabBarActiveTintColor: colors.accentText,
         tabBarInactiveTintColor: colors.muted,
@@ -38,8 +44,10 @@ export default function TabsLayout() {
           name={t.name}
           options={{
             title: t.title,
-            // Text glyphs: no icon font to load, and the same on iOS and web.
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 17, lineHeight: 20 }}>{t.glyph}</Text>,
+            tabBarIcon: t.name === "library"
+              ? ({ color }) => <LibraryGlyph color={color} />
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            : ({ color }: { color: any }) => <Text style={{ color: typeof color === "string" ? color : undefined, fontSize: 17, lineHeight: 20 }}>{t.glyph}</Text>,
           }}
         />
       ))}

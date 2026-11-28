@@ -179,26 +179,51 @@ export function fitPause(opts: {
   return Math.max(0, Math.floor(msThatFit));
 }
 
-/** Joins PCM pieces with `pauseBytes` of silence between them. */
-export function stitchPcm(chunks: ArrayBuffer[], pauseBytes: number): ArrayBuffer {
-  const gaps = Math.max(0, chunks.length - 1);
-  const out = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0) + gaps * pauseBytes);
+/**
+ * Scale an array of pause values down proportionally so the total gap fits
+ * within the size a response may carry. Returns the original values when they already fit.
+ */
+export function fitPauses(opts: {
+  pauseMsArr: number[];
+  speechBytes: number;
+  rate: number;
+  maxBytes?: number;
+}): number[] {
+  const { pauseMsArr, speechBytes, rate } = opts;
+  const room = (opts.maxBytes ?? MAX_AUDIO_BYTES) - WAV_HEADER_BYTES - speechBytes;
+  const totalWant = pauseMsArr.reduce((n, ms) => n + silenceBytes(ms, rate), 0);
+  if (totalWant <= 0 || totalWant <= room) return [...pauseMsArr];
+  const factor = Math.max(0, room / totalWant);
+  return pauseMsArr.map((ms) => Math.max(0, Math.floor(ms * factor)));
+}
+
+/** Joins PCM pieces with `pauseBytes` of silence between them. Accepts a uniform value or one value per gap. */
+export function stitchPcm(chunks: ArrayBuffer[], pauseBytes: number | number[]): ArrayBuffer {
+  const pFor = (i: number) => (typeof pauseBytes === "number" ? pauseBytes : (pauseBytes[i] ?? 0));
+  const totalGap = typeof pauseBytes === "number"
+    ? Math.max(0, chunks.length - 1) * pauseBytes
+    : pauseBytes.reduce((n, b) => n + b, 0);
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0) + totalGap);
   let at = 0;
   chunks.forEach((c, i) => {
     out.set(new Uint8Array(c), at);
-    at += c.byteLength + (i < chunks.length - 1 ? pauseBytes : 0);
+    at += c.byteLength + (i < chunks.length - 1 ? pFor(i) : 0);
   });
   return out.buffer;
 }
 
-/** Where each piece starts, as a share of the whole, for the read-along. */
-export function startShares(chunkBytes: number[], pauseBytes: number): number[] {
-  const total = chunkBytes.reduce((n, b) => n + b, 0) + Math.max(0, chunkBytes.length - 1) * pauseBytes;
+/** Where each piece starts, as a share of the whole, for the read-along. Accepts a uniform pause or one per gap. */
+export function startShares(chunkBytes: number[], pauseBytes: number | number[]): number[] {
+  const pFor = (i: number) => (typeof pauseBytes === "number" ? pauseBytes : (pauseBytes[i] ?? 0));
+  const totalGap = typeof pauseBytes === "number"
+    ? Math.max(0, chunkBytes.length - 1) * pauseBytes
+    : chunkBytes.slice(0, -1).reduce((n, _, i) => n + pFor(i), 0);
+  const total = chunkBytes.reduce((n, b) => n + b, 0) + totalGap;
   if (total <= 0) return chunkBytes.map(() => 0);
   let at = 0;
-  return chunkBytes.map((b) => {
+  return chunkBytes.map((b, i) => {
     const start = at / total;
-    at += b + pauseBytes;
+    at += b + (i < chunkBytes.length - 1 ? pFor(i) : 0);
     return Math.round(start * 10000) / 10000;
   });
 }

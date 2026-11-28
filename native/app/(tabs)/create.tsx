@@ -1,23 +1,28 @@
 import { useCallback, useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { EXAMPLES, MAX_NAME, MAX_WANT } from "@/lib/create";
+import { EXAMPLES, MAX_WANT } from "@/lib/create";
 import { createAccess, freeNoteFor, isSignedIn, showResetDemo } from "@/lib/createGate";
 import { refreshAccount, useAccountView } from "../../src/accountStore";
-import { create, clearPaywallError, edit, load, reset, useCreate } from "../../src/create/session";
+import { create, clearPaywallError, edit, load, pickCadence, pickSpeed, pickVoice, reset, setScriptMode, useCreate } from "../../src/create/session";
+import { VoiceSection } from "../../src/ui/VoiceSection";
 import { PAYWALL_ENABLED } from "../../src/config";
 import { shouldShowPaywall } from "@/lib/paywall";
 import { refreshCredits, useCredits } from "../../src/creditsStore";
 import { mockPurchaseClient } from "../../src/paywall/mockPurchase";
 import { PaywallSheet } from "../../src/paywall/PaywallSheet";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { colors } from "../../src/theme";
 import { Button, Gate, s } from "../../src/create/ui";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 
 // Create, step 1: the wish. One tap makes the script and the recording (step 2 shows progress).
 export default function Wish() {
   const c = useCreate();
   const router = useRouter();
+  const np = useNowPlaying();
   // The same sign-in state the Account tab keeps; it updates here when that changes (#164).
   const { account, checked } = useAccountView();
   const signedIn = isSignedIn(account);
@@ -62,6 +67,7 @@ export default function Wish() {
             {c.gate ? <Gate signedIn={signedIn} /> : null}
             {checking ? <Text accessibilityLiveRegion="polite" style={s.muted}>Checking your account…</Text> : null}
             <Button label="Create my manifestation" disabled={!c.want.trim() || checking} onPress={go} />
+            {isActive(np) ? <PlaybackBar np={np} /> : null}
           </>
         }
       >
@@ -74,7 +80,10 @@ export default function Wish() {
               </Text>
             </View>
           ) : null}
-          <Text nativeID="want" style={s.muted}>What do you want?</Text>
+          <Text nativeID="want" style={s.muted}>What is already yours?</Text>
+          <Text style={[s.muted, { fontStyle: "italic", fontSize: 12 }]}>
+            {"To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret."}
+          </Text>
           <TextInput
             accessibilityLabelledBy="want"
             aria-labelledby="want"
@@ -94,25 +103,20 @@ export default function Wish() {
               <Button key={e} small label={e} onPress={() => edit({ want: e })} />
             ))}
           </View>
-          <Text nativeID="name" style={s.muted}>Your first name (optional)</Text>
-          <TextInput
-            accessibilityLabelledBy="name"
-            aria-labelledby="name"
-            style={s.input}
-            value={c.name}
-            maxLength={MAX_NAME}
-            autoComplete="given-name"
-            returnKeyType="done"
-            placeholder="Tim"
-            placeholderTextColor={colors.muted}
-            onChangeText={(name) => edit({ name })}
-          />
           <View style={s.row}>
-            <Text style={s.muted}>
-              Voice: <Text style={s.p}>{c.voiceName}</Text>
-            </Text>
-            <Button small label="Change voice" onPress={() => router.push("/create/voice")} />
+            <Text style={s.muted}>Script</Text>
+            <Button small label="Enhance with AI" disabled={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />
+            <Button small label="Exactly my words" disabled={c.scriptMode === "exact"} onPress={() => setScriptMode("exact")} />
           </View>
+          <VoiceSection
+            voiceId={c.voiceId}
+            voiceName={c.voiceName}
+            speedStep={c.speedStep}
+            cadenceStep={c.cadenceStep}
+            onPickVoice={(id) => void pickVoice(id)}
+            onPickSpeed={(id) => void pickSpeed(id)}
+            onPickCadence={(id) => void pickCadence(id)}
+          />
           <View style={s.row}>
             {note ? <Text style={s.muted}>{note}</Text> : null}
             {showResetDemo(__DEV__, c.used) ? <Button small label="Reset demo" onPress={reset} /> : null}

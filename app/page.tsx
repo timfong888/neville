@@ -1,15 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { hashOf, neutralScript, scriptLines, titleFor, VARIANT_COUNT } from "@/lib/script";
+import { displayTitle, hashOf, neutralScript, scriptLines, toYouStatement, VARIANT_COUNT } from "@/lib/script";
 import { FALLBACK_TITLE, noteForReason } from "@/lib/create";
+import { newAttemptId, shortRef, copyLine } from "@/lib/attemptId";
 import { FREE_ANON_GENERATIONS } from "@/lib/architecture";
 import Link from "next/link";
+import { useRouter as useNextRouter } from "next/navigation";
 import { DEFAULT_VOICE_ID, resolveVoice, voiceBlurb } from "@/lib/voices";
 import { ensureModeVoice, readMode } from "@/lib/modeStore";
-import { readVoiceChoice } from "@/lib/voiceStore";
+import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
-import { readPaceChoice, readToneChoice } from "@/lib/deliveryStore";
+import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice, writeSpeedStepChoice, writeCadenceStepChoice } from "@/lib/deliveryStore";
+import { CURATED_VOICES, SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -19,17 +22,20 @@ import { CLOSING } from "@/lib/prompt";
 import { DEFAULT_MUSIC, type Segment } from "@/lib/music";
 import { MusicBed, prefetchMusic, speechOf } from "@/lib/musicBed";
 import { readMusicChoice, readMusicVolume, writeMusicVolume } from "@/lib/musicStore";
+import { LIBRARY_WEB_ROUTE, playlistLabel } from "@/lib/create";
 import { newId } from "@/lib/library/model";
 import { resolveStore } from "@/lib/library/useLibrary";
 import Onboarding from "@/app/components/Onboarding";
+import { WaitingPhrasesWeb } from "@/app/components/WaitingPhrasesWeb";
+import { editEnablesRerecord, linesFromText, rrErrorMessage } from "@/lib/scriptEdit";
 
 type Stage = "form" | "making" | "player";
 
 const EXAMPLES = [
-  "I want to be calm and confident when I speak",
-  "a healthy, strong body that I enjoy living in",
-  "to run my own business doing work I love",
-  "a loving, easy relationship with my family",
+  "I am calm and confident when I speak",
+  "I am healthy and strong",
+  "I run my own business doing work I love",
+  "I have a loving, easy relationship with my family",
 ];
 
 type Made = {
@@ -38,6 +44,8 @@ type Made = {
   voiceId: string;
   voiceName: string;
   source: string;
+  /** 2–5 word title from the model, via X-Title. Absent for templates and fallbacks. */
+  title?: string;
   starts?: number[];
   /** Programming mode (#77): the script alone, without the loop, for Save. */
   saveUrl?: string;
@@ -73,8 +81,18 @@ function writeCount(n: number) {
 }
 
 export default function DemoPage() {
+  const nextRouter = useNextRouter();
   const [stage, setStage] = useState<Stage>("form");
   const [want, setWant] = useState("");
+  const [scriptMode, setScriptModeState] = useState<"enhance" | "exact">("enhance");
+  const setScriptMode = (mode: "enhance" | "exact") => {
+    setScriptModeState(mode);
+    try { window.localStorage.setItem("nv_script_mode", mode); } catch { /* private mode */ }
+  };
+  const [speedStep, setSpeedStepState] = useState<SpeedStep>(() => readSpeedStepChoice());
+  const setSpeedStep = (id: SpeedStep) => { setSpeedStepState(id); writeSpeedStepChoice(id); };
+  const [cadenceStep, setCadenceStepState] = useState<CadenceStep>(() => readCadenceStepChoice());
+  const setCadenceStep = (id: CadenceStep) => { setCadenceStepState(id); writeCadenceStepChoice(id); };
   // Programming mode (#77): minutes of repetition after the script, and the bell between them.
   const [repeatMin, setRepeatMin] = useState(0);
   const [bellOn, setBellOn] = useState(true);
@@ -100,6 +118,8 @@ export default function DemoPage() {
   // The server's own script when only the voice failed: read by the device voice.
   const [fallback, setFallback] = useState<string[] | null>(null);
   const [note, setNote] = useState("");
+  const attemptId = useRef("");
+  const attemptBuild = useRef("");
   const audio = useRef<HTMLAudioElement | null>(null);
   const [used, setUsed] = useState(0);
   const [gate, setGate] = useState(false);
@@ -107,6 +127,12 @@ export default function DemoPage() {
   // The library id once this result is saved; cleared when a new one is made.
   const [savedId, setSavedId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Script editing + re-record state.
+  const [editScript, setEditScript] = useState("");
+  const [rrRunning, setRrRunning] = useState(false);
+  const [rrError, setRrError] = useState("");
+  const [prevMade, setPrevMade] = useState<Made | null>(null);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceURI, setVoiceURI] = useState("");
@@ -135,6 +161,24 @@ export default function DemoPage() {
   const [playing, setPlaying] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [toast, setToast] = useState("");
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const sampleAudio = useRef<HTMLAudioElement | null>(null);
+
+  const toggleSample = (id: string, sample: string) => {
+    if (playingVoice === id) {
+      sampleAudio.current?.pause();
+      sampleAudio.current = null;
+      setPlayingVoice(null);
+      return;
+    }
+    sampleAudio.current?.pause();
+    const a = new Audio(sample);
+    sampleAudio.current = a;
+    setPlayingVoice(id);
+    a.onended = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    a.onerror = () => { setPlayingVoice(null); sampleAudio.current = null; };
+    void a.play();
+  };
 
   const token = useRef(0);
   const bed = useRef<MusicBed | null>(null);
@@ -155,6 +199,10 @@ export default function DemoPage() {
   // Voices, free counter, and shared links.
   useEffect(() => {
     setUsed(readCount());
+    try {
+      const m = window.localStorage.getItem("nv_script_mode");
+      if (m === "exact" || m === "enhance") setScriptModeState(m);
+    } catch { /* private mode */ }
     // A shared link only fills in the form; nothing plays until Create.
     // Otherwise restore what the listener typed before visiting Settings (#100).
     const d = startingDraft(window.location.search);
@@ -345,6 +393,9 @@ export default function DemoPage() {
   const generate = async (v: number) => {
     stop();
     const mine = ++run.current;
+    const aid = newAttemptId();
+    attemptId.current = aid;
+    attemptBuild.current = "";
     setStage("making");
     setNote("");
     setIdx(-1);
@@ -362,7 +413,7 @@ export default function DemoPage() {
     try {
       const res = await fetch("/api/manifest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Attempt-Id": aid },
         body: JSON.stringify({
           want: want.trim(),
           name: name.trim(),
@@ -370,7 +421,10 @@ export default function DemoPage() {
           variant: v,
           pace: readPaceChoice(),
           tone: readToneChoice(),
+          speedStep: readSpeedStepChoice(),
+          cadenceStep: readCadenceStepChoice(),
           repeat: repeatMin > 0,
+          ...(scriptMode === "exact" ? { scriptMode: "exact" } : {}),
         }),
       });
       if (res.ok) {
@@ -378,12 +432,16 @@ export default function DemoPage() {
         const made = JSON.parse(new TextDecoder().decode(Uint8Array.from(packed, (c) => c.charCodeAt(0))));
         if (!Array.isArray(made) || !made.every((l) => typeof l === "string")) throw new Error("bad script");
         const audio = await res.blob();
+        attemptBuild.current = res.headers.get("X-Build") ?? "";
         const scriptSource = res.headers.get("X-Script-Source") ?? "";
         scriptReason = res.headers.get("X-Script-Reason") ?? undefined;
+        const titleB64 = res.headers.get("X-Title");
+        const serverTitle = titleB64 ? new TextDecoder().decode(Uint8Array.from(atob(titleB64), (c) => c.charCodeAt(0))) || undefined : undefined;
         const base = {
           voiceId: resolveVoice(res.headers.get("X-Voice-Id")).id,
           voiceName: resolveVoice(res.headers.get("X-Voice-Id")).name,
           source: scriptSource,
+          ...(serverTitle ? { title: serverTitle } : {}),
         };
         // Programming mode: the server recorded the refrain after the script.
         const refrainB64 = res.headers.get("X-Refrain");
@@ -434,7 +492,7 @@ export default function DemoPage() {
           ? `${why} Here is your script in your device's own voice.`
           : `${why} Here is a general version in your device's own voice.`
         : [
-            next.source === "template" ? noteForReason(scriptReason) : "",
+            next.source === "template" ? noteForReason(scriptReason) : next.source === "exact" ? "Your exact words." : "",
             noLoop === "voice"
               ? `${next.voiceName}'s recordings cannot be looped, so this plays without the repetition. Choose another voice in Settings to repeat it.`
               : noLoop === "build"
@@ -444,7 +502,90 @@ export default function DemoPage() {
             .filter(Boolean)
             .join(" "),
     );
+    setEditScript((next?.saveLines ?? next?.lines ?? written ?? []).join("\n"));
+    setRrError("");
+    setPrevMade(null);
     setStage("player");
+  };
+
+  const rerecordEdit = async () => {
+    if (rrRunning) return;
+    const lines = linesFromText(editScript);
+    if (!lines.length || !made) return;
+    stop();
+    setRrRunning(true);
+    setRrError("");
+    try {
+      const res = await fetch("/api/rerecord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines, voiceId: made.voiceId }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+        setRrError(rrErrorMessage(j?.code, j?.error));
+        return;
+      }
+      const blob = await res.blob();
+      const newUrl = URL.createObjectURL(blob);
+      const usedVoice = resolveVoice(res.headers.get("X-Voice-Id"));
+      const newMade: Made = {
+        ...made,
+        lines,
+        url: newUrl,
+        voiceId: usedVoice.id,
+        voiceName: usedVoice.name,
+        starts: undefined,
+        saveLines: undefined,
+        saveUrl: undefined,
+        speech: undefined,
+      };
+      // Keep the old URL alive so Undo can restore it; revocation happens on undo or on
+      // the next re-record (at which point prevMade is replaced below).
+      if (prevMade) {
+        URL.revokeObjectURL(prevMade.url);
+        if (prevMade.saveUrl) URL.revokeObjectURL(prevMade.saveUrl);
+      }
+      setPrevMade(made);
+      setMade(newMade);
+      setEditScript(lines.join("\n"));
+      if (savedId) {
+        try {
+          const store = await resolveStore();
+          const audio = await (await fetch(newUrl)).blob();
+          await store.saveManifestation(
+            { id: savedId, title: newMade.source === "template" ? (note || newMade.voiceName) : (newMade.title ?? displayTitle(toYouStatement(want))), want: want.trim(), firstName: name.trim(), lines, voiceId: usedVoice.id, voiceName: usedVoice.name, hasAudio: true, createdAt: Date.now(), updatedAt: Date.now() },
+            audio,
+          );
+        } catch { /* library save failure is non-fatal: in-memory audio still plays */ }
+      }
+    } catch {
+      setRrError("The recording could not be made just now.");
+    } finally {
+      setRrRunning(false);
+    }
+  };
+
+  const undoRerecord = () => {
+    if (!prevMade) return;
+    const old = prevMade;
+    URL.revokeObjectURL(made?.url ?? "");
+    setMade(old);
+    setEditScript((old.saveLines ?? old.lines).join("\n"));
+    setPrevMade(null);
+    setRrError("");
+    if (savedId) {
+      void (async () => {
+        try {
+          const store = await resolveStore();
+          const audio = await (await fetch(old.url)).blob();
+          await store.saveManifestation(
+            { id: savedId, title: old.source === "template" ? FALLBACK_TITLE : (old.title ?? displayTitle(toYouStatement(want))), want: want.trim(), firstName: name.trim(), lines: old.saveLines ?? old.lines, voiceId: old.voiceId, voiceName: old.voiceName, hasAudio: true, createdAt: Date.now(), updatedAt: Date.now() },
+            audio,
+          );
+        } catch { /* non-fatal */ }
+      })();
+    }
   };
 
   const create = () => {
@@ -481,7 +622,7 @@ export default function DemoPage() {
     u.searchParams.set("w", want.trim());
     if (name.trim()) u.searchParams.set("n", name.trim());
     try {
-      if (navigator.share) await navigator.share({ title: titleFor(want), url: u.toString() });
+      if (navigator.share) await navigator.share({ title: made?.title ?? displayTitle(toYouStatement(want)), url: u.toString() });
       else {
         await navigator.clipboard.writeText(u.toString());
         setToast("Link copied.");
@@ -503,12 +644,14 @@ export default function DemoPage() {
       await (await resolveStore()).saveManifestation(
         {
           id,
-          title: made?.source === "template" ? FALLBACK_TITLE : made ? titleFor(want) : FALLBACK_TITLE,
+          title: made?.source === "template" ? FALLBACK_TITLE : made ? (made.title ?? displayTitle(toYouStatement(want))) : FALLBACK_TITLE,
           want: want.trim(),
           firstName: name.trim(),
           lines: made?.saveLines ?? lines,
           voiceId: made?.voiceId ?? "",
           voiceName: made?.voiceName ?? "Device voice",
+          speedStep,
+          cadenceStep,
           hasAudio: !!audio,
           createdAt: now,
           updatedAt: now,
@@ -522,6 +665,11 @@ export default function DemoPage() {
     }
     setSaving(false);
     setTimeout(() => setToast(""), 2500);
+  };
+
+  const goToPlaylist = async () => {
+    if (!savedId) await save();
+    nextRouter.push(LIBRARY_WEB_ROUTE);
   };
 
   const reset = () => {
@@ -550,12 +698,15 @@ export default function DemoPage() {
           No sign-up. One tap. A short affirmation written and recorded for you.
         </p>
         <div className="card">
-          <label htmlFor="want">What do you want?</label>
+          <label htmlFor="want">What is already yours?</label>
+          <p className="small muted" style={{ fontStyle: "italic", margin: "2px 0 6px" }}>
+            To feel I will be is to confess I am not. — Neville Goddard, Feeling Is the Secret.
+          </p>
           <textarea
             id="want"
             value={want}
             maxLength={280}
-            placeholder="I want to be calm and confident when I speak"
+            placeholder="I am calm and confident when I speak"
             onChange={(e) => editWant(e.target.value)}
           />
           <div className="chips" aria-label="Examples">
@@ -595,14 +746,33 @@ export default function DemoPage() {
               </select>
             </div>
           </div>
-          <Link className="voicesummary" href="/settings#voice">
+          <div className="row" role="radiogroup" aria-label="Voice">
             <span className="small muted">Voice</span>
-            <span>
-              <b>{nextVoice.name}</b>
-              <span className="small muted"> {mixOn ? "· next in your voice mix" : voiceBlurb(nextVoice) && `· ${voiceBlurb(nextVoice)}`}</span>
-            </span>
-            <span className="change">Change</span>
-          </Link>
+            {CURATED_VOICES.map((v) => (
+              <span key={v.id} style={{ display: "inline-flex", gap: "2px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className={`chip${studioVoice.id === v.id ? " active" : ""}`}
+                  aria-pressed={studioVoice.id === v.id}
+                  onClick={() => { writeVoiceChoice(v.id); refreshNextVoice(); }}
+                >
+                  {v.name}
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  aria-label={`${playingVoice === v.id ? "Stop" : "Play"} ${v.name} sample`}
+                  onClick={() => toggleSample(v.id, v.sample)}
+                  style={{ minWidth: "2em" }}
+                >
+                  {playingVoice === v.id ? "■" : "▶"}
+                </button>
+              </span>
+            ))}
+            <Link className="chip" href="/settings#voice" title="Mix voices or choose from the full list">
+              More
+            </Link>
+          </div>
           <div className="row">
             <div>
               <label htmlFor="repeat">Repetition after the script</label>
@@ -643,6 +813,53 @@ export default function DemoPage() {
               new idea settle in, especially at first.
             </p>
           )}
+          <div className="row">
+            <span className="small muted">Script</span>
+            <button
+              type="button"
+              className={`chip${scriptMode === "enhance" ? " active" : ""}`}
+              aria-pressed={scriptMode === "enhance"}
+              onClick={() => setScriptMode("enhance")}
+            >
+              Enhance with AI
+            </button>
+            <button
+              type="button"
+              className={`chip${scriptMode === "exact" ? " active" : ""}`}
+              aria-pressed={scriptMode === "exact"}
+              onClick={() => setScriptMode("exact")}
+            >
+              Exactly my words
+            </button>
+          </div>
+          <div className="row">
+            <span className="small muted">Speed</span>
+            {SPEED_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${speedStep === o.id ? " active" : ""}`}
+                aria-pressed={speedStep === o.id}
+                onClick={() => setSpeedStep(o.id as SpeedStep)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <span className="small muted">Cadence</span>
+            {CADENCE_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`chip${cadenceStep === o.id ? " active" : ""}`}
+                aria-pressed={cadenceStep === o.id}
+                onClick={() => setCadenceStep(o.id as CadenceStep)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
           <button className="btn primary block" disabled={!want.trim()} onClick={create}>
             Create my manifestation
           </button>
@@ -667,6 +884,7 @@ export default function DemoPage() {
       <>
         <h1>Making it yours…</h1>
         <p className="lede">This takes up to half a minute. Keep this page open.</p>
+        <WaitingPhrasesWeb />
       </>
     );
   }
@@ -675,11 +893,22 @@ export default function DemoPage() {
 
   return (
     <>
-      <h1>{made?.source === "template" ? FALLBACK_TITLE : titleFor(want)}</h1>
+      <h1>{made?.source === "template" ? FALLBACK_TITLE : (made?.title ?? displayTitle(toYouStatement(want)))}</h1>
       <p className="lede">
         {idx >= lines.length ? "Finished. Play it again, or try a new variation." : "Tap play, close your eyes."}
       </p>
       {note && <p className="small muted">{note}</p>}
+      {!made && attemptId.current ? (
+        <p className="small muted">
+          Reference {shortRef(attemptId.current)}{" "}
+          <button
+            className="chip"
+            onClick={() => void navigator.clipboard.writeText(copyLine(attemptId.current, attemptBuild.current)).catch(() => undefined)}
+          >
+            Copy
+          </button>
+        </p>
+      ) : null}
 
       <div
         className={`visual${playing ? " playing" : ""}`}
@@ -722,6 +951,9 @@ export default function DemoPage() {
             {saving ? "Saving…" : "Save"}
           </button>
         )}
+        <button className="btn sm" onClick={goToPlaylist} disabled={saving}>
+          {playlistLabel(savedId)}
+        </button>
         <button
           className="btn sm ghost"
           aria-pressed={music}
@@ -761,13 +993,42 @@ export default function DemoPage() {
         </p>
       )}
 
-      <ol className="script">
-        {lines.map((l, i) => (
-          <li key={i} className={i === idx ? "now" : i < idx ? "past" : ""}>
-            {l}
-          </li>
-        ))}
-      </ol>
+      {rrRunning ? (
+        <div>
+          <p className="small muted">Recording in progress. This takes up to half a minute.</p>
+          <WaitingPhrasesWeb />
+        </div>
+      ) : (
+        <>
+          <textarea
+            className="script-edit"
+            aria-label="Script"
+            value={editScript}
+            disabled={playing}
+            onChange={(e) => { setEditScript(e.target.value); setRrError(""); }}
+          />
+          {editEnablesRerecord(lines, editScript) && (
+            <div className="controls">
+              <button className="btn sm primary" onClick={() => void rerecordEdit()} disabled={playing}>
+                Re-record
+              </button>
+              {prevMade && (
+                <button className="btn sm ghost" onClick={undoRerecord}>
+                  Undo
+                </button>
+              )}
+            </div>
+          )}
+          {prevMade && !editEnablesRerecord(lines, editScript) && (
+            <div className="controls">
+              <button className="btn sm ghost" onClick={undoRerecord}>
+                Undo re-record
+              </button>
+            </div>
+          )}
+          {rrError && <p className="small muted" role="alert">{rrError}</p>}
+        </>
+      )}
 
       <p className="small muted">
         {made

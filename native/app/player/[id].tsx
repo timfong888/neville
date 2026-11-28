@@ -1,28 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { lineForProgress } from "@/lib/create";
 import { lineStarts } from "@/lib/audio";
-import { buildQueue, gapClip, repeatsFor, roundAt } from "@/lib/playerQueue";
-import { DEFAULT_REPEAT_MINUTES, REPEAT_MINUTES } from "@/lib/repetition";
+import { displayTitle } from "@/lib/script";
+import { buildQueue, gapClip, roundAt } from "@/lib/playerQueue";
+import { planSession } from "@/lib/session/planSession";
 import { audio } from "../../src/seams/audio";
 import type { Manifestation } from "@/lib/library/model";
 import { nowPlaying, useNowPlaying } from "../../src/player/nowPlayingStore";
 import { inOrder } from "../../src/player/copies";
 import { MUSIC_ENABLED } from "../../src/player/musicStore";
 import { DEMO_ID, demoAudioUri, demoItem } from "../../src/player/demo";
-import { DEFAULT_LOOP, LOOP_GAP_MS, type LoopMode, loopQueue, makeLoopStore, playerGapName, playerLoop } from "../../src/player/loop";
+import { LOOP_GAP_MS, loopQueue, playerGapName } from "../../src/player/loop";
 import { kv } from "../../src/seams/kv";
 import { library } from "../../src/seams/library";
 import { colors } from "../../src/theme";
 import { CurrentLinePanel } from "../../src/ui/CurrentLinePanel";
 import { PlayOptions } from "../../src/ui/PlayOptions";
 import { Screen } from "../../src/ui/Screen";
+import {
+  DEFAULT_LOOPS,
+  DEFAULT_SESSION_MODE,
+  DEFAULT_TIME,
+  MAX_LOOPS,
+  SESSION_MODES,
+  TIME_OPTIONS,
+  makeSessionStore,
+  type SessionMode,
+} from "../../src/player/sessionStore";
 
-const loopStore = makeLoopStore(kv);
-// The Player loops this one item. Looping the whole Library starts from the Library screen.
-const PLAYER_LOOPS: readonly LoopMode[] = ["off", "one"];
-const LOOP_LABEL: Record<LoopMode, string> = { off: "Off", one: "One", all: "All" };
+const sessionStore = makeSessionStore(kv);
+
+const SESSION_LABEL: Record<SessionMode, string> = { "until-stopped": "Until I stop", loops: "Loops", time: "Time" };
 
 // The Player (#122): one saved item, opened by id. It starts a job on the app-level controller (#161), which
 // plays the recording, then again for the chosen minutes with an optional bell, or on a loop. The playing
@@ -30,11 +40,9 @@ const LOOP_LABEL: Record<LoopMode, string> = { off: "Off", one: "One", all: "All
 export default function Player() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loaded, setLoaded] = useState<Manifestation | null | undefined>(undefined);
-  const [minutes, setMinutes] = useState<number>(DEFAULT_REPEAT_MINUTES);
   const [bellOn, setBellOn] = useState(true);
-  // Off or one (#157): whether this item repeats until stopped.
-  const [loop, setLoop] = useState<LoopMode>(DEFAULT_LOOP);
-  // Set once the listener picks a mode, so the stored choice, read later, does not replace it.
+  const [sessionMode, setSessionMode] = useState<SessionMode>(DEFAULT_SESSION_MODE);
+  const [sessionTarget, setSessionTarget] = useState<number>(DEFAULT_TIME);
   const picked = useRef(false);
   const voice = useRef<{ src: string; seconds: number } | null>(null);
   const lastLineRef = useRef(0);
@@ -48,16 +56,17 @@ export default function Player() {
     setLoaded(undefined);
     audio.configure().catch(() => {});
     picked.current = false;
-    void loopStore.read().then((m) => live && !picked.current && setLoop(playerLoop(m)));
+    void sessionStore.readMode().then((m) => {
+      if (!live || picked.current) return;
+      setSessionMode(m);
+      void sessionStore.readTarget(m).then((t) => live && !picked.current && setSessionTarget(t));
+    });
     (async () => {
-      // `/player/demo` is a built-in test tone. Every other id comes from the library seam.
       const demo = String(id) === DEMO_ID;
       const it = demo ? demoItem : await library.get(String(id)).catch(() => null);
-      // The library owns its address and may free it at any time, so the Player plays its own copy.
       const own = (u: string | null) => inOrder(() => (u && live ? audio.keep("player-voice", u) : Promise.resolve(null)));
       const src = !it?.hasAudio ? null : await (demo ? demoAudioUri() : library.audioUri(it.id).then(own)).catch(() => null);
       if (src) {
-        // The length is read now, so Play does not wait and the browser still counts it as a tap.
         const seconds = await audio.duration(src);
         if (live) voice.current = { src, seconds };
       }
@@ -66,21 +75,49 @@ export default function Player() {
     return () => void (live = false);
   }, [id]);
 
+  const pickMode = (m: SessionMode) => {
+    picked.current = true;
+    setSessionMode(m);
+    void sessionStore.writeMode(m);
+    const t = m === "loops" ? DEFAULT_LOOPS : DEFAULT_TIME;
+    setSessionTarget(t);
+    void sessionStore.writeTarget(t);
+  };
+
+  const pickTarget = (t: number) => {
+    setSessionTarget(t);
+    void sessionStore.writeTarget(t);
+  };
+
+  const plan = (() => {
+    const v = voice.current;
+    if (!v || sessionMode === "until-stopped") return null;
+    const gapSec = LOOP_GAP_MS / 1000;
+    const loopDur = v.seconds + gapSec;
+    return planSession([loopDur], sessionMode, sessionTarget, undefined, gapSec);
+  })();
+
   const play = () => {
     const v = voice.current;
     if (!v || !loaded) return;
     const item = loaded;
-    const looping = loop === "one";
-    const repeats = looping ? 0 : repeatsFor(v.seconds, minutes);
+    const looping = sessionMode === "until-stopped";
+    const repeats = plan?.loops != null ? plan.loops - 1 : 0;
     void nowPlaying.play({
       id: item.id,
       title: item.title || "Neville",
       route: `/player/${item.id}`,
       empty: "",
       prepare: async () => {
-        const gap = repeats || looping ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, looping ? LOOP_GAP_MS : undefined), "audio/wav") : "";
-        const clips = looping ? loopQueue("one", [], item.id, gap, { id: item.id, src: v.src, title: item.title }).clips : buildQueue(v.src, gap, repeats);
-        return { clips, loop: looping, music: MUSIC_ENABLED, at: (i) => ({ title: item.title, position: roundAt(i).round, total: repeats + 1 }) };
+        const hasGap = looping || repeats > 0;
+        const gap = hasGap
+          ? await audio.save(playerGapName(looping, bellOn), gapClip(bellOn, LOOP_GAP_MS), "audio/wav")
+          : "";
+        const clips = looping
+          ? loopQueue("one", [], item.id, gap, { id: item.id, src: v.src, title: item.title }).clips
+          : buildQueue(v.src, gap, repeats);
+        const total = plan?.loops ?? 1;
+        return { clips, loop: looping, music: MUSIC_ENABLED, at: (i) => ({ title: item.title, position: roundAt(i).round, total }) };
       },
     });
   };
@@ -89,48 +126,49 @@ export default function Player() {
   if (loaded === null) return <Screen><Text style={s.p}>This item is not saved on this device.</Text></Screen>;
 
   const item = loaded;
-  // The controller plays one thing at a time; this screen shows it only when it is this item.
   const mine = np.id === item.id;
-  const phase = mine && (np.status === "playing" || np.status === "paused") ? np.status : "idle";
+  const phase = mine && (np.status === "playing" || np.status === "stopped-mid") ? np.status : "idle";
 
-  // Track which script line is being spoken. The queue alternates recording (even index) and
-  // gap clips (odd index); lineForProgress returns null on a gap so we hold the last line.
   if (mine && phase !== "idle") {
     const l = lineForProgress(np.index, np.progress, starts);
     if (l !== null) lastLineRef.current = l;
   }
   const currentLine: number | null = mine && phase !== "idle" ? lastLineRef.current : null;
   const busy = mine && np.status === "preparing";
-  const note = mine && np.status === "idle" ? np.note : "";
+  const rawNote = mine && np.status === "idle" ? np.note : "";
+  const note = rawNote === "Finished." ? "Session complete." : rawNote;
   const active = phase !== "idle";
-  // While this item plays, the running job's loop, not the stored choice, which another item may have changed.
-  const shownLoop: LoopMode = active ? (np.loop ? "one" : "off") : loop;
+  const shownLoop = sessionMode === "until-stopped";
   const at = roundAt(mine ? np.index : 0);
   const plays = np.total;
-  const pick = (m: LoopMode) => {
-    picked.current = true;
-    setLoop(m);
-    void loopStore.write(m);
-  };
+
+  const loopsLeft = active && plan?.loops != null ? Math.max(0, plan.loops - at.round + (at.inGap ? 0 : 1)) : null;
+
   return (
     <Screen>
-      <Text style={s.h1} accessibilityRole="header">{item.title || "Untitled"}</Text>
+      <Text style={s.h1} accessibilityRole="header">{displayTitle(item.title) || "Untitled"}</Text>
       {item.voiceName ? <Text style={s.dim}>Voice: {item.voiceName}</Text> : null}
       {voice.current ? (
         <View style={s.row}>
-          <Pressable
-            style={[s.btn, s.main]}
-            accessibilityRole="button"
-            accessibilityLabel={phase === "playing" ? "Pause" : "Play"}
-            onPress={() => (phase === "idle" ? play() : nowPlaying.toggle())}
-          >
-            <Text style={s.mainText}>{phase === "playing" ? "Pause" : phase === "paused" ? "Resume" : "Play"}</Text>
-          </Pressable>
-          {active ? (
-            <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Stop" onPress={() => nowPlaying.stop()}>
-              <Text style={s.btnText}>Stop</Text>
+          {phase === "stopped-mid" ? (
+            <>
+              <Pressable style={[s.btn, s.main]} accessibilityRole="button" accessibilityLabel="Resume" onPress={() => nowPlaying.resume()}>
+                <Text style={s.mainText}>Resume</Text>
+              </Pressable>
+              <Pressable style={s.btn} accessibilityRole="button" accessibilityLabel="Start over" onPress={() => nowPlaying.stop()}>
+                <Text style={s.btnText}>Start over</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              style={[s.btn, s.main]}
+              accessibilityRole="button"
+              accessibilityLabel={phase === "playing" ? "Stop" : "Play"}
+              onPress={() => (phase === "playing" ? nowPlaying.pause() : play())}
+            >
+              <Text style={s.mainText}>{phase === "playing" ? "Stop" : "Play"}</Text>
             </Pressable>
-          ) : null}
+          )}
         </View>
       ) : (
         <Text style={s.p}>
@@ -141,8 +179,11 @@ export default function Player() {
       )}
       {active ? (
         <Text style={s.p} accessibilityLiveRegion="polite">
-          {shownLoop === "one" ? `Repeating${at.inGap ? ", pause" : ""}`
-            : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? ", pause" : ""}` : "Playing once"}
+          {shownLoop
+            ? `Repeating${at.inGap ? ", pause" : ""}`
+            : loopsLeft !== null
+              ? `${loopsLeft} loop${loopsLeft !== 1 ? "s" : ""} remaining`
+              : plays > 1 ? `Play ${at.round} of ${plays}${at.inGap ? ", pause" : ""}` : "Playing once"}
         </Text>
       ) : note ? (
         <Text style={s.p}>{note}</Text>
@@ -150,43 +191,79 @@ export default function Player() {
 
       {currentLine !== null ? <CurrentLinePanel line={item.lines[currentLine] ?? ""} /> : null}
 
-      <Text style={s.label}>Loop{active ? " (stop to change)" : ""}</Text>
+      <Text style={s.label}>Session length{active ? " (stop to change)" : ""}</Text>
       <View style={s.row}>
-        {PLAYER_LOOPS.map((m) => (
+        {SESSION_MODES.map((m) => (
           <Pressable
             key={m}
             disabled={active || busy}
-            style={[s.chip, shownLoop === m && s.on, (active || busy) && s.off]}
+            style={[s.chip, sessionMode === m && s.on, (active || busy) && s.off]}
             accessibilityRole="radio"
-            accessibilityState={{ selected: shownLoop === m, disabled: active || busy }}
-            accessibilityLabel={`Loop ${LOOP_LABEL[m]}`}
-            onPress={() => pick(m)}
+            accessibilityState={{ selected: sessionMode === m, disabled: active || busy }}
+            accessibilityLabel={SESSION_LABEL[m]}
+            onPress={() => pickMode(m)}
           >
-            <Text style={s.btnText}>{LOOP_LABEL[m]}</Text>
+            <Text style={s.btnText}>{SESSION_LABEL[m]}</Text>
           </Pressable>
         ))}
       </View>
-      <Text style={s.dim}>{shownLoop === "one" ? "Repeats this recording until you stop it. To loop everything, use Play all on loop in the Library." : "Plays once, then repeats for the minutes below."}</Text>
+
+      {sessionMode === "time" && !active ? (
+        <>
+          <View style={s.row}>
+            {TIME_OPTIONS.map((m) => (
+              <Pressable
+                key={m}
+                style={[s.chip, sessionTarget === m && s.on]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sessionTarget === m }}
+                accessibilityLabel={`${m} minutes`}
+                onPress={() => pickTarget(m)}
+              >
+                <Text style={s.btnText}>{m} min</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={[s.row, s.spread]}>
+            <Pressable style={s.chip} accessibilityLabel="Less time" onPress={() => pickTarget(Math.max(1, sessionTarget - 1))}>
+              <Text style={s.btnText}>−</Text>
+            </Pressable>
+            <TextInput
+              style={[s.p, s.timeInput]}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={4}
+              value={String(sessionTarget)}
+              onChangeText={(v) => { const n = parseInt(v, 10); if (!Number.isNaN(n) && n >= 1) pickTarget(n); }}
+              accessibilityLabel={`${sessionTarget} minutes, tap to edit`}
+            />
+            <Text style={s.p}>min</Text>
+            <Pressable style={s.chip} accessibilityLabel="More time" onPress={() => pickTarget(sessionTarget + 1)}>
+              <Text style={s.btnText}>+</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : sessionMode === "loops" && !active ? (
+        <View style={[s.row, s.spread]}>
+          <Pressable style={s.chip} accessibilityLabel="Fewer loops" onPress={() => pickTarget(Math.max(1, sessionTarget - 1))}><Text style={s.btnText}>−</Text></Pressable>
+          <Text style={s.p}>{sessionTarget} loop{sessionTarget !== 1 ? "s" : ""}</Text>
+          <Pressable style={s.chip} accessibilityLabel="More loops" onPress={() => pickTarget(Math.min(MAX_LOOPS, sessionTarget + 1))}><Text style={s.btnText}>+</Text></Pressable>
+        </View>
+      ) : null}
+
+      {!active && plan && voice.current ? (
+        <Text style={s.dim}>About {plan.loops} loop{plan.loops !== 1 ? "s" : ""}{plan.endsAt ? `, ends at ${plan.endsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</Text>
+      ) : null}
+
       <PlayOptions disabled={active || busy} />
-      <Text style={s.label}>Repetition after the first play{shownLoop !== "off" ? " (Off while looping)" : active ? " (stop to change)" : ""}</Text>
-      <View style={s.row}>
-        {REPEAT_MINUTES.map((m) => (
-          <Pressable
-            key={m}
-            disabled={active || loop !== "off"}
-            style={[s.chip, minutes === m && !active && s.on, (active || loop !== "off") && s.off]}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: minutes === m && !active, disabled: active || loop !== "off" }}
-            accessibilityLabel={m ? `${m} minutes` : "Off"}
-            onPress={() => setMinutes(m)}
-          >
-            <Text style={s.btnText}>{m ? `${m} min` : "Off"}</Text>
-          </Pressable>
-        ))}
-      </View>
       <View style={[s.row, s.spread]}>
         <Text style={s.p}>A soft bell between plays</Text>
-        <Switch accessibilityLabel="A soft bell between plays" value={bellOn} onValueChange={setBellOn} disabled={active || (minutes === 0 && loop === "off")} />
+        <Switch
+          accessibilityLabel="A soft bell between plays"
+          value={bellOn}
+          onValueChange={setBellOn}
+          disabled={active || (sessionMode === "until-stopped" ? false : (plan?.loops ?? 0) <= 1)}
+        />
       </View>
 
       <View style={s.script}>
@@ -210,9 +287,10 @@ const s = StyleSheet.create({
   mainText: { color: "#151820", fontSize: 18, fontWeight: "600" },
   btnText: { color: "#fff", fontSize: 16 },
   chip: { borderColor: "#c9ced8", borderWidth: 1, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
+  timeInput: { minWidth: 56, textAlign: "center" },
   on: { backgroundColor: "#2a3142", borderColor: "#8ab4ff" },
   off: { opacity: 0.5 },
   script: { gap: 10, marginTop: 8 },
-  line: { color: "#e6e9ef", fontSize: 18, lineHeight: 26 },
+  line: { color: "#e6e9ef", fontSize: 15, lineHeight: 22 },
   activeLine: { color: colors.accentText, fontWeight: "600" },
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanLines } from "@/lib/prompt";
-import { neutralScript, scriptLines, toYouStatement } from "@/lib/script";
+import { displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
 
 describe("neutralScript (the fallback when the text model did not write the script)", () => {
   it("takes no wish at all, so it cannot repeat the visitor's words", () => {
@@ -28,6 +28,42 @@ describe("toYouStatement", () => {
   it("turns a wish into a present-tense you statement", () => {
     expect(toYouStatement("I want to be calm and confident when I speak")).toBe("you are calm and confident when you speak");
     expect(toYouStatement("")).toBe("you are living the life you chose");
+  });
+});
+
+describe("displayTitle", () => {
+  it("strips leading 'You are' and trailing ellipsis from old stored titles", () => {
+    expect(displayTitle("You are attracting young beautiful women with…")).toBe("Attracting young beautiful women with");
+  });
+  it("strips leading 'You have' and cuts to 5 words", () => {
+    expect(displayTitle("You have this house by the sea now")).toBe("This house by the sea");
+  });
+  it("strips a bare leading 'You'", () => {
+    expect(displayTitle("You got this calm feeling")).toBe("Got this calm feeling");
+  });
+  it("cuts to 5 words without adding ellipsis", () => {
+    expect(displayTitle("Calm and confident in every situation that arises")).toBe("Calm and confident in every");
+    expect(displayTitle("Calm and confident in every situation that arises")).not.toMatch(/…|\.\.\./);
+  });
+  it("leaves short clean titles unchanged", () => {
+    expect(displayTitle("Magnetic confidence")).toBe("Magnetic confidence");
+    expect(displayTitle("A moment of calm")).toBe("A moment of calm");
+    expect(displayTitle("Calm sleep")).toBe("Calm sleep");
+  });
+  it("strips trailing ellipsis from old 7-word titles", () => {
+    expect(displayTitle("You are calm and confident when you…")).not.toMatch(/…|\.\.\./);
+    expect(displayTitle("You are calm and confident when you…")).toBe("Calm and confident when you");
+  });
+  it("is case-insensitive for the filler prefix", () => {
+    expect(displayTitle("you are calm")).toBe("Calm");
+    expect(displayTitle("YOU HAVE peace")).toBe("Peace");
+  });
+  it("capitalises the first letter", () => {
+    expect(displayTitle("magnetic confidence")).toBe("Magnetic confidence");
+  });
+  it("is idempotent on clean AI titles", () => {
+    expect(displayTitle(displayTitle("Magnetic confidence"))).toBe("Magnetic confidence");
+    expect(displayTitle(displayTitle("Calm sleep"))).toBe("Calm sleep");
   });
 });
 
