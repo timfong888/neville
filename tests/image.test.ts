@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { imagePrompt } from "@/lib/image/prompt";
-import { imageGate } from "@/lib/image/gate";
+import { IMAGE_GUIDANCE, imageGate } from "@/lib/image/gate";
 import { mockProvider } from "@/lib/image/provider";
 import { wishMentionsMinor } from "@/lib/prompt";
 
@@ -175,6 +175,91 @@ describe("imageGate minor-word check", () => {
   it("C1 acceptance example still passes", () => {
     const wish = "photorealistic very attractive women, open and smiling at me in a flirtatious way";
     expect(imageGate(wish).allowed).toBe(true);
+  });
+});
+
+// ── imageGate relaxed (issue 215) ────────────────────────────────────────────
+
+describe("imageGate relaxed (issue 215)", () => {
+  it("allows non-sexual family wishes and ambiguous words", () => {
+    // "sister", "little" are in MINOR but not MINOR_CLEAR; no intimacy word → allowed
+    expect(imageGate("my little sister smiling", { relaxed: true }).allowed).toBe(true);
+    expect(imageGate("a hug from my sister", { relaxed: true }).allowed).toBe(true);
+    expect(imageGate("my mother is proud of me", { relaxed: true }).allowed).toBe(true);
+  });
+
+  it("refuses family role + intimacy for relaxed (issue 219 block 4)", () => {
+    const cases: [string, string][] = [
+      ["kiss my sister", "minor"],
+      ["sleep with my stepmother", "minor"],
+    ];
+    for (const [wish, reason] of cases) {
+      const result = imageGate(wish, { relaxed: true });
+      expect(result.allowed, wish).toBe(false);
+      if (!result.allowed) expect(result.reason, wish).toBe(reason);
+    }
+  });
+
+  it("still refuses MINOR_CLEAR terms even when relaxed", () => {
+    const cases: [string, string][] = [
+      ["pretty girls at the beach", "minor"],
+      ["kids playing in a park", "minor"],
+      ["a teen with a guitar", "minor"],
+      ["a student in a classroom", "minor"],
+    ];
+    for (const [wish, reason] of cases) {
+      const result = imageGate(wish, { relaxed: true });
+      expect(result.allowed, wish).toBe(false);
+      if (!result.allowed) expect(result.reason, wish).toBe(reason);
+    }
+  });
+
+  it("still refuses real_person for relaxed accounts", () => {
+    const result = imageGate("a photo like Taylor Swift", { relaxed: true });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("real_person");
+  });
+
+  it("still refuses reference_photo for relaxed accounts", () => {
+    const result = imageGate("using my photo, make a portrait", { relaxed: true });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) expect(result.reason).toBe("reference_photo");
+  });
+
+  it("relaxed and strict behave the same for adult-only wishes", () => {
+    const wish = "attractive women in a coffee shop";
+    expect(imageGate(wish, { relaxed: true }).allowed).toBe(true);
+    expect(imageGate(wish).allowed).toBe(true);
+  });
+});
+
+// ── IMAGE_GUIDANCE ────────────────────────────────────────────────────────────
+
+describe("IMAGE_GUIDANCE (issue 215)", () => {
+  it("has an entry for each refusal reason", () => {
+    expect(typeof IMAGE_GUIDANCE.minor).toBe("string");
+    expect(typeof IMAGE_GUIDANCE.real_person).toBe("string");
+    expect(typeof IMAGE_GUIDANCE.reference_photo).toBe("string");
+  });
+
+  it("none of the guidance strings are empty", () => {
+    for (const [key, text] of Object.entries(IMAGE_GUIDANCE)) {
+      expect(text.length, key).toBeGreaterThan(0);
+    }
+  });
+
+  it("guidance strings do not contain wish-specific text", () => {
+    // These are the fixed guidance strings — they must never echo a user wish.
+    // Verify they contain only the known fixed sentences.
+    expect(IMAGE_GUIDANCE.minor).toBe(
+      `An image can't be made for this wish. Describe adults only, for example "women in their early twenties".`,
+    );
+    expect(IMAGE_GUIDANCE.real_person).toBe(
+      `An image can't show a named real person. Describe the kind of person instead.`,
+    );
+    expect(IMAGE_GUIDANCE.reference_photo).toBe(
+      `An image can't be made from a photo. Describe the person in words instead.`,
+    );
   });
 });
 

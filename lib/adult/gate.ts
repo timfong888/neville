@@ -97,12 +97,19 @@ const GUIDANCE: Record<BlockReason, string> = {
  * Never logs or echoes the blocked term; callers must not log `wish` on refusal.
  */
 export function adultGate(wish: string): AdultGateResult {
-  // Two-tier minor check:
-  // 1. Absolute terms (ages under 18, loli, schoolgirl, girl, boy, etc.) always block.
-  // 2. Ambiguous minor-associated words (sister, daughter, etc.) only block when a
-  //    sexual-intent signal is also present (wishSexualisesMinor).
-  //    Non-sexual wishes that happen to mention a sibling or niece pass through.
-  if (ABSOLUTE_MINOR.test(wish) || wishSexualisesMinor(wish)) {
+  // Three-tier minor/family check (order matters):
+  // 1. Absolute minor terms (ages under 18, loli, schoolgirl, girl, boy, etc.) always block as "minor".
+  // 2. Family/relative role words + sexual context → "family_role" (checked before wishSexualisesMinor
+  //    so that "make love to my daughter" routes to family_role, not minor, even though MINOR
+  //    includes family words to catch them on non-adult paths in lib/prompt.ts).
+  // 3. Remaining wishSexualisesMinor matches (non-family minor words) → "minor".
+  if (ABSOLUTE_MINOR.test(wish)) {
+    return { allowed: false, reason: "minor", guidance: GUIDANCE.minor };
+  }
+  if (FAMILY_ROLE.test(wish) && SEXUAL_CONTEXT.test(wish)) {
+    return { allowed: false, reason: "family_role", guidance: GUIDANCE.family_role };
+  }
+  if (wishSexualisesMinor(wish)) {
     return { allowed: false, reason: "minor", guidance: GUIDANCE.minor };
   }
   if (PROPER_NAME.test(wish) || LIKENESS.test(wish)) {
@@ -116,9 +123,6 @@ export function adultGate(wish: string): AdultGateResult {
   }
   if (NON_CONSENT.test(wish)) {
     return { allowed: false, reason: "non_consent", guidance: GUIDANCE.non_consent };
-  }
-  if (FAMILY_ROLE.test(wish) && SEXUAL_CONTEXT.test(wish)) {
-    return { allowed: false, reason: "family_role", guidance: GUIDANCE.family_role };
   }
   return { allowed: true };
 }

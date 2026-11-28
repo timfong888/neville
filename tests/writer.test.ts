@@ -69,11 +69,11 @@ afterAll(() => {
 const KEY = "sk-or-test-KEY-4f9a1c";
 const NAME = "Zorbulon";
 
-async function write(variant = 0, want = "my journey across Japan") {
+async function write(variant = 0, want = "my journey across Japan", relaxed?: boolean) {
   vi.resetModules();
   asked.length = 0;
   const { writeScript } = await import("@/lib/server/writer");
-  return writeScript({ key: KEY, want, name: NAME, variant });
+  return writeScript({ key: KEY, want, name: NAME, variant, ...(relaxed !== undefined ? { relaxed } : {}) });
 }
 
 describe("writeScript", () => {
@@ -385,5 +385,137 @@ describe("writeScript reason header (#176)", () => {
     const all = error.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
     expect(all).not.toContain("pineapples");
     expect(all).not.toContain(SECRETWISH);
+  });
+});
+
+describe("writeScript relaxed filter (issue 215)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  // The GOOD mock script mentions "journey" (a banned phrase); wishes must include "journey"
+  // so the bannedIn exception applies and cleanLines passes.
+  it("withholds family role + intimacy for relaxed (issue 219 block 4)", async () => {
+    // "sister" is a family role; "kiss" is an intimacy word → withheld for relaxed too.
+    const s = await write(0, "I want to kiss my sister, journey across Japan", true);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("withholds family role + intimacy when not relaxed (unchanged)", async () => {
+    const s = await write(0, "I want to kiss my sister, journey across Japan");
+    expect(s.source).toBe("template");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("allows non-sexual family wish for relaxed", async () => {
+    plan = {};
+    // "sister" with no intimacy word: allowed for relaxed.
+    const s = await write(0, "a hug from my sister, journey across Japan", true);
+    expect(s.source).toBe("model");
+    expect(asked).toHaveLength(1);
+  });
+
+  it("still withholds teen+intimacy even when relaxed", async () => {
+    const s = await write(0, "I want to kiss a teen", true);
+    expect(s.source).toBe("template");
+    expect(asked).toHaveLength(0);
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(all).toContain('"tier":"relaxed"');
+  });
+
+  it("non-relaxed withheld log has no tier field", async () => {
+    const s = await write(0, "I want to kiss my 15 year old classmate");
+    expect(s.source).toBe("template");
+    const all = warn.mock.calls.map((c: unknown[]) => c.map(String).join(" ")).join("\n");
+    expect(all).not.toContain('"tier"');
+  });
+
+  it("passes little/young/junior through for relaxed (non-family MINOR words), holds for non-relaxed", async () => {
+    plan = {};
+    for (const wish of [
+      "my little girlfriend, journey across Japan",
+      "romantic evening with young ladies, journey across Japan",
+      "my junior girlfriend, journey across Japan",
+    ]) {
+      expect((await write(0, wish, true)).source, `relaxed: ${wish}`).toBe("model");
+      expect((await write(0, wish)).source, `non-relaxed: ${wish}`).toBe("template");
+    }
+  });
+
+  it("withholds family role + intimacy for relaxed (son, stepmother, make love)", async () => {
+    for (const wish of [
+      "romantic time with my son, journey across Japan",
+      "sleep with my stepmother",
+      "make love to my daughter",
+      "hook up with my stepsister",
+    ]) {
+      const s = await write(0, wish, true);
+      expect(s.source, `relaxed withheld: ${wish}`).toBe("template");
+      expect(s.reason, wish).toBe("withheld");
+    }
+  });
+
+  it("withholds make love to daughter for strict too (make love now in ASKS_FOR_INTIMACY)", async () => {
+    // "daughter" is in MINOR; "make love" is now in ASKS_FOR_INTIMACY
+    const s = await write(0, "make love to my daughter");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+  });
+
+  it("withholds step-prefixed family role + intimacy for strict accounts (issue 219 block 4)", async () => {
+    // stepdaughter/stepsister bypass \b word boundary in MINOR; wishSexualisesFamilyRole now covers them for strict too.
+    for (const wish of [
+      "sex with my stepdaughter",
+      "intimate scene with my stepsister",
+      "kiss my stepmother",
+      "romantic night with my stepbrother",
+    ]) {
+      const s = await write(0, wish);
+      expect(s.source, `strict withheld: ${wish}`).toBe("template");
+      expect(s.reason, wish).toBe("withheld");
+    }
+  });
+});
+
+describe("writeScript withheld term field (issue 215)", () => {
+  it("non-relaxed withheld: term is the matched MINOR word", async () => {
+    const s = await write(0, "I want to kiss my sister, journey across Japan");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toBe("sister");
+  });
+
+  it("relaxed withheld: term is the matched MINOR_CLEAR word", async () => {
+    const s = await write(0, "I want to kiss a teen girl", true);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toMatch(/teen/i);
+  });
+
+  it("relaxed withheld via family role: term is the matched family word", async () => {
+    const s = await write(0, "I want to kiss my sister", true);
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toBe("sister");
+  });
+
+  it("strict withheld via step-family role: term is the matched family word", async () => {
+    const s = await write(0, "sex with my stepdaughter");
+    expect(s.source).toBe("template");
+    expect(s.reason).toBe("withheld");
+    expect(s.term).toMatch(/stepdaughter/i);
+  });
+
+  it("non-withheld script has no term field", async () => {
+    plan = {};
+    const s = await write(0, "I want to feel confident, journey across Japan");
+    expect(s.source).toBe("model");
+    expect(s.term).toBeUndefined();
   });
 });

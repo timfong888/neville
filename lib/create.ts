@@ -98,14 +98,22 @@ export type Made = {
   recording: { audio: ArrayBuffer; mime: string; voiceId: string; voiceName: string; starts: number[] } | null;
   /** "exact" when the script uses the person's own sentences unchanged. */
   scriptMode?: "exact";
+  /** The attempt ID for this generation, used to show a reference on failure. */
+  attemptId?: string;
+  /** Short build tag from the server, included in the Copy reference line. */
+  build?: string;
 };
 
 /** The server's words, plus when a daily limit lifts: its day is the UTC date (lib/limits.ts). */
 const withReset = (e: ApiError): string => (e.code === "visitor_full" || e.code === "day_full" ? `${e.message} It resets at midnight UTC.` : e.message);
 
 /** The user-facing note when the server returned a template script instead of a personal one. */
-export function noteForReason(reason: string | undefined): string {
-  if (reason === "withheld") return "That wish was held back, so this is a general script. Try wording it differently.";
+export function noteForReason(reason: string | undefined, term?: string): string {
+  if (reason === "withheld") {
+    return term
+      ? `The word "${term}" held this wish back. Try describing adults only. This is a general script.`
+      : "That wish was held back. Try describing adults only. This is a general script.";
+  }
   return "A personal script could not be written just now, so this is a general one.";
 }
 
@@ -115,16 +123,18 @@ export function noteForReason(reason: string | undefined): string {
  * never reads the typed wish back: only the server's text model vets a wish.
  * `deviceVoice` says whether this device can speak the script itself.
  */
-export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, deviceVoice: boolean): Promise<Made> {
+export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, deviceVoice: boolean, attemptId?: string): Promise<Made> {
   try {
-    const r = await api.manifest(wishRequest(w));
+    const r = await api.manifest(wishRequest(w), { attemptId });
     const voice = resolveVoice(r.voiceId);
     return {
       title: r.source === "template" ? FALLBACK_TITLE : (r.title ?? displayTitle(toYouStatement(w.want))),
       lines: r.lines,
-      note: r.source === "template" ? noteForReason(r.reason) : r.scriptMode === "exact" ? "Your exact words." : "",
+      note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your exact words." : "",
       recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
       ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
+      ...(r.attemptId ? { attemptId: r.attemptId } : { attemptId }),
+      ...(r.build ? { build: r.build } : {}),
     };
   } catch (e) {
     const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
@@ -136,6 +146,7 @@ export async function makeManifestation(api: Pick<Api, "manifest">, w: Wish, dev
       lines: written ?? neutralScript(w.name.trim()),
       note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
       recording: null,
+      attemptId,
     };
   }
 }
