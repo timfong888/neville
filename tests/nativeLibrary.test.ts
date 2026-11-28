@@ -281,6 +281,37 @@ describe("native library store", () => {
   it("names files by format", () => {
     expect([extFor("audio/mpeg"), extFor("audio/wav; codecs=1"), extFor("audio/mp4"), extFor("")]).toEqual(["mp3", "wav", "m4a", "mp3"]);
   });
+
+  it("(a) script edit with audio=undefined preserves hasAudio and voiceName for a subsequent failed re-record", async () => {
+    const d = disk();
+    const lib = makeFileLibrary(d);
+    const original = item({ voiceName: "Sulafat" });
+    await lib.save(original, mp3);
+
+    // Script edit: the fixed component calls save(next, undefined) to keep existing audio.
+    const edited = { ...original, lines: ["Updated script."], updatedAt: 2 };
+    await lib.save(edited, undefined);
+
+    // Failed re-record never calls library.save, so fields are still from before the attempt.
+    const after = await lib.get(original.id);
+    expect(after?.hasAudio).toBe(true);
+    expect(after?.voiceName).toBe("Sulafat");
+  });
+
+  it("(c) item with existing recording stays in playlist after script edit when re-record has not yet replaced it", async () => {
+    const d = disk();
+    const lib = makeFileLibrary(d);
+    const original = item();
+    await lib.save(original, mp3);
+
+    // Script edit preserves audio (fixed behaviour: undefined, not null).
+    const edited = { ...original, lines: ["New line."], updatedAt: 2 };
+    await lib.save(edited, undefined);
+
+    const { manifestations } = await lib.load();
+    const inPlaylist = manifestations.filter((x) => x.hasAudio);
+    expect(inPlaylist.map((x) => x.id)).toContain(original.id);
+  });
 });
 
 describe("web recording addresses", () => {
