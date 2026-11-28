@@ -16,9 +16,11 @@ onBellChange(() => playAll.reset());
 library.subscribe(() => {
   const { id, status, index } = nowPlaying.state();
   playAll.reset();
-  if (id === "all" && (status === "playing" || status === "paused")) {
+  if (id === "all" && status === "playing") {
     const currentId = playAll.idAtClipIndex(index) ?? null;
     void nowPlaying.play(playAll.jobFrom(currentId));
+  } else if (id === "all" && status === "stopped-mid") {
+    nowPlaying.stop();
   } else if (id !== "all") {
     nowPlaying.stop();
   }

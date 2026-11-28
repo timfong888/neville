@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, rewriteWant, sexualIn, splitRefrain, splitTitle, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesMinor, wishSexualisesMinorCategory } from "@/lib/prompt";
 import { scoreVividness, type NameOpts } from "@/lib/script/vividness";
 
 type Catalog = { at: number; ids: Set<string> };
@@ -46,7 +46,7 @@ export function vetModels(): Promise<string[]> {
 
 /** The refrain is spoken and looped too: it passes the same content guards as the script, or the default is used. */
 function safeRefrain(refrain: string | null, wish: string): string {
-  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) ? refrain : DEFAULT_REFRAIN;
+  return refrain && !grammarIssue([refrain]) && !sexualIn([refrain], wish) && !thankYouIn([refrain]) ? refrain : DEFAULT_REFRAIN;
 }
 
 export type Script = {
@@ -80,7 +80,7 @@ function publicReason(f: Failure): string {
   return "writer_error";
 }
 
-export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; attemptId?: string }): Promise<Script> {
+export async function writeScript(opts: { key: string; want: string; name: string; variant: number; toneNote?: string; attemptId?: string; voiceId?: string; voiceModel?: string }): Promise<Script> {
   const started = Date.now();
   // Where the last try got to, so a fallback can say why (#176).
   let attempt = 0;
@@ -96,7 +96,7 @@ export async function writeScript(opts: { key: string; want: string; name: strin
     const code = publicReason(failure);
     console.warn("[script_fallback]", JSON.stringify({ ...failure, ...extra, model: model ?? null, attempt, elapsedMs: Date.now() - started, attempt_id: opts.attemptId ?? null }));
     if (failure.reason !== "withheld") {
-      alertFailure("script_failed", { route: "manifest", reason: code, model: model ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started, attempt_id: opts.attemptId });
+      alertFailure("script_failed", { route: "manifest", reason: code, model: model ?? opts.voiceModel ?? null, ...("status" in failure ? { status: failure.status } : {}), elapsedMs: Date.now() - started, attempt_id: opts.attemptId, ...(opts.voiceId ? { voice: opts.voiceId } : {}) });
     } else {
       captureEvent("script_withheld", { route: "manifest", reason: code, attempt_id: opts.attemptId });
     }
@@ -182,12 +182,30 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
-      const lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      let lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
       }
       if (lines) {
+        // Post-check: no first-person speaker words, no thank-you phrases (#255).
+        const fpIssue = speakerFirstPersonIn(lines);
+        const tyIssue = thankYouIn(lines);
+        if (fpIssue || tyIssue) {
+          if (i === 0) {
+            // First failure: regenerate once.
+            failure = { reason: "unusable_reply", status: res.status };
+            variant++;
+            continue;
+          }
+          // Second failure: apply deterministic pronoun transform, strip remaining thank-you lines.
+          const transformed = pronounTransform(lines);
+          lines = transformed.filter(l => !thankYouIn([l]));
+          if (!lines.length) {
+            failure = { reason: "unusable_reply", status: res.status };
+            break;
+          }
+        }
         const vr = scoreVividness(lines, opts.name, nameOpts);
         const result: Script = {
           lines,
