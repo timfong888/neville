@@ -3,7 +3,7 @@
 import "server-only";
 import { OPENROUTER } from "@/lib/server/openrouter";
 import { vetModels } from "@/lib/server/writer";
-import { VET_SYSTEM, verdict } from "@/lib/rerecord";
+import { VET_SYSTEM, VET_SYSTEM_ADULT, verdict } from "@/lib/rerecord";
 
 export type Vet =
   | { ok: true; model: string; costUsd: number | null }
@@ -11,7 +11,7 @@ export type Vet =
   | { ok: false; reason: "empty"; model: string; costUsd: number | null }
   | { ok: false; reason: "unavailable" };
 
-export async function vetScript(key: string, lines: string[]): Promise<Vet> {
+export async function vetScript(key: string, lines: string[], isAdult = false): Promise<Vet> {
   let models: string[];
   try {
     models = await vetModels();
@@ -35,7 +35,7 @@ export async function vetScript(key: string, lines: string[]): Promise<Vet> {
           temperature: 0,
           usage: { include: true },
           messages: [
-            { role: "system", content: VET_SYSTEM },
+            { role: "system", content: isAdult ? VET_SYSTEM_ADULT : VET_SYSTEM },
             { role: "user", content: JSON.stringify({ lines }) },
           ],
         }),

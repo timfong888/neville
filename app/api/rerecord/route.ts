@@ -12,6 +12,7 @@ import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "
 import { resolveCadence, resolveSpeed } from "@/lib/voice/options";
 import { isFilterRelaxed, isUnlimited, paywallEnabled } from "@/lib/credits";
 import { currentUser } from "@/lib/server/accounts";
+import { isAdultTierUser } from "@/lib/adult/tier";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 
@@ -93,6 +94,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
   const tester = isUnlimited(session);
   if (tester && session) console.info("[tester]", session.id);
+  const isAdult = isAdultTierUser(session?.email ?? null);
   const relaxed = isFilterRelaxed(session);
   if (relaxed && session) console.info("[relaxed]", session.id);
   const slot = tester ? null : await takeSlot(visitor(req));
@@ -136,7 +138,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   }
 
   captureEvent("attempt_started", { route: "rerecord", attempt_id: attemptId, build });
-  const vet = await vetScript(key, lines);
+  const vet = await vetScript(key, lines, isAdult);
   if (vet.ok || vet.reason !== "unavailable") {
     await record({ route: "rerecord", kind: "vet", model: vet.model, chars: lines.join(" ").length, estUsd: vet.costUsd });
   }
