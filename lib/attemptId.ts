@@ -11,6 +11,11 @@ export function shortRef(id: string): string {
   return `${h.slice(0, 4)}-${h.slice(4, 8)}`;
 }
 
+/** "b56f1666": first 8 hex chars of a UUID, lowercase, as the support code shown to users. */
+export function codeRef(id: string): string {
+  return id.replace(/-/g, "").slice(0, 8).toLowerCase();
+}
+
 /** Clipboard text for the Copy button: "Neville ref <uuid> <ISO time UTC> [build]". */
 export function copyLine(id: string, build = ""): string {
   const t = new Date().toISOString();
