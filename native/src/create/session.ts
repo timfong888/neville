@@ -13,6 +13,7 @@ import { displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/
 import { detectPaywallError, type PaywallError } from "@/lib/paywall";
 import { ApiError } from "@/lib/api/client";
 import { resolveVoice } from "@/lib/voices";
+import { FALLBACK_VOICE_ID } from "../seams/voiceConstants";
 import { currentView } from "../accountStore";
 import { api } from "../api";
 import { PAYWALL_ENABLED } from "../config";
@@ -44,7 +45,7 @@ export type CreateState = {
   scriptMode: ScriptMode;
 };
 
-let state: CreateState = { want: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
+let state: CreateState = { want: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: FALLBACK_VOICE_ID, voiceName: resolveVoice(FALLBACK_VOICE_ID).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
 const subs = new Set<() => void>();
 const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };

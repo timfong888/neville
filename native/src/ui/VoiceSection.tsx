@@ -3,7 +3,8 @@
 // a voice (with sample playback), speed and cadence.
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { CADENCE_OPTIONS, CURATED_VOICES, SPEED_OPTIONS, voiceOptionLabel, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
+import { CADENCE_OPTIONS, CURATED_VOICE_IDS, SPEED_OPTIONS, voiceOptionLabel, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
+import { useVoices } from "../seams/voiceList";
 import { useSample } from "../create/useSample";
 import { OptionRow, SmallButton } from "./OptionRow";
 import { colors, radius, space, type as ty } from "../theme";
@@ -21,6 +22,8 @@ type Props = {
 export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPickVoice, onPickSpeed, onPickCadence }: Props) {
   const [open, setOpen] = useState(false);
   const { playing, toggle, stop } = useSample();
+  const { voices } = useVoices();
+  const curatedVoices = voices.filter((v) => CURATED_VOICE_IDS.includes(v.id) && v.generate);
 
   const summary = voiceOptionLabel(voiceName, speedStep, cadenceStep);
 
@@ -46,7 +49,7 @@ export function VoiceSection({ voiceId, voiceName, speedStep, cadenceStep, onPic
         <View style={s.panel}>
           <Text style={ty.muted}>Choose a voice — samples are pre-made, so listening is free.</Text>
           <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
-            {CURATED_VOICES.map((v) => (
+            {curatedVoices.map((v) => (
               <OptionRow
                 key={v.id}
                 label={v.name}

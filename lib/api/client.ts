@@ -5,6 +5,25 @@
 import { type Library, type Manifestation, type Playlist, parseLibrary } from "@/lib/library/model";
 
 export type PackInfo = { id: string; credits: number; price: string };
+
+/** A single voice entry returned by /api/voices. Mirrors lib/voices.ts Voice. */
+export type ServerVoice = {
+  id: string;
+  provider: string;
+  model: string;
+  voice: string;
+  name: string;
+  label: string;
+  desc?: string;
+  sample: string;
+  enabled: boolean;
+  generate: boolean;
+  atomic?: boolean;
+  tier: string;
+  adultOnly?: boolean;
+};
+
+export type VoicesResponse = { voices: ServerVoice[]; default: string };
 export type CreditsResponse = {
   balance: number;
   unlimited: boolean;
@@ -229,8 +248,8 @@ export function createApi(opts: ApiOptions) {
       await call("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName }) });
     },
 
-    async voices(): Promise<unknown> {
-      return (await call("/api/voices")).json();
+    async voices(): Promise<VoicesResponse> {
+      return (await (await call("/api/voices")).json()) as VoicesResponse;
     },
     async status(): Promise<unknown> {
       return (await call("/api/status")).json();
