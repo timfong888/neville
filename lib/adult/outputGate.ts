@@ -6,7 +6,7 @@
 // Tim, 2026-11-27: "Don't block shipping the feature yet but make sure there
 // is a clear ticket that is P1 and required to ship."
 
-export type OutputCategory = "minor" | "violence" | "non_consent";
+export type OutputCategory = "minor" | "real_person" | "family_role" | "violence" | "non_consent";
 
 export type OutputVerdict =
   | { verdict: "pass" }
@@ -14,6 +14,17 @@ export type OutputVerdict =
 
 // Patterns applied to model-generated text; broader than input patterns since
 // models can paraphrase. Any match = refuse (fail closed).
+
+// Two consecutive title-cased Unicode words (3+ chars each) in model output strongly suggests
+// a real named person was introduced. The `u` flag enables \p{Lu}/\p{Ll} for accented chars.
+const REAL_PERSON_OUT =
+  /\b\p{Lu}\p{Ll}{2,}\s+\p{Lu}\p{Ll}{2,}\b/u;
+
+// Family or relative role words must never appear in adult-tier output; the content is sexual
+// by nature so any family reference is a hard block (no sexual-context co-signal required here).
+const FAMILY_ROLE_OUT =
+  /\b(?:mom|mother|dad|father|sister|brother|daughter|son|niece|nephew|cousin|aunt|uncle|grandm(?:a|other)|grandf(?:a|ather)|granddad|grandpa|grandma|stepmom|stepdad|stepdaughter|stepson|stepsister|stepbrother|stepmother|stepfather|in[\s-]?law|relative)\b/i;
+
 const MINOR_OUT =
   /\b(?:child(?:ren)?|minor\b|underage|teen(?:age(?:r|d)?)?|youth|young (?:girl|boy) |schoolgirl|schoolboy|girl(?:ish)?\b|boy(?:ish)?\b|kid(?:s)?\b|(?:[1-9]|1[0-7])[- ]?year[s ]?[- ]?old|loli\w*)\b/i;
 
@@ -27,6 +38,8 @@ const NON_CONSENT_OUT =
 export function classifyScript(lines: string[]): OutputVerdict {
   const text = lines.join(" ");
   if (MINOR_OUT.test(text)) return { verdict: "refuse", category: "minor" };
+  if (REAL_PERSON_OUT.test(text)) return { verdict: "refuse", category: "real_person" };
+  if (FAMILY_ROLE_OUT.test(text)) return { verdict: "refuse", category: "family_role" };
   if (VIOLENCE_OUT.test(text)) return { verdict: "refuse", category: "violence" };
   if (NON_CONSENT_OUT.test(text)) return { verdict: "refuse", category: "non_consent" };
   return { verdict: "pass" };
