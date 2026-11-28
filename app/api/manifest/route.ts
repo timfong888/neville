@@ -190,6 +190,11 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
     for (let i = 0; i < chain.length; i++) {
       const c = chain[i];
+      const ceiling = await underCeiling(key);
+      if (!ceiling.ok) {
+        await charged.refund();
+        return NextResponse.json(ceiling.refusal, { status: ceiling.refusal.status });
+      }
       const ms = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
       if (ms === null) {
         alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: c.model, elapsedMs: Date.now() - started });
