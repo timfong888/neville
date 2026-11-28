@@ -7,6 +7,7 @@ import { DEFAULT_REFRAIN, exactLines, wishSexualisesMinor, wishSexualisesMinorCa
 import { neutralScript } from "@/lib/script";
 import { captureEvent } from "@/lib/server/telemetry";
 import { alertFailure } from "@/lib/server/alertFailure";
+import { newAttemptId } from "@/lib/attemptId";
 import { estimateSpeech, record } from "@/lib/server/ledger";
 import { pauseFor, resolvePace, resolveTone, speedFor, styleInstruction } from "@/lib/delivery";
 import { segmentLines, segmentsToPausedLines } from "@/lib/speech/pauses";
@@ -43,6 +44,8 @@ export async function POST(req: Request) {
 async function handle(req: Request, state: PaidState): Promise<Response> {
   // The route has 60 s in all (maxDuration), counted from here: guards, script, voice and the ledger writes.
   const started = Date.now();
+  const attemptId = req.headers.get("X-Attempt-Id") || newAttemptId();
+  const build = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) ?? "";
   if (!generationEnabled()) {
     return NextResponse.json({ code: "off", error: "Recording is switched off." }, { status: 503 });
   }
@@ -130,11 +133,12 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     return timeoutResponse(true);
   }
 
+  captureEvent("attempt_started", { route: "manifest", attempt_id: attemptId, build });
   const isExact = body.scriptMode === "exact";
   let script: Script;
   if (isExact) {
     if (wishSexualisesMinor(want)) {
-      captureEvent("script_withheld", { route: "manifest" });
+      captureEvent("script_withheld", { route: "manifest", attempt_id: attemptId });
       const category = wishSexualisesMinorCategory(want);
       script = { lines: neutralScript(name), source: "template", reason: "withheld", refrain: DEFAULT_REFRAIN, ...(category ? {} : {}) };
     } else {
@@ -142,7 +146,10 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       script = { lines, source: "exact", refrain };
     }
   } else {
-    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, voiceId: voice.id, voiceModel: voice.model });
+    script = await writeScript({ key, want, name, variant, toneNote: tone.scriptNote, attemptId, voiceId: voice.id, voiceModel: voice.model });
+  }
+  if (script.source === "model") {
+    captureEvent("script_ok", { route: "manifest", attempt_id: attemptId, model: script.model, elapsedMs: Date.now() - started });
   }
   // Programming mode (#77): the refrain is recorded once, as one more line at
   // the end, and the app loops it. Only voices recorded as PCM with line starts
@@ -199,9 +206,9 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
     await record({ route: "manifest", kind: "speech", model: voice.model, voiceId: voice.id, chars: speech.sentChars ?? spoken, estUsd: null, ok: false });
     // The upstream reason, so a failure can be read from the log (#73). Never the key.
     console.warn("[voice_failed]", JSON.stringify({ route: "manifest", model: voice.model, voiceId: voice.id, status: speech.status, message: speech.message }));
-    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech.status, elapsedMs: Date.now() - started });
+    alertFailure("voice_failed", { route: "manifest", model: voice.model, voice: voice.id, status: speech.status, elapsedMs: Date.now() - started, attempt_id: attemptId });
     await charged.refund();
-    return NextResponse.json(
+    const failRes = NextResponse.json(
       {
         code: "voice_failed",
         error: "The voice could not be recorded just now.",
@@ -213,8 +220,11 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
       },
       { status: 502 },
     );
+    failRes.headers.set("X-Attempt-Id", attemptId);
+    return failRes;
   }
 
+  captureEvent("voice_ok", { route: "manifest", attempt_id: attemptId, model: voice.model, elapsedMs: Date.now() - started });
   await record({
     route: "manifest",
     kind: "speech",
@@ -226,10 +236,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
   });
   // The recording is made: mark the spend delivered so it is never refunded by reconciliation.
   if (!state.timedOut) await charged.fulfil(); // a timed-out request was already refunded or left for reconciliation
+  captureEvent("attempt_done", { route: "manifest", attempt_id: attemptId, elapsedMs: Date.now() - started });
   return new NextResponse(speech.audio, {
     headers: {
       "Content-Type": speech.mime,
       "Cache-Control": "no-store",
+      "X-Attempt-Id": attemptId,
+      ...(build ? { "X-Build": build } : {}),
       "X-Script": Buffer.from(JSON.stringify(script.lines), "utf8").toString("base64"),
       "X-Script-Source": script.source,
       ...(script.source === "template" && script.reason ? { "X-Script-Reason": script.reason } : {}),

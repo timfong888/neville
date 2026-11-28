@@ -47,6 +47,10 @@ export type Recording = {
   creditsBalance?: string | null;
   /** Which writing mode produced this script: "exact" or absent when enhance. */
   scriptMode?: "exact";
+  /** The attempt ID echoed back by the server. */
+  attemptId?: string;
+  /** Short build tag from X-Build, when the server sent it. */
+  build?: string;
 };
 
 /** Thrown for any non-2xx response. `lines` is the written script when only the voice failed. */
@@ -159,6 +163,8 @@ export function createApi(opts: ApiOptions) {
     const title = readTitle(res.headers.get("X-Title"));
     const creditsBalanceHeader = res.headers.get("X-Credits-Balance");
     const scriptModeHeader = res.headers.get("X-Script-Mode");
+    const attemptId = res.headers.get("X-Attempt-Id") ?? undefined;
+    const build = res.headers.get("X-Build") ?? undefined;
     return {
       audio: await res.arrayBuffer(),
       mime: res.headers.get("Content-Type") ?? "audio/mpeg",
@@ -170,7 +176,14 @@ export function createApi(opts: ApiOptions) {
       starts: readStarts(res.headers.get("X-Line-Starts"), script.length),
       ...(creditsBalanceHeader !== null ? { creditsBalance: creditsBalanceHeader } : {}),
       ...(scriptModeHeader === "exact" ? { scriptMode: "exact" as const } : {}),
+      ...(attemptId ? { attemptId } : {}),
+      ...(build ? { build } : {}),
     };
+  }
+
+  function withAttemptId(init: RequestInit, attemptId?: string): RequestInit {
+    if (!attemptId) return init;
+    return { ...init, headers: { ...(init.headers as Record<string, string>), "X-Attempt-Id": attemptId } };
   }
 
   return {
@@ -188,12 +201,13 @@ export function createApi(opts: ApiOptions) {
     },
 
     /** A wish in; a script and its recording out. One paid request. */
-    async manifest(req: WishRequest): Promise<Recording> {
-      return recording(await call("/api/manifest", json(req)));
+    async manifest(req: WishRequest, opts: { attemptId?: string } = {}): Promise<Recording> {
+      return recording(await call("/api/manifest", withAttemptId(json(req), opts.attemptId)));
     },
     /** Records an existing script again, in one voice. */
-    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown } = {}): Promise<Recording> {
-      return recording(await call("/api/rerecord", json({ lines, voiceId, ...opts })), lines);
+    async rerecord(lines: string[], voiceId: string, opts: { speedStep?: unknown; cadenceStep?: unknown; attemptId?: string } = {}): Promise<Recording> {
+      const { attemptId, ...rest } = opts;
+      return recording(await call("/api/rerecord", withAttemptId(json({ lines, voiceId, ...rest }), attemptId)), lines);
     },
 
     async credits(): Promise<CreditsResponse> {
