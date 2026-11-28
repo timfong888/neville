@@ -2,9 +2,11 @@
 // free-creation count, and the script and recording once made. Rules are in lib/create.ts.
 import { useSyncExternalStore } from "react";
 import { FALLBACK_TITLE, FREE_STORAGE_KEY, type Made, type ScriptMode, SCRIPT_MODE_KEY, makeManifestation, nextVariant, noteForReason, parseCount, pickOnCreate, seeSettingsVoice, toManifestation, wishRequest } from "@/lib/create";
+import { newAttemptId } from "@/lib/attemptId";
 import { DEFAULT_CADENCE_STEP, DEFAULT_SPEED_STEP, resolveCadence, resolveSpeed, type CadenceStep, type SpeedStep } from "@/lib/voice/options";
 import { DRAFT_STORAGE_KEY, parseDraft } from "@/lib/draftStore";
 import { createAccess, isSignedIn } from "@/lib/createGate";
+import { getFirstName } from "../profileNameStore";
 import { newId } from "@/lib/library/model";
 import { lineStarts } from "@/lib/audio";
 import { displayTitle, neutralScript, scriptLines, toYouStatement } from "@/lib/script";
@@ -20,7 +22,6 @@ import { settings } from "../seams/settings";
 
 export type CreateState = {
   want: string;
-  name: string;
   /** Free creations used on this device. */
   used: number;
   variant: number;
@@ -43,7 +44,7 @@ export type CreateState = {
   scriptMode: ScriptMode;
 };
 
-let state: CreateState = { want: "", name: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
+let state: CreateState = { want: "", used: 0, variant: 0, gate: false, making: false, picked: null, voiceId: resolveVoice(null).id, voiceName: resolveVoice(null).name, speedStep: DEFAULT_SPEED_STEP, cadenceStep: DEFAULT_CADENCE_STEP, made: null, savedId: "", paywallError: null, scriptMode: "enhance" };
 const subs = new Set<() => void>();
 const set = <P extends Partial<CreateState>>(p: P): P => {
   state = { ...state, ...p };
@@ -78,8 +79,9 @@ export async function load(): Promise<void> {
   const [draft, used, chosen, modeRaw] = await Promise.all([read(DRAFT_STORAGE_KEY), read(FREE_STORAGE_KEY), settings.read(), read(SCRIPT_MODE_KEY)]);
   const scriptMode: ScriptMode = modeRaw === "exact" ? "exact" : "enhance";
   // Typing that began before storage answered wins over the stored draft.
+  const { want } = parseDraft(draft);
   set({
-    ...(typed ? {} : parseDraft(draft)),
+    ...(typed ? {} : { want }),
     used: parseCount(used),
     ...voiceNow(chosen.voiceId),
     speedStep: resolveSpeed(chosen.speedStep).id,
@@ -101,10 +103,10 @@ export async function pickCadence(id: CadenceStep): Promise<boolean> {
 }
 
 /** Typing saves the draft, so a trip to Settings or a restart keeps it (#100). */
-export function edit(p: { want?: string; name?: string }): void {
+export function edit(p: { want?: string }): void {
   typed = true;
   set(p);
-  write(DRAFT_STORAGE_KEY, state.want || state.name ? JSON.stringify({ want: state.want, name: state.name }) : null);
+  write(DRAFT_STORAGE_KEY, state.want ? JSON.stringify({ want: state.want }) : null);
 }
 
 /** Picks the voice for the next recording here on Create. `asDefault` also makes it the Settings choice. */
@@ -130,15 +132,18 @@ export function setScriptMode(mode: ScriptMode): void {
 export const getCreateState = () => state;
 
 let run = 0;
+let currentAttemptId = "";
 /** The wish the current `made` was asked for. The form can change afterwards. */
 let asked: { want: string; name: string; speedStep?: string; cadenceStep?: string } = { want: "", name: "" };
 async function generate(variant: number): Promise<void> {
   const mine = ++run;
+  const attemptId = newAttemptId();
+  currentAttemptId = attemptId;
   // Capture speed/cadence from state before the async settings.read(): pickSpeed/pickCadence
   // update state synchronously but write to storage async, so storage may be stale.
   const { speedStep, cadenceStep } = state;
   set({ making: true, made: null, savedId: "", variant, paywallError: null });
-  const wish = { want: state.want, name: state.name };
+  const wish = { want: state.want, name: getFirstName() };
   const chosen = await settings.read();
   const { voiceId } = set(voiceNow(chosen.voiceId));
   const scriptMode = state.scriptMode;
@@ -146,7 +151,7 @@ async function generate(variant: number): Promise<void> {
   if (PAYWALL_ENABLED) {
     // Paywall path: call api.manifest directly so we can intercept 401/402/504.
     try {
-      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }));
+      const r = await api.manifest(wishRequest({ ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }), { attemptId });
       if (run !== mine) return;
       asked = { ...wish, speedStep, cadenceStep };
       const voice = resolveVoice(r.voiceId);
@@ -156,6 +161,8 @@ async function generate(variant: number): Promise<void> {
         note: r.source === "template" ? noteForReason(r.reason, r.term) : r.scriptMode === "exact" ? "Your exact words." : "",
         recording: { audio: r.audio, mime: r.mime, voiceId: voice.id, voiceName: voice.name, starts: r.starts ?? lineStarts(r.lines) },
         ...(r.scriptMode === "exact" ? { scriptMode: "exact" as const } : {}),
+        attemptId: r.attemptId ?? attemptId,
+        ...(r.build ? { build: r.build } : {}),
       };
       set({ making: false, made });
     } catch (e) {
@@ -178,6 +185,7 @@ async function generate(variant: number): Promise<void> {
         lines: written ?? neutralScript(wish.name.trim()),
         note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
         recording: null,
+        attemptId,
       };
       asked = { ...wish, speedStep, cadenceStep };
       set({ making: false, made });
@@ -186,12 +194,15 @@ async function generate(variant: number): Promise<void> {
   }
 
   // Original non-paywall path.
-  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }, canSpeak());
+  const made = await makeManifestation(api, { ...wish, variant, ...chosen, voiceId, scriptMode, speedStep, cadenceStep }, canSpeak(), attemptId);
   // A newer request, or leaving the flow, replaces this one.
   if (run !== mine) return;
   asked = { ...wish, speedStep, cadenceStep };
   set({ making: false, made });
 }
+
+/** The attempt ID for the most recent generation, for the reference display. */
+export function getAttemptId(): string { return currentAttemptId; }
 
 /** Counts one free creation. False, with the gate shown, when a signed-out user has none left. A signed-in user is not held to the count (#164). */
 function spend(): boolean {
