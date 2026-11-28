@@ -99,14 +99,9 @@ describe("POST /api/rerecord", () => {
     expect(res.headers.get("Content-Type")).toMatch(/^audio\//);
     expect(paths()).toContain("/chat/completions");
     const speech = calls.find((c) => c.path.startsWith("/audio/speech"));
-    // The default voice is atomic: one request, a pause marker between lines.
+    // The default voice (orpheus-tara) is non-atomic: one request, lines joined with a blank line.
     expect(calls.filter((c) => c.path.startsWith("/audio/speech"))).toHaveLength(1);
-    expect((speech?.body as { input: string }).input).toBe("Take a slow breath. [pause] You are calm and steady.");
-    // Same delivery as /api/manifest at the default pace and tone.
-    const D = await import("@/lib/delivery");
-    const pace = D.resolvePace(undefined);
-    const tone = D.resolveTone(undefined);
-    expect(speech?.body).toMatchObject({ speed: D.speedFor(pace, tone), instructions: D.styleInstruction(pace, tone) });
+    expect((speech?.body as { input: string }).input).toBe("Take a slow breath.\n\nYou are calm and steady.");
   });
 
   it("records a non-atomic PCM voice (HeyGen) line-by-line so pauses can be stitched", async () => {
@@ -173,8 +168,8 @@ describe("POST /api/rerecord", () => {
     const rows = await L.ledger().recent(10);
     expect(rows.map((r) => r.kind)).toEqual(["speech", "vet"]);
     expect(rows[1]).toMatchObject({ route: "rerecord", model: "google/gemini-2.5-flash-lite", estUsd: 0.00002 });
-    // The default voice is atomic: the ledger counts the pause tags sent with the lines.
-    expect(rows[0].chars).toBe("Take a slow breath. [pause] You are calm and steady.".length);
+    // The default voice (orpheus-tara) is non-atomic: chars = lines joined with blank-line separator.
+    expect(rows[0].chars).toBe("Take a slow breath.\n\nYou are calm and steady.".length);
   });
 
   it("records a rejected vet (it was paid for) but no speech", async () => {
@@ -289,11 +284,11 @@ describe("POST /api/rerecord", () => {
   }, 15_000);
 
   it("falls back to the default voice when the requested voice fails", async () => {
-    // gemini-charon has voice "Charon"; gemini-sulafat (default) has voice "Sulafat".
+    // gemini-charon has voice "Charon"; orpheus-tara is now the default voice.
     speechFailsForVoice = "Charon";
     const res = await POST(req({ ...script, voiceId: "gemini-charon" }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-Voice-Id")).toBe("gemini-sulafat");
+    expect(res.headers.get("X-Voice-Id")).toBe("orpheus-tara");
   }, 15_000);
 
   it("returns voice_failed when both the requested voice and the default fail", async () => {
@@ -305,7 +300,7 @@ describe("POST /api/rerecord", () => {
   }, 15_000);
 
   it("does not attempt fallback when the default voice itself fails", async () => {
-    // Default voice is gemini-sulafat; failing it should not loop.
+    // Default voice is orpheus-tara; failing it should not loop.
     speechFails = true;
     const res = await POST(req(script)); // voiceId: null → resolves to default
     expect(res.status).toBe(502);

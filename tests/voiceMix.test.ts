@@ -9,7 +9,7 @@ describe("voice mix", () => {
   });
 
   it("drops unknown and sample-only voices, and falls back to the default when nothing is left", () => {
-    expect(cleanMix(["gemini-kore", "nope", "gemini-kore", "orpheus-tara"])).toEqual(["gemini-kore"]);
+    expect(cleanMix(["gemini-kore", "nope", "gemini-kore", "sesame-read-speech-a"])).toEqual(["gemini-kore"]);
     expect(cleanMix([])).toEqual(DEFAULT_MIX);
     expect(cleanMix("x")).toEqual(DEFAULT_MIX);
   });

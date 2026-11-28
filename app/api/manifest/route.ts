@@ -190,6 +190,13 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
 
     for (let i = 0; i < chain.length; i++) {
       const c = chain[i];
+      // Re-check ceiling before each attempt — a concurrent request may have consumed the allowance between iterations.
+      const iterCeiling = await underCeiling(key);
+      if (!iterCeiling.ok) {
+        await charged.refund();
+        await slot?.release();
+        return NextResponse.json(iterCeiling.refusal, { status: iterCeiling.refusal.status });
+      }
       const ms = voiceBudget(state, Math.max(3_000, Math.min(42_000, 52_000 - (Date.now() - started))));
       if (ms === null) {
         alertFailure("manifest_timeout", { route: "manifest", reason: "timeout", model: c.model, elapsedMs: Date.now() - started });

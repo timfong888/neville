@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import config from "@/config/voices.json";
 import { DEFAULT_VOICE_ID, ENABLED_VOICES, resolveVoice } from "@/lib/voices";
 
-const CHEAP = ["heygen/heygen-voice-1-turbo", "google/gemini-3.8-flash-lite-tts", "hexgrad/kokoro-82m", "fish-audio/s2.1-pro-free:free"];
+const CHEAP = ["heygen/heygen-voice-1-turbo", "google/gemini-3.8-flash-lite-tts", "hexgrad/kokoro-82m", "fish-audio/s2.1-pro-free:free", "canopylabs/orpheus-3b-0.1-ft"];
 
 describe("voice choice", () => {
   it("returns the chosen voice when it may be recorded", () => {
@@ -36,14 +36,11 @@ describe("voice descriptions", () => {
   });
 });
 
-describe("atomic default (#76)", () => {
-  it("defaults to a Gemini voice recorded in one request", () => {
-    const v = resolveVoice(DEFAULT_VOICE_ID);
-    expect(v.id).toBe("gemini-sulafat");
-    expect(v.atomic).toBe(true);
-    expect(v.model).toMatch(/^google\/gemini/);
-  });
+describe("atomic flag (#76)", () => {
   it("flags only Gemini voices as atomic", () => {
     for (const v of ENABLED_VOICES) if (v.atomic) expect(v.model).toMatch(/^google\/gemini/);
+  });
+  it("default is orpheus-tara", () => {
+    expect(DEFAULT_VOICE_ID).toBe("orpheus-tara");
   });
 });
