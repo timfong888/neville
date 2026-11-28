@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { exactLines, firstToSecond, addNameToExactLines, speakerFirstPersonIn, thankYouIn, pronounTransform, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -89,8 +89,8 @@ describe("system prompt", () => {
 
 describe("Neville's method (#78)", () => {
   it("carries the Lesson 1 techniques, paraphrased", () => {
-    expect(METHOD_VERSION).toBe("lesson1-v2");
-    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Who you are now/, /Thanks as the refrain/, /No fighting/]) {
+    expect(METHOD_VERSION).toBe("vivid-v1");
+    for (const idea of [/Assume the end/, /Here and now/, /from inside/, /implies it is done/, /Show evidence/, /Use the senses/, /Body feeling/, /Stay inside the scene/]) {
       expect(SYSTEM).toMatch(idea);
     }
   });
@@ -194,7 +194,8 @@ describe("refrain (#77)", () => {
     // Not addressed to the listener: the "you" of "thank you" does not count.
     expect(splitRefrain("x\nRefrain: The house is finished, thank you.").refrain).toBeNull();
     expect(splitRefrain("x\nRefrain: My house by the sea, thank you").refrain).toBeNull();
-    expect(DEFAULT_REFRAIN).toMatch(/thank you/i);
+    // Default refrain must be free of thanks language.
+    expect(DEFAULT_REFRAIN).not.toMatch(/thank you/i);
   });
 });
 
@@ -371,5 +372,308 @@ describe("sexual content (#170)", () => {
     ];
     expect(cleanLines(lines.join("\n"), 2400, "I want to own a small house by the sea")).toBeNull();
     expect(cleanLines(lines.join("\n"), 2400, "I want a romantic evening with my wife")).not.toBeNull();
+  });
+});
+
+describe("splitTitle (#205)", () => {
+  it("parses a valid Title label and strips it from the script", () => {
+    const { script, title } = splitTitle("Line one.\nTitle: Magnetic confidence\nLine two.");
+    expect(title).toBe("Magnetic confidence");
+    expect(script).not.toMatch(/Title/);
+    expect(script).toContain("Line one.");
+    expect(script).toContain("Line two.");
+  });
+  it("accepts 2 to 5 words", () => {
+    expect(splitTitle("x\nTitle: Calm sleep").title).toBe("Calm sleep");
+    expect(splitTitle("x\nTitle: Calm and clear speech now").title).toBe("Calm and clear speech now");
+    expect(splitTitle("x\nTitle: One").title).toBeNull(); // 1 word → invalid
+    expect(splitTitle("x\nTitle: One two three four five six").title).toBeNull(); // 6 words → invalid
+  });
+  it("rejects titles with ellipsis", () => {
+    expect(splitTitle("x\nTitle: Magnetic confidence…").title).toBeNull();
+    expect(splitTitle("x\nTitle: Magnetic confidence...").title).toBeNull();
+  });
+  it("rejects titles starting with 'You are' or 'You have'", () => {
+    expect(splitTitle("x\nTitle: You are calm now").title).toBeNull();
+    expect(splitTitle("x\nTitle: You have this").title).toBeNull();
+    expect(splitTitle("x\nTitle: You got this").title).toBeNull();
+  });
+  it("rejects titles containing the listener's name", () => {
+    expect(splitTitle("x\nTitle: Tim finds peace", "Tim").title).toBeNull();
+    expect(splitTitle("x\nTitle: Calm and peaceful", "Tim").title).toBe("Calm and peaceful");
+  });
+  it("returns null title when no Title label is present", () => {
+    expect(splitTitle("Just a line.\nAnother line.").title).toBeNull();
+  });
+  it("strips decoration from the label", () => {
+    expect(splitTitle('x\n**Title:** Calm and clear').title).toBe("Calm and clear");
+    expect(splitTitle('x\n## Title: Calm and clear').title).toBe("Calm and clear");
+  });
+  it("capitalises the first letter of the title", () => {
+    expect(splitTitle("x\nTitle: magnetic confidence").title).toBe("Magnetic confidence");
+  });
+  it("asks the model for a 2 to 5 word title", () => {
+    expect(SYSTEM).toMatch(/Title:/);
+    expect(SYSTEM).toMatch(/2 to 5 words/);
+  });
+});
+
+describe("wishSexualisesMinorRelaxed (relaxed filter, issue 215)", () => {
+  it("withholds clear minor-protection terms with an intimacy word", () => {
+    for (const [wish, label] of [
+      ["I want to kiss a teen", "teen"],
+      ["I want to kiss my 15 year old classmate", "age+classmate"],
+      ["romantic relationship with girls", "girls"],
+      ["kiss my student", "student"],
+      ["romantic evening with kids", "kids"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
+    }
+  });
+  it("withholds family role + intimacy (issue 219 block 4, every account)", () => {
+    for (const [wish, label] of [
+      ["I want to kiss my sister", "sister+kiss"],
+      ["sleep with my stepmother", "stepmother+sleep with"],
+      ["I want romantic time with my son", "son+romantic"],
+      ["make love to my daughter", "daughter+make love"],
+      ["making love with my uncle", "uncle+making love"],
+      ["hook up with my stepsister", "stepsister+hook up with"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(true);
+    }
+  });
+  it("passes ambiguous non-family terms and non-sexual family wishes", () => {
+    for (const [wish, label] of [
+      ["my little girlfriend", "little (not family role)"],
+      ["romantic evening with young ladies", "young exception"],
+      ["my junior girlfriend", "junior (not family role)"],
+      ["a hug from my sister", "sister — no intimacy word"],
+      ["my mother is proud of me", "mother — no intimacy word"],
+      ["make love to my craft", "make love — no family role"],
+      ["hook up with investors in my network", "hook up — no family role"],
+      ["making love to the music I play", "making love — no family role"],
+    ] as [string, string][]) {
+      expect(wishSexualisesMinorRelaxed(wish), label).toBe(false);
+    }
+  });
+  it("wishMentionsMinor and wishSexualisesMinor (strict) are unchanged", () => {
+    for (const wish of ["I want to kiss my sister", "my little girlfriend", "romantic time with my son"]) {
+      expect(wishSexualisesMinor(wish), wish).toBe(true);
+    }
+    for (const wish of ["I want to kiss a teen", "romantic relationship with girls", "kiss my student"]) {
+      expect(wishSexualisesMinor(wish), wish).toBe(true);
+    }
+  });
+});
+
+describe("exactLines (#229)", () => {
+  const WISH = "I am attracting beautiful women. I am effortlessly confident. The women desire me.";
+  it("keeps every sentence in order and transforms to second-person", () => {
+    const { lines } = exactLines(WISH);
+    expect(lines).toEqual([
+      "You are attracting beautiful women.",
+      "You are effortlessly confident.",
+      "The women desire you.",
+    ]);
+  });
+  it("adds nothing to the sentences", () => {
+    const { lines } = exactLines(WISH);
+    const all = lines.join(" ");
+    expect(all).not.toContain("It is done");
+    expect(all.split(/\s+/).length).toBeLessThanOrEqual(WISH.split(/\s+/).length + 2);
+  });
+  it("picks the longest sentence as the refrain", () => {
+    const { refrain } = exactLines(WISH);
+    expect(refrain).toBe("You are attracting beautiful women.");
+  });
+  it("handles a single sentence with no terminal punctuation", () => {
+    const { lines, refrain } = exactLines("I am calm");
+    expect(lines).toEqual(["You are calm"]);
+    expect(refrain).toBe("You are calm.");
+  });
+  it("preserves terminal punctuation on sentences that have it", () => {
+    const { lines } = exactLines("I am calm. I am strong.");
+    expect(lines[0]).toBe("You are calm.");
+    expect(lines[1]).toBe("You are strong.");
+  });
+});
+
+describe("firstToSecond (#255)", () => {
+  it("converts I am to you are", () => {
+    expect(firstToSecond("I am effortlessly confident.")).toBe("You are effortlessly confident.");
+  });
+  it("converts I'm to you are", () => {
+    expect(firstToSecond("I'm calm and strong.")).toBe("You are calm and strong.");
+  });
+  it("converts my to your", () => {
+    expect(firstToSecond("My confidence is real.")).toBe("Your confidence is real.");
+  });
+  it("converts me to you", () => {
+    expect(firstToSecond("People see me clearly.")).toBe("People see you clearly.");
+  });
+  it("converts myself to yourself", () => {
+    expect(firstToSecond("I trust myself.")).toBe("You trust yourself.");
+  });
+  it("capitalises the first letter of the result", () => {
+    expect(firstToSecond("I attract success.").charAt(0)).toBe("Y");
+  });
+  it("leaves second-person sentences unchanged", () => {
+    expect(firstToSecond("You are calm and strong.")).toBe("You are calm and strong.");
+  });
+  it("converts I'll be to you are (not you will)", () => {
+    expect(firstToSecond("I'll be confident.")).toBe("You are confident.");
+  });
+  it("converts I'll to you (present, not future)", () => {
+    expect(firstToSecond("I'll succeed.")).toBe("You succeed.");
+    expect(firstToSecond("I'll be confident.")).not.toMatch(/you will/i);
+  });
+  it("converts I'd be to you are (not you would)", () => {
+    expect(firstToSecond("I'd be happy.")).toBe("You are happy.");
+  });
+  it("converts I'd to you (present, not conditional)", () => {
+    expect(firstToSecond("I'd love this.")).toBe("You love this.");
+    expect(firstToSecond("I'd be happy.")).not.toMatch(/you would/i);
+  });
+});
+
+describe("addNameToExactLines (#255)", () => {
+  it("prefixes the first nameMin sentences with the name", () => {
+    const lines = ["You are confident.", "You are strong.", "You are calm.", "You are clear.", "You are steady.", "You are present."];
+    const out = addNameToExactLines(lines, "Tim");
+    expect(out.filter((l) => l.startsWith("Tim, ")).length).toBeGreaterThanOrEqual(5);
+  });
+  it("prefixes all sentences when fewer than nameMin are available", () => {
+    const lines = ["You are confident.", "You are calm."];
+    const out = addNameToExactLines(lines, "Tim");
+    expect(out[0]).toBe("Tim, you are confident.");
+    expect(out[1]).toBe("Tim, you are calm.");
+  });
+  it("returns lines unchanged when no name is given", () => {
+    const lines = ["You are confident."];
+    expect(addNameToExactLines(lines, "")).toEqual(lines);
+  });
+  it("lowercases the sentence start after the name prefix", () => {
+    const out = addNameToExactLines(["You are calm."], "Tim");
+    expect(out[0]).toBe("Tim, you are calm.");
+  });
+  it("cycles a single sentence to reach nameMin=5 (#255 regression)", () => {
+    const out = addNameToExactLines(["You are calm."], "Tim");
+    expect(out.filter((l) => l.startsWith("Tim, ")).length).toBeGreaterThanOrEqual(5);
+    expect(out[0]).toBe("Tim, you are calm.");
+    expect(out[4]).toBe("Tim, you are calm.");
+  });
+  it("exactLines: single-sentence wish with name reaches 5 name uses", () => {
+    const { lines } = exactLines("I am calm.", "Tim");
+    const nameCount = lines.filter((l) => l.startsWith("Tim, ")).length;
+    expect(nameCount).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("exactLines with name (#255) — regression test", () => {
+  it("transforms first person to second person when name given", () => {
+    const { lines } = exactLines("I am effortlessly confident and seductive.", "Tim");
+    expect(lines[0]).not.toMatch(/\bI\b/);
+    expect(lines[0]).toMatch(/you are/i);
+    expect(lines.join(" ")).toContain("Tim");
+  });
+  it("adds name prefix to reach 5 uses given enough sentences", () => {
+    const wish = "I am confident. I am strong. I am calm. I am clear. I am steady.";
+    const { lines } = exactLines(wish, "Tim");
+    const nameCount = lines.filter((l) => l.startsWith("Tim, ")).length;
+    expect(nameCount).toBeGreaterThanOrEqual(5);
+    expect(lines.join(" ")).not.toMatch(/\bI\b/);
+  });
+  it("no-name case transforms first-person to second-person (#255)", () => {
+    const { lines, refrain } = exactLines("I am calm. I am strong.");
+    expect(lines[0]).toBe("You are calm.");
+    expect(lines[1]).toBe("You are strong.");
+    expect(refrain).toBe("You are strong."); // longest sentence wins
+  });
+  it("refrain is the longest transformed sentence without name prefix", () => {
+    const { refrain } = exactLines("I am calm. I am effortlessly confident and seductive.", "Tim");
+    expect(refrain).toBe("You are effortlessly confident and seductive.");
+    expect(refrain).not.toMatch(/\bI\b/);
+  });
+  it("no-name case uses you only and does not invent a name (#255)", () => {
+    const { lines } = exactLines("I am effortlessly confident.", undefined);
+    expect(lines[0]).toBe("You are effortlessly confident.");
+    expect(lines.join(" ")).not.toContain("Tim");
+  });
+  it("strips thank-you prefix from exact lines — regression #255", () => {
+    const { lines } = exactLines("Thank you, I am calm.", "Tim");
+    expect(lines.join(" ")).not.toMatch(/thank\s+you/i);
+    expect(lines.some((l) => /you are calm/i.test(l))).toBe(true);
+  });
+  it("strips thank-you from no-name exact lines — regression #255", () => {
+    const { lines } = exactLines("Thank you, I am calm.", undefined);
+    expect(lines.join(" ")).not.toMatch(/thank\s+you/i);
+    expect(lines[0]).toMatch(/you are calm/i);
+  });
+  it("refrain is clean of thank-you when wish starts with thank-you — regression #255", () => {
+    const { refrain } = exactLines("Thank you, I am effortlessly confident.", "Tim");
+    expect(refrain).not.toMatch(/thank\s+you/i);
+  });
+});
+
+describe("speakerFirstPersonIn and thankYouIn (#255)", () => {
+  it("detects I am in script lines", () => {
+    expect(speakerFirstPersonIn(["You are calm.", "I am here with you."])).toBe("I am");
+  });
+  it("detects I feel in script lines", () => {
+    expect(speakerFirstPersonIn(["You feel strong.", "I feel joy when you succeed."])).toBe("I feel");
+  });
+  it("detects possessive my (capitalized) — regression #255", () => {
+    expect(speakerFirstPersonIn(["My confidence is steady."])).not.toBeNull();
+  });
+  it("detects lowercase my — regression #255", () => {
+    expect(speakerFirstPersonIn(["Your heart is warm, my joy is full."])).not.toBeNull();
+  });
+  it("detects standalone I — regression #255", () => {
+    expect(speakerFirstPersonIn(["I believe this is true."])).not.toBeNull();
+  });
+  it("returns null for clean second-person lines", () => {
+    expect(speakerFirstPersonIn(["You are calm.", "You feel strong.", "It is done."])).toBeNull();
+  });
+  it("detects thank you in script lines", () => {
+    expect(thankYouIn(["Thank you for this moment."])).not.toBeNull();
+    expect(thankYouIn(["You feel the warmth in your chest."])).toBeNull();
+  });
+  it("detects thanks in script lines", () => {
+    expect(thankYouIn(["Thanks, that was real."])).not.toBeNull();
+  });
+  it("does not flag gratitude affirmations — only explicit thank-you phrases", () => {
+    expect(thankYouIn(["You feel grateful for the peace you carry."])).toBeNull();
+    expect(thankYouIn(["Gratitude fills this moment."])).toBeNull();
+  });
+});
+
+describe("pronounTransform (#255)", () => {
+  it("transforms all first-person speaker words to second-person across lines", () => {
+    const lines = ["I am calm.", "I feel the warmth.", "My heart is steady."];
+    const out = pronounTransform(lines);
+    expect(out.join(" ")).not.toMatch(/\bI\b/);
+    expect(out[0]).toBe("You are calm.");
+    expect(out[1]).toBe("You feel the warmth.");
+    expect(out[2]).toBe("Your heart is steady.");
+  });
+  it("leaves second-person lines unchanged", () => {
+    const lines = ["You are calm.", "You feel the warmth.", "It is done."];
+    expect(pronounTransform(lines)).toEqual(lines);
+  });
+});
+
+describe("authority voice — SYSTEM prompt (#255)", () => {
+  it("speaks in the second person, never as I", () => {
+    expect(SYSTEM).toMatch(/second person/);
+    expect(SYSTEM).toMatch(/never as "I"/);
+  });
+  it("includes you already as a voice example", () => {
+    expect(SYSTEM).toMatch(/you already/);
+  });
+  it("explicitly forbids I am and I feel as speaker words", () => {
+    expect(SYSTEM).toMatch(/no "I am", "I feel"/);
+  });
+  it("bans thank-you language", () => {
+    expect(SYSTEM).toMatch(/thank you/i);
   });
 });

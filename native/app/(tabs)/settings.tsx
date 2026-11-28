@@ -2,11 +2,15 @@ import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { DEFAULT_PACE_ID, DEFAULT_TONE_ID, PACES, TONES } from "@/lib/delivery";
-import { DEFAULT_VOICE_ID, ENABLED_VOICES, TIER_LABEL, resolveVoice, voiceBlurb } from "@/lib/voices";
+import { TIER_LABEL } from "@/lib/voices";
+import { useVoices } from "../../src/seams/voiceList";
 import { paceSupport } from "@/lib/voiceMix";
 import { useSample } from "../../src/create/useSample";
 import { settings, useSettings, type Settings } from "../../src/seams/settings";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { OptionRow, SmallButton } from "../../src/ui/OptionRow";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
 
@@ -15,8 +19,10 @@ const PACE_LABEL = { honours: "", ignores: "Ignores pace", untested: "Pace untes
 // Voice, pace and tone: the same options, defaults and wording as the website's Settings page.
 export default function SettingsScreen() {
   const { settings: chosen } = useSettings();
+  const { voices, defaultId, ready } = useVoices();
   const [note, setNote] = useState("");
   const { playing, error, toggle, stop, clearError } = useSample();
+  const np = useNowPlaying();
   // Tabs stay mounted, so stop when the screen loses focus as well as when it unmounts.
   useFocusEffect(useCallback(() => stop, [stop]));
 
@@ -27,7 +33,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen title="Settings">
+    <Screen title="Settings" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Text accessibilityRole="header" style={type.h2}>Delivery</Text>
       <View accessibilityRole="radiogroup" accessibilityLabel="Pace" style={s.list}>
         <Text style={type.muted}>Pace</Text>
@@ -47,16 +53,18 @@ export default function SettingsScreen() {
 
       <Text accessibilityRole="header" style={type.h2}>Voice</Text>
       <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
-        <Text style={type.muted}>{ENABLED_VOICES.length} voices. Samples are pre-made, so listening is free.</Text>
-        {ENABLED_VOICES.map((v) => (
+        {ready
+          ? <Text style={type.muted}>{voices.length} voices. Samples are pre-made, so listening is free.</Text>
+          : <Text style={type.muted}>Loading voices…</Text>}
+        {voices.map((v) => (
           <OptionRow
             key={v.id}
             label={v.name}
-            note={[v.generate ? "" : "Sample only", voiceBlurb(v), v.provider, TIER_LABEL[v.tier], v.generate ? PACE_LABEL[paceSupport(v)] : ""].filter(Boolean).join(" · ")}
-            isDefault={v.id === DEFAULT_VOICE_ID}
+            note={[v.generate ? "" : "Sample only", v.desc ?? v.label, v.provider, TIER_LABEL[v.tier as keyof typeof TIER_LABEL], v.generate ? PACE_LABEL[paceSupport(v)] : ""].filter(Boolean).join(" · ")}
+            isDefault={v.id === defaultId}
             selected={chosen.voiceId === v.id}
             disabled={!v.generate}
-            onPress={() => save({ voiceId: v.id }, `${resolveVoice(v.id).name} is your voice`)}
+            onPress={() => save({ voiceId: v.id }, `${v.name} is your voice`)}
             right={<SmallButton label={playing === v.id ? "Stop" : "Play"} a11y={`${playing === v.id ? "Stop" : "Play"} sample of ${v.name}`} onPress={() => (setNote(""), toggle(v.id, v.sample))} />}
           />
         ))}

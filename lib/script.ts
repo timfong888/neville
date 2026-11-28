@@ -48,6 +48,23 @@ export function titleFor(raw: string): string {
   return capitalise(words) + (core.split(/\s+/).length > 7 ? "…" : "");
 }
 
+/**
+ * Derives a display title from any stored title string.
+ * Drops leading filler ("You are", "You have", "You"), strips trailing "…",
+ * cuts at 5 words on a word boundary, and never adds "…".
+ * Safe to call on AI titles (no-op) and old stored titles alike.
+ */
+export function displayTitle(stored: string): string {
+  let s = stored.replace(/…$/, "").replace(/\.{2,}$/, "").trim();
+  if (/^you are\s+/i.test(s)) s = s.replace(/^you are\s+/i, "");
+  else if (/^you have\s+/i.test(s)) s = s.replace(/^you have\s+/i, "");
+  else if (/^you\s+/i.test(s)) s = s.replace(/^you\s+/i, "");
+  const words = s.trim().split(/\s+/).filter(Boolean);
+  const cut = words.slice(0, 5).join(" ");
+  if (!cut) return stored.trim();
+  return cut.charAt(0).toUpperCase() + cut.slice(1);
+}
+
 type Line = (core: string, name: string) => string;
 
 const withName = (name: string, rest: string) =>

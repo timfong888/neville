@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { ENABLED_VOICES, TIER_LABEL, voiceBlurb } from "@/lib/voices";
+import { TIER_LABEL } from "@/lib/voices";
+import { useVoices } from "../../src/seams/voiceList";
 import { load, pickVoice, useCreate } from "../../src/create/session";
 import { Button } from "../../src/create/ui";
 import { useSample } from "../../src/create/useSample";
 import { useSettings } from "../../src/seams/settings";
+import { isActive } from "../../src/player/nowPlaying";
+import { useNowPlaying } from "../../src/player/nowPlayingStore";
 import { OptionRow, SmallButton } from "../../src/ui/OptionRow";
+import { PlaybackBar } from "../../src/ui/PlaybackBar";
 import { Screen } from "../../src/ui/Screen";
 import { space, type } from "../../src/theme";
 
@@ -15,9 +19,11 @@ import { space, type } from "../../src/theme";
 export default function VoicePicker() {
   const c = useCreate();
   const router = useRouter();
+  const np = useNowPlaying();
   const { settings: saved } = useSettings();
   const { playing, error, toggle, stop, clearError } = useSample();
   const [note, setNote] = useState("");
+  const { voices, defaultId, ready } = useVoices();
   // Opened cold (a deep link, a refresh), the wish step has not read Settings yet.
   useEffect(() => void load(), []);
   const isDefault = c.voiceId === saved.voiceId;
@@ -33,7 +39,7 @@ export default function VoicePicker() {
   };
 
   return (
-    <Screen title="Choose a voice">
+    <Screen title="Choose a voice" footer={isActive(np) ? <PlaybackBar np={np} /> : undefined}>
       <Stack.Screen options={{ title: "Voice" }} />
       <Text style={type.muted}>For your next recording. Samples are pre-made, so listening is free.</Text>
       {/* Above the long list, so the choice and its buttons need no scrolling. */}
@@ -46,12 +52,13 @@ export default function VoicePicker() {
         {isDefault ? null : <Button small label="Make this my default" onPress={() => void makeDefault()} />}
       </View>
       <View accessibilityRole="radiogroup" accessibilityLabel="Voice" style={s.list}>
-        {ENABLED_VOICES.map((v) => (
+        {!ready && <Text style={type.muted}>Loading voices…</Text>}
+        {voices.map((v) => (
           <OptionRow
             key={v.id}
             label={v.name}
             // "Default" in Settings marks the app's own default, so the saved choice is named differently here.
-            note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", voiceBlurb(v), TIER_LABEL[v.tier]].filter(Boolean).join(" · ")}
+            note={[v.generate ? "" : "Sample only", v.id === saved.voiceId ? "Your Settings voice" : "", v.desc ?? v.label, TIER_LABEL[v.tier as keyof typeof TIER_LABEL]].filter(Boolean).join(" · ")}
             selected={c.voiceId === v.id}
             disabled={!v.generate}
             onPress={() => (setNote(""), clearError(), void pickVoice(v.id))}

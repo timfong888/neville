@@ -29,5 +29,9 @@
     { "id": "gemini-sulafat", "model": "google/gemini-3.8-flash-lite-tts", "voice": "Sulafat", "atomic": true },
     { "id": "heygen-nadine", "model": "heygen/heygen-voice-1-turbo", "voice": "nadine", "atomic": false },
     { "id": "grok-eve", "model": "x-ai/grok-voice-tts-1.0", "voice": "eve", "atomic": false }
-  ]
+  ],
+  "nameEveryWords": 50,
+  "nameMin": 5,
+  "nameMax": 8,
+  "minGapWords": 10
 }

@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { listSpeechModels } from "@/lib/server/openrouter";
+import { DEFAULT_VOICE_ID, ENABLED_VOICES } from "@/lib/voices";
 
-// Speech models, their prices and voices, straight from OpenRouter's public list.
+// The list of voices the app offers, keyed by their id.
+// A Vercel deploy is enough to add, remove or change the default.
 export async function GET() {
-  try {
-    return NextResponse.json(await listSpeechModels());
-  } catch (e) {
-    return NextResponse.json({ error: String(e instanceof Error ? e.message : e) }, { status: 502 });
-  }
+  return NextResponse.json({ voices: ENABLED_VOICES, default: DEFAULT_VOICE_ID });
 }
