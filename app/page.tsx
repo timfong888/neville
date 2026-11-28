@@ -12,7 +12,8 @@ import { ensureModeVoice, readMode } from "@/lib/modeStore";
 import { readVoiceChoice, writeVoiceChoice } from "@/lib/voiceStore";
 import { advanceMix, peekMixVoice, readMixOn } from "@/lib/voiceMixStore";
 import { readCadenceStepChoice, readPaceChoice, readSpeedStepChoice, readToneChoice, writeSpeedStepChoice, writeCadenceStepChoice } from "@/lib/deliveryStore";
-import { CURATED_VOICES, SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
+import { SPEED_OPTIONS, CADENCE_OPTIONS, type SpeedStep, type CadenceStep } from "@/lib/voice/options";
+import type { ServerVoice, VoicesResponse } from "@/lib/api/client";
 import { REPEAT_MINUTES } from "@/lib/repetition";
 import { composeSession, scriptOnly } from "@/lib/repetitionClient";
 import { readBellOn, readRepeatMinutes, writeBellOn, writeRepeatMinutes } from "@/lib/repetitionStore";
@@ -155,6 +156,13 @@ export default function DemoPage() {
   useEffect(() => {
     refreshNextVoice();
   }, [refreshNextVoice]);
+  const [serverVoices, setServerVoices] = useState<ServerVoice[]>([]);
+  useEffect(() => {
+    fetch("/api/voices")
+      .then((r) => r.json() as Promise<VoicesResponse>)
+      .then((d) => setServerVoices(d.voices.filter((v) => v.generate)))
+      .catch(() => {});
+  }, []);
   const [canSpeak, setCanSpeak] = useState(true);
   const [music, setMusic] = useState(true);
   const [volume, setVolume] = useState(0.6);
@@ -748,7 +756,7 @@ export default function DemoPage() {
           </div>
           <div className="row" role="radiogroup" aria-label="Voice">
             <span className="small muted">Voice</span>
-            {CURATED_VOICES.map((v) => (
+            {serverVoices.map((v) => (
               <span key={v.id} style={{ display: "inline-flex", gap: "2px", alignItems: "center" }}>
                 <button
                   type="button"

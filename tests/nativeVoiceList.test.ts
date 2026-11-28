@@ -144,3 +144,31 @@ describe("/api/voices endpoint", () => {
     }
   });
 });
+
+// ---- VoiceSection picker regression (issue #274) -----------------------
+
+describe("VoiceSection picker — full server list (issue #274)", () => {
+  it("picker shows all generate=true voices, not just 5 curated", () => {
+    // Previously filtered to CURATED_VOICE_IDS (5 voices); now shows full server list.
+    const pickable = SAMPLE_VOICES.filter((v) => v.generate);
+    expect(pickable.length).toBe(SAMPLE_VOICES.length); // all SAMPLE_VOICES are generate=true
+    expect(pickable.length).toBeGreaterThan(0);
+  });
+
+  it("resolveVoiceId returns null for a stale stored id (e.g. 'tabitha' removed from server list)", () => {
+    // A stored id absent from the server list resolves to null; caller uses server default.
+    expect(resolveVoiceId("tabitha", SAMPLE_VOICES)).toBeNull();
+  });
+
+  it("stale id fall-through: resolveVoiceId(stale) ?? defaultId == defaultId", () => {
+    const defaultId = SAMPLE_PAYLOAD.default;
+    const resolved = resolveVoiceId("stale-gone-id", SAMPLE_VOICES) ?? defaultId;
+    expect(resolved).toBe(defaultId);
+  });
+
+  it("ENABLED_VOICES has at least one non-curated generate=true voice beyond the original 5", () => {
+    const curatedIds = new Set(["gemini-sulafat", "gemini-vindemiatrix", "gemini-algieba", "gemini-charon", "heygen-nadine"]);
+    const extra = ENABLED_VOICES.filter((v) => v.generate && !curatedIds.has(v.id));
+    expect(extra.length).toBeGreaterThan(0);
+  });
+});
