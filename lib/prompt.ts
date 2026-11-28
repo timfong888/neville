@@ -40,7 +40,7 @@ Write as an author, not as a coach:
 - Every sentence is complete, with a subject and a verb, and means something when spoken aloud. Prefer plain, concrete images to abstract nouns. Never stack abstract nouns or write slogans such as "you are a magnet for pure attraction" or "abundance flows through your being". Say what happens instead. Before you answer, reread every sentence and rewrite any that a listener would not understand.
 
 Rules:
-- 9 to 12 sentences, about 90 to 120 words in total: the recording must fit in about a minute, and a long script cannot be sent. Each sentence at most 12 words: one image or one action per sentence, concrete and complete, easy to speak in a single breath. One sentence per line, each line a sentence of its own. Plain text only: no titles, numbering, quotation marks, brackets, emoji, ellipses or stage directions.
+- About 90 to 120 words in total: the recording must fit in about a minute, and a long script cannot be sent. Each line is a phrase of 3 to 9 words: one image or one action, easy to speak in a single breath. A line may end mid-sentence at a clause boundary (comma or conjunction); never end a line on a function word (the, a, an, in, on, at, by, for, of, to, and, or, but). Write as many lines as the phrasing needs. Plain text only: no titles, numbering, quotation marks, brackets, emoji, ellipses or stage directions.
 - Open as the "opening" field asks; it is an instruction to you, never words to write. If a first name is given, use it 5 to 8 times across the script. Mix the placements: some uses at the start of a sentence, some at the end, some mid-sentence for emphasis; no placement type more than twice in a row. Leave at least 10 words between uses. Never two uses in one sentence. Never inside the refrain.
 - Say "you are", "you have", "you see", "you feel", "you already". Keep every sentence in the present tense: no "earlier", "yesterday", "stopped", "felt" or "was". Never "you will", "you want", "you can", "you hope", "someday", "try", "maybe" or "I". The voice that speaks is never in the scene: no "I am", "I feel", "I see" or "my" — always "you".
 - Repeat one short, complete sentence that says the wish is true (for example: The house by the sea is yours) in three different lines, like a quiet refrain. It must read naturally each time; never paste a bare noun phrase from the wish into a sentence. Repetition is the point.
@@ -49,7 +49,7 @@ Rules:
 - Use the listener's own words for the wish. Never use thanks language in the script: no thank you, thanks, grateful, gratitude, appreciate, blessed. Stay inside the scene like watching your own movie — present tense, the listener's own thoughts and senses and power.
 - End with exactly: ${CLOSING}
 
-Worked examples (each under 60 words, 12-word sentence max):
+Worked examples (each under 60 words, 9-word phrase max per line):
 
 Money: You open the app and the number glows steady. It has climbed again since morning. A quiet ease settles in your chest. The balance confirms what you already know. You set the phone face-down without checking again. It is done.
 
@@ -555,6 +555,70 @@ export function cleanLines(
   if (grammarIssue(out)) return null;
   if (sexualIn(out, wish)) return null;
   return [...out, closing];
+}
+
+/** Maximum words per script line (phrase contract, issue 306). */
+export const MAX_PHRASE_WORDS = 9;
+
+const PHRASE_FUNCTION_WORDS = new Set([
+  "the", "a", "an", "in", "on", "at", "by", "for", "of", "to",
+  "and", "or", "but", "nor", "so", "yet", "with", "from", "as",
+  "is", "are", "was", "were", "it", "its", "this", "that",
+]);
+
+function endsOnFunctionWord(phrase: string): boolean {
+  const words = phrase.trim().split(/\s+/);
+  const last = words[words.length - 1].replace(/[.,!?;:'"—]+$/, "").toLowerCase();
+  return PHRASE_FUNCTION_WORDS.has(last);
+}
+
+/** Returns violation descriptions for lines outside the 3–MAX_PHRASE_WORDS phrase contract. */
+export function checkPhraseLines(lines: string[], maxWords = MAX_PHRASE_WORDS): string[] {
+  const violations: string[] = [];
+  for (const line of lines) {
+    const words = line.trim().split(/\s+/).filter(Boolean);
+    if (words.length > maxWords) violations.push(`too long (${words.length}w): "${line}"`);
+    else if (words.length < 3) violations.push(`too short (${words.length}w): "${line}"`);
+    else if (endsOnFunctionWord(line)) violations.push(`ends on function word: "${line}"`);
+  }
+  return violations;
+}
+
+/**
+ * Split lines > maxWords at natural clause boundaries; preserves every word
+ * (joined phrases equal the original line — verbatim and translate modes both pass).
+ */
+export function splitPhraseLines(lines: string[], maxWords = MAX_PHRASE_WORDS): string[] {
+  const CONJS = new Set(["and", "as", "while", "then", "but", "or", "so"]);
+  const result: string[] = [];
+  for (const line of lines) {
+    const words = line.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= maxWords) { result.push(words.join(" ")); continue; }
+    let remaining = [...words];
+    while (remaining.length > maxWords) {
+      const window = remaining.slice(0, maxWords);
+      let cut = -1;
+      // Prefer the last comma within the window.
+      for (let i = window.length - 1; i >= 1; i--) {
+        if (window[i - 1].endsWith(",")) { cut = i; break; }
+      }
+      // Fall back to the last conjunction.
+      if (cut < 0) {
+        for (let i = window.length - 1; i >= 2; i--) {
+          if (CONJS.has(window[i - 1].toLowerCase())) { cut = i - 1; break; }
+        }
+      }
+      if (cut <= 0) cut = maxWords;
+      // Never end a phrase on a function word (move cut back once if needed).
+      if (cut > 2 && endsOnFunctionWord(remaining.slice(0, cut).join(" "))) cut--;
+      const phrase = remaining.slice(0, cut).join(" ");
+      if (!phrase.trim()) break; // Safety
+      result.push(phrase);
+      remaining = remaining.slice(cut);
+    }
+    if (remaining.length) result.push(remaining.join(" "));
+  }
+  return result;
 }
 
 /**

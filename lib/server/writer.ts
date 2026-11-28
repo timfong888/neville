@@ -8,7 +8,7 @@ import { OPENROUTER } from "@/lib/server/openrouter";
 import { alertFailure } from "@/lib/server/alertFailure";
 import { captureEvent } from "@/lib/server/telemetry";
 import { neutralScript } from "@/lib/script";
-import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
+import { DEFAULT_REFRAIN, SYSTEM, cleanLines, grammarIssue, pronounTransform, rewriteWant, sexualIn, speakerFirstPersonIn, splitPhraseLines, splitRefrain, splitTitle, thankYouIn, wishMessage, wishSexualisesFamilyRole, wishSexualisesMinor, wishSexualisesMinorCategory, wishSexualisesMinorRelaxed, withheldMinorTerm } from "@/lib/prompt";
 import { scoreVividness, type NameOpts } from "@/lib/script/vividness";
 import { classifyScript } from "@/lib/adult/outputGate";
 
@@ -195,7 +195,9 @@ export async function writeScript(opts: { key: string; want: string; name: strin
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
       const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
-      let lines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      const rawLines = titleParts ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords }) : null;
+      // One-pass phrase repair: split any line > MAX_PHRASE_WORDS at clause boundaries.
+      let lines = rawLines ? splitPhraseLines(rawLines) : null;
       if (typeof json.usage?.cost === "number") {
         cost += json.usage.cost;
         priced = true;
