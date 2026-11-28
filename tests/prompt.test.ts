@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { exactLines, firstToSecond, addNameToExactLines, speakerFirstPersonIn, thankYouIn, pronounTransform, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage } from "@/lib/prompt";
+import { exactLines, firstToSecond, addNameToExactLines, speakerFirstPersonIn, thankYouIn, pronounTransform, grammarIssue, sexualIn, wishAsksForIntimacy, wishSexualisesMinor, wishSexualisesMinorRelaxed, BANNED, CLOSING, DEFAULT_REFRAIN, METHOD_VERSION, splitRefrain, splitTitle, MOMENTS, OPENINGS, momentFor, SYSTEM, bannedIn, cleanLines, openingFor, wishMessage, checkPhraseLines, splitPhraseLines, MAX_PHRASE_WORDS } from "@/lib/prompt";
 import { TONES } from "@/lib/delivery";
 import limits from "@/config/limits.json";
 
@@ -57,7 +57,7 @@ describe("calm delivery", () => {
   });
   it("tells the model to be slow, short, repetitive and never salesy", () => {
     expect(SYSTEM).toMatch(/slowly/);
-    expect(SYSTEM).toMatch(/9 to 12 sentences/);
+    expect(SYSTEM).toMatch(/3 to 9 words/);
     expect(SYSTEM).toMatch(/Repeat one short, complete sentence/);
     expect(SYSTEM).toMatch(/present tense/);
     expect(SYSTEM).toMatch(/no exclamation marks/);
@@ -679,5 +679,91 @@ describe("authority voice — SYSTEM prompt (#255)", () => {
   });
   it("bans thank-you language", () => {
     expect(SYSTEM).toMatch(/thank you/i);
+  });
+});
+
+// ── Phrase-level line contract (AT-1–AT-10, issue 306) ────────────────────────
+describe("phrase-level line contract (issue 306)", () => {
+  it("AT-1: checkPhraseLines returns empty for valid phrases", () => {
+    const lines = [
+      "You are calm and clear.",        // 5 words, ends on "clear"
+      "You are whole and complete.",    // 5 words, ends on "complete"
+      "The light is gold and warm.",    // 6 words, ends on "warm"
+      "Your journey across Japan is complete.", // 6 words, ends on "complete"
+    ];
+    expect(checkPhraseLines(lines)).toEqual([]);
+  });
+
+  it("AT-2: checkPhraseLines flags lines longer than MAX_PHRASE_WORDS", () => {
+    const long = "You breathe full and slow as the morning light fills the room."; // 12 words
+    const v = checkPhraseLines([long]);
+    expect(v.length).toBeGreaterThan(0);
+    expect(v[0]).toMatch(/too long/);
+  });
+
+  it("AT-3: checkPhraseLines flags lines shorter than 3 words", () => {
+    const v = checkPhraseLines(["Done."]);
+    expect(v.length).toBeGreaterThan(0);
+    expect(v[0]).toMatch(/too short/);
+  });
+
+  it("AT-4: checkPhraseLines flags lines ending on a function word", () => {
+    const v = checkPhraseLines(["You step into the"]);
+    expect(v.length).toBeGreaterThan(0);
+    expect(v[0]).toMatch(/function word/);
+  });
+
+  it("AT-5: splitPhraseLines splits at comma boundary", () => {
+    const line = "You step inside, and your heart is lighter now."; // 9 words — fits; needs a longer one
+    const long = "You step inside, and your heart is lighter now and clear."; // 11 words
+    const result = splitPhraseLines([long]);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((p) => {
+      expect(p.trim().split(/\s+/).length).toBeLessThanOrEqual(MAX_PHRASE_WORDS);
+    });
+    // Split should happen at the comma
+    expect(result[0]).toMatch(/inside,$/);
+  });
+
+  it("AT-6: splitPhraseLines falls back to conjunction split when no comma", () => {
+    const long = "You breathe full and slow as the morning light fills the room."; // 12 words
+    const result = splitPhraseLines([long]);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((p) => {
+      expect(p.trim().split(/\s+/).length).toBeLessThanOrEqual(MAX_PHRASE_WORDS);
+    });
+  });
+
+  it("AT-7: splitPhraseLines preserves all words (joined = original)", () => {
+    const lines = [
+      "You breathe full and slow as the morning light fills the room.", // 12w
+      "Take a slow breath in, and let it go.",                           // 9w — unchanged
+    ];
+    const result = splitPhraseLines(lines);
+    // Joining all result phrases with " " must give back original words
+    const resultWords = result.join(" ").split(/\s+/);
+    const inputWords = lines.join(" ").split(/\s+/);
+    expect(resultWords).toEqual(inputWords);
+  });
+
+  it("AT-8: SYSTEM prompt states phrase-level line contract (3–9 words per line)", () => {
+    expect(SYSTEM).toMatch(/3 to 9 words/);
+    expect(SYSTEM).toMatch(/clause boundary/i);
+    expect(SYSTEM).toMatch(/function word/i);
+  });
+
+  it("AT-9: splitPhraseLines never ends a phrase on a function word", () => {
+    const long = "You breathe full and slow as the morning light fills the room."; // 12 words
+    const result = splitPhraseLines([long]);
+    for (const phrase of result) {
+      const words = phrase.trim().split(/\s+/);
+      const lastWord = words[words.length - 1].replace(/[.,!?;:'"—]+$/, "").toLowerCase();
+      const functionWords = new Set(["the", "a", "an", "in", "on", "at", "by", "for", "of", "to", "and", "or", "but", "nor", "so", "yet", "with", "from", "as", "is", "are", "was", "were", "it", "its", "this", "that"]);
+      expect(functionWords.has(lastWord), `phrase ends on "${lastWord}": "${phrase}"`).toBe(false);
+    }
+  });
+
+  it("AT-10: MAX_PHRASE_WORDS is exported from lib/prompt and equals 9", () => {
+    expect(MAX_PHRASE_WORDS).toBe(9);
   });
 });

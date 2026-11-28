@@ -2,5 +2,5 @@
   "phraseMs": 500,
   "sentenceMs": 1200,
   "refrainMs": 1800,
-  "maxWords": 12
+  "maxWords": 9
 }
