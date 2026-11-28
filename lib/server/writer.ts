@@ -340,10 +340,11 @@ export async function writeAdultScript(opts: { key: string; want: string; name: 
       }
       const text = json.choices?.[0]?.message?.content;
       const parts = typeof text === "string" ? splitRefrain(text, opts.want) : null;
+      const titleParts = parts ? splitTitle(parts.script, opts.name) : null;
       // Adult scripts may contain explicit content: skip the sexualIn guard but keep
       // bannedIn (stock phrases) and grammarIssue. cleanLines still enforces length.
-      const lines = parts
-        ? cleanLines(parts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords })
+      const lines = titleParts
+        ? cleanLines(titleParts.script, limits.maxScriptChars, opts.want, { lines: limits.scriptMinLines, words: limits.scriptMinWords })
         : null;
       if (typeof json.usage?.cost === "number") { cost += json.usage.cost; priced = true; }
       if (lines) {
@@ -354,7 +355,7 @@ export async function writeAdultScript(opts: { key: string; want: string; name: 
           return { ok: false, reason: "output_gate", category: verdict.category };
         }
         console.info("[adult_script_try]", JSON.stringify({ attempt_id: opts.attemptId ?? null, model, attempt: m + 1, outcome: "ok", ms: Date.now() - tryStart }));
-        const script: Script = { lines, source: "model", model, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN };
+        const script: Script = { lines, source: "model", model, costUsd: priced ? cost : null, refrain: DEFAULT_REFRAIN, ...(titleParts?.title ? { title: titleParts.title } : {}) };
         return { ok: true, script };
       }
       failure = { reason: "unusable_reply", status: res.status };

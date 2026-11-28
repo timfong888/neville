@@ -289,6 +289,7 @@ async function handle(req: Request, state: PaidState): Promise<Response> {
         "X-Script-Source": adultScript.source,
         ...(adultScript.source === "exact" ? { "X-Script-Mode": "exact" } : {}),
         "X-Adult": "1",
+        ...(adultScript.title ? { "X-Title": Buffer.from(adultScript.title, "utf8").toString("base64") } : {}),
         ...(repeat && !speech.tailDropped ? { "X-Refrain": Buffer.from(adultScript.refrain, "utf8").toString("base64") } : {}),
         ...(charged.left !== null ? { "X-Credits-Left": charged.left } : {}),
         "X-Voice-Id": usedId, "X-Chars": String(text.length), "X-Pace": pace.id, "X-Tone": tone.id,
