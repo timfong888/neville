@@ -1,0 +1,262 @@
+[
+  {
+    "input": ["I want a house."],
+    "output": ["You have a house."],
+    "note": "want → you have (thing)"
+  },
+  {
+    "input": ["I want more money."],
+    "output": ["You have more money."],
+    "note": "want → you have (thing)"
+  },
+  {
+    "input": ["I want a good job."],
+    "output": ["You have a good job."],
+    "note": "want → you have (thing)"
+  },
+  {
+    "input": ["I want to have a baby."],
+    "output": ["You have a baby."],
+    "note": "want to have → you have"
+  },
+  {
+    "input": ["I want to be healthy."],
+    "output": ["You are healthy."],
+    "note": "want to be → you are (state)"
+  },
+  {
+    "input": ["I want to be a successful writer."],
+    "output": ["You are a successful writer."],
+    "note": "want to be → you are (identity)"
+  },
+  {
+    "input": ["I want to feel calm."],
+    "output": ["You are calm."],
+    "note": "want to feel → you are (state)"
+  },
+  {
+    "input": ["I want to be a loving father."],
+    "output": ["You are a loving father."],
+    "note": "want to be → you are (role)"
+  },
+  {
+    "input": ["I want to travel to Japan."],
+    "output": ["You travel to Japan."],
+    "note": "want to [verb] → you [verb]"
+  },
+  {
+    "input": ["I want to run a marathon."],
+    "output": ["You run a marathon."],
+    "note": "want to [verb] → you [verb]"
+  },
+  {
+    "input": ["I hope to find love."],
+    "output": ["You have love."],
+    "note": "hope → you have (thing)"
+  },
+  {
+    "input": ["I will get a promotion."],
+    "output": ["You are promoted."],
+    "note": "will get → you are (past to present)"
+  },
+  {
+    "input": ["I am going to run a marathon."],
+    "output": ["You run a marathon."],
+    "note": "going to → you [verb] (plan)"
+  },
+  {
+    "input": ["I am going to become a doctor."],
+    "output": ["You are a doctor."],
+    "note": "going to become → you are"
+  },
+  {
+    "input": ["Maybe I'll find a good partner someday."],
+    "output": ["You have a good partner."],
+    "note": "maybe + someday hedge dropped"
+  },
+  {
+    "input": ["I was promoted at work."],
+    "output": ["You are promoted at work."],
+    "note": "past tense → present tense"
+  },
+  {
+    "input": ["I got my dream job."],
+    "output": ["You have your dream job."],
+    "note": "past got → you have"
+  },
+  {
+    "input": ["I don't have enough money."],
+    "output": ["You have enough money."],
+    "note": "lack → flip to positive"
+  },
+  {
+    "input": ["I lack confidence."],
+    "output": ["You have confidence."],
+    "note": "lack → you have (the named thing)"
+  },
+  {
+    "input": ["I am not anxious."],
+    "output": ["You are not anxious."],
+    "note": "negation kept — positive 'calm' was not named by user"
+  },
+  {
+    "input": ["My wife and I want a vacation."],
+    "output": ["You and your wife have a vacation."],
+    "note": "my wife and I → you and your wife"
+  },
+  {
+    "input": ["I did it myself."],
+    "output": ["You did it yourself."],
+    "note": "myself → yourself"
+  },
+  {
+    "input": ["This success is mine."],
+    "output": ["This success is yours."],
+    "note": "mine → yours"
+  },
+  {
+    "input": ["Will I ever be healthy?"],
+    "output": ["You are healthy."],
+    "note": "question + will → present true statement"
+  },
+  {
+    "input": ["I want good health, wealth, and happiness."],
+    "output": ["You have good health, wealth, and happiness."],
+    "note": "list of things → you have"
+  },
+  {
+    "input": ["I want peace."],
+    "output": ["You have peace."],
+    "note": "very short wish"
+  },
+  {
+    "input": ["I want to have a beautiful home by the sea, with a garden and a view of the mountains, where I can sit in the morning with my coffee and feel the warmth of the sun on my face, surrounded by people I love, in a community that feels safe and welcoming."],
+    "output": ["You have a beautiful home by the sea, with a garden and a view of the mountains, where you sit in the morning with your coffee and feel the warmth of the sun on your face, surrounded by people you love, in a community that feels safe and welcoming."],
+    "note": "very long wish"
+  },
+  {
+    "input": ["You are healthy and strong."],
+    "output": ["You are healthy and strong."],
+    "note": "already second person — keep as is"
+  },
+  {
+    "input": ["I want health, thank you."],
+    "output": ["You have health."],
+    "note": "thank-you phrase dropped"
+  },
+  {
+    "input": ["Thank you."],
+    "output": [""],
+    "note": "pure thank-you — returns empty string"
+  },
+  {
+    "input": ["I want to meet Sarah at the park."],
+    "output": ["You meet Sarah at the park."],
+    "note": "first name inside wish — kept unchanged"
+  },
+  {
+    "input": ["I want to be happy, con mucho amor."],
+    "output": ["You are happy, con mucho amor."],
+    "note": "mixed language — non-English kept as is"
+  },
+  {
+    "input": ["I want a house.", "I want to be healthy.", "Thank you so much."],
+    "output": ["You have a house.", "You are healthy.", ""],
+    "note": "multi-sentence: each line translated; pure thank-you → empty string"
+  },
+  {
+    "input": ["I am trying to lose weight."],
+    "output": ["You lose weight."],
+    "note": "trying hedge dropped"
+  },
+  {
+    "input": ["I want my business to grow."],
+    "output": ["Your business grows."],
+    "note": "my → your; verb kept"
+  },
+  {
+    "input": ["I want to fix my relationship."],
+    "output": ["You fix your relationship."],
+    "note": "want to [verb] → you [verb]; my → your"
+  },
+  {
+    "input": ["I wish I could sleep better."],
+    "output": ["You sleep better."],
+    "note": "wish I could → you [verb]"
+  },
+  {
+    "input": ["I am calm and confident."],
+    "output": ["You are calm and confident."],
+    "note": "I am → you are (simple state)"
+  },
+  {
+    "input": ["I have a loving family."],
+    "output": ["You have a loving family."],
+    "note": "I have → you have (simple pronoun change)"
+  },
+  {
+    "input": ["I am going to open my own business."],
+    "output": ["You have your own business."],
+    "note": "going to open → you have (the end state)"
+  },
+  {
+    "input": ["I hope to try meditation."],
+    "output": ["You meditate."],
+    "note": "hope to try → you [verb] (hedge try dropped)"
+  },
+  {
+    "input": ["I want to be promoted at work."],
+    "output": ["You are promoted at work."],
+    "note": "want to be → you are"
+  },
+  {
+    "input": ["I want yoi to believe in me."],
+    "output": ["You believe in yourself."],
+    "note": "typo: pronoun — 'yoi' corrected to 'you'"
+  },
+  {
+    "input": ["I want to runn every morning."],
+    "output": ["You run every morning."],
+    "note": "typo: verb double letter — 'runn' corrected to 'run'"
+  },
+  {
+    "input": ["I want to visit Paries with my family."],
+    "output": ["You visit Paris with your family."],
+    "note": "typo: name-adjacent word — 'Paries' corrected to 'Paris'"
+  },
+  {
+    "input": ["I want to be suuccessful."],
+    "output": ["You are successful."],
+    "note": "typo: extra double letter — 'suuccessful' corrected to 'successful'"
+  },
+  {
+    "input": ["I want to be heatlhy."],
+    "output": ["You are healthy."],
+    "note": "typo: swapped letters — 'heatlhy' corrected to 'healthy'"
+  },
+  {
+    "input": ["I want helth."],
+    "output": ["You have health."],
+    "note": "typo: missing letter — 'helth' corrected to 'health'"
+  },
+  {
+    "input": ["I want to master Qi Gong."],
+    "output": ["You master Qi Gong."],
+    "note": "keep rare word: foreign term 'Qi Gong' stays unchanged"
+  },
+  {
+    "input": ["I want to live in Oaxaca."],
+    "output": ["You live in Oaxaca."],
+    "note": "keep rare word: proper noun 'Oaxaca' stays unchanged"
+  },
+  {
+    "input": ["I want to learn Python."],
+    "output": ["You learn Python."],
+    "note": "keep rare word: tech term 'Python' stays unchanged"
+  },
+  {
+    "input": ["I want to understand Wabi-sabi."],
+    "output": ["You understand Wabi-sabi."],
+    "note": "keep rare word: Japanese concept 'Wabi-sabi' stays unchanged"
+  }
+]
