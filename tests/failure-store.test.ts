@@ -161,7 +161,7 @@ describe("alertFailure enrichment (regression)", () => {
     const { alertFailure } = await import("@/lib/server/alertFailure");
     const { resetFailureStore, failureSummaryMemory } = await import("@/lib/server/failureStore");
     resetFailureStore();
-    alertFailure("voice_failed", { route: "rerecord", model: "google/gemini-tts", status: 503, requestId: "req_42" });
+    alertFailure("voice_failed", { route: "rerecord", model: "google/gemini-tts", status: 503, attempt_id: "req_42" });
     const today = new Date().toISOString().slice(0, 10);
     const mem = failureSummaryMemory();
     // The store key uses `kind:reason` — reason defaults to "unknown" when absent
@@ -170,19 +170,20 @@ describe("alertFailure enrichment (regression)", () => {
     expect(entry?.sampleIds).toContain("req_42");
   });
 
-  it("generates a correlation ID so sampleIds is never empty even without requestId", async () => {
+  it("uses attempt_id as sampleId so the failure is always traceable", async () => {
     process.env.POSTHOG_KEY = "phc_testkey";
     vi.resetModules();
     const { alertFailure } = await import("@/lib/server/alertFailure");
     const { resetFailureStore, failureSummaryMemory } = await import("@/lib/server/failureStore");
     resetFailureStore();
+    // Without attempt_id, sampleIds gets "unknown" (not empty)
     alertFailure("manifest_timeout", { route: "manifest", reason: "timeout" });
     const today = new Date().toISOString().slice(0, 10);
     const mem = failureSummaryMemory();
     const entry = mem[today]?.["manifest_timeout:timeout"];
     expect(entry?.count).toBe(1);
     expect(entry?.sampleIds).toHaveLength(1);
-    expect(entry?.sampleIds[0]).toBeTruthy();
+    expect(entry?.sampleIds[0]).toBe("unknown");
   });
 
   it("never includes forbidden fields (wish, name, script text)", async () => {
