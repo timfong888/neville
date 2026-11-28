@@ -1,4 +1,4 @@
-// Pure helpers for the edit-and-re-record feature on the recording screen.
+// Pure helpers for the edit-and-re-record feature on the recording and review screens.
 // No React, no network: used by the web page, the native screen, and tests.
 import { linesFromText, sameLines } from "@/lib/library/model";
 import limits from "@/config/limits.json";
@@ -7,6 +7,17 @@ export { linesFromText };
 
 /** Maximum characters the server will record. Source: config/limits.json maxScriptChars. */
 export const MAX_SCRIPT_CHARS: number = limits.maxScriptChars;
+
+/**
+ * Derives the initial value of the editable script textarea from `made.lines`.
+ * Returns "" when made is null — this happens on the non-PAYWALL path where the
+ * Review screen is pushed before generate() completes. The screen's useEffect
+ * calls this function again once c.made becomes populated, so the box is never
+ * left empty after the API returns.
+ */
+export function editScriptFromMade(made: { lines: string[] } | null): string {
+  return (made?.lines ?? []).join("\n");
+}
 
 /** How many characters over the audio limit the edited text is; 0 when within budget. */
 export function charOverage(text: string, limit: number = MAX_SCRIPT_CHARS): number {

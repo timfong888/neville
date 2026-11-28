@@ -181,12 +181,14 @@ async function generate(variant: number): Promise<void> {
       const why = !(e instanceof ApiError) ? "The recording could not be made just now." : e.code ? withReset(e) : "Recording is not available just now.";
       const written = e instanceof ApiError ? scriptLines(e.lines) : null;
       const how = canSpeak() ? "in your device's own voice" : "to read";
+      const support = e instanceof ApiError ? (e.data?.supportCode ?? e.data?.attemptId) : undefined;
       const made: Made = {
         title: FALLBACK_TITLE,
         lines: written ?? neutralScript(wish.name.trim()),
         note: `${why} Here is ${written ? "your script" : "a general version"} ${how}.`,
         recording: null,
         attemptId,
+        ...(support ? { supportCode: support } : {}),
       };
       asked = { ...wish, speedStep, cadenceStep };
       set({ making: false, made });

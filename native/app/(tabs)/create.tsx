@@ -105,8 +105,8 @@ export default function Wish() {
           </View>
           <View style={s.row}>
             <Text style={s.muted}>Script</Text>
-            <Button small label="Enhance with AI" disabled={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />
-            <Button small label="Exactly my words" disabled={c.scriptMode === "exact"} onPress={() => setScriptMode("exact")} />
+            <Button small label="Enhance with AI" active={c.scriptMode === "enhance"} onPress={() => setScriptMode("enhance")} />
+            <Button small label="Exactly my words" active={c.scriptMode === "exact"} onPress={() => setScriptMode("exact")} />
           </View>
           <VoiceSection
             voiceId={c.voiceId}
