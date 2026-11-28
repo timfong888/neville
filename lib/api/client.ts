@@ -21,6 +21,9 @@ export type ServerVoice = {
   atomic?: boolean;
   tier: string;
   adultOnly?: boolean;
+  gender?: "male" | "female";
+  pitch?: "Low" | "Medium" | "High";
+  language?: string;
 };
 
 export type VoicesResponse = { voices: ServerVoice[]; default: string };

@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tone: DEFAULT_TONE_ID,
   speedStep: DEFAULT_SPEED_STEP,
   cadenceStep: DEFAULT_CADENCE_STEP,
+  language: "en",
 };
 
 /** The current choices, kept up to date as they change. `ready` is false until storage has been read. */
